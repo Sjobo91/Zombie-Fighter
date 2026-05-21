@@ -364,7 +364,8 @@
 const THREE = window.THREE;
 
 /* ─── tuning ──────────────────────────────────────────────────────────────── */
-const ARENA = 82;
+const ARENA = 240;          // half-extent of the square world
+const ZSHORE = 196;         // southern playable limit — the waterline
 const P = {
   speed: 16, sprintMul: 1.62, dashSpeed: 62, r: 1.25,
   baseHp: 140, baseDmg: 14, baseCrit: 0.13, baseCritMul: 2.1,
@@ -431,12 +432,13 @@ addEventListener("resize", resize); resize();
 /* ─── lights ──────────────────────────────────────────────────────────────── */
 scene.add(new THREE.HemisphereLight(0x3a4060, 0x0a0808, 0.6));
 const moon = new THREE.DirectionalLight(0x9fb0d8, 0.66);
-moon.position.set(60, 96, 40);
+moon.position.set(62, 100, 44);
 moon.castShadow = true;
 moon.shadow.mapSize.set(2048, 2048);
-moon.shadow.camera.near = 1; moon.shadow.camera.far = 250;
-moon.shadow.camera.left = -ARENA; moon.shadow.camera.right = ARENA;
-moon.shadow.camera.top = ARENA; moon.shadow.camera.bottom = -ARENA;
+moon.shadow.camera.near = 1; moon.shadow.camera.far = 340;
+// the shadow frustum is small and follows the player for crisp shadows
+moon.shadow.camera.left = -90; moon.shadow.camera.right = 90;
+moon.shadow.camera.top = 90; moon.shadow.camera.bottom = -90;
 moon.shadow.bias = -0.0015;
 scene.add(moon);
 scene.add(moon.target);
@@ -560,26 +562,27 @@ const Ambience = (() => {
     on = true;
     master = c.createGain();
     master.gain.setValueAtTime(0.0001, c.currentTime);
-    master.gain.linearRampToValueAtTime(0.5, c.currentTime + 6);
+    master.gain.linearRampToValueAtTime(0.32, c.currentTime + 6);
     master.connect(Sound.master());
-    // wind — looped noise wandering through a band-pass
+    // wind — a faint bed that gusts and falls; never a constant hiss
     const len = (c.sampleRate * 3) | 0;
     const b = c.createBuffer(1, len, c.sampleRate), d = b.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     const wind = c.createBufferSource(); wind.buffer = b; wind.loop = true;
     const wf = c.createBiquadFilter();
-    wf.type = "bandpass"; wf.frequency.value = 380; wf.Q.value = 1.1;
-    const wg = c.createGain(); wg.gain.value = 0.17;
+    wf.type = "bandpass"; wf.frequency.value = 330; wf.Q.value = 1.5;
+    const wg = c.createGain(); wg.gain.value = 0.05;
     wind.connect(wf).connect(wg).connect(master); wind.start();
     const lfo = c.createOscillator(); lfo.frequency.value = 0.07;
-    const lg = c.createGain(); lg.gain.value = 230;
+    const lg = c.createGain(); lg.gain.value = 170;
     lfo.connect(lg).connect(wf.frequency); lfo.start();
-    // a soft low pad — atmosphere, not a buzz
-    const pad = c.createOscillator(); pad.type = "sine"; pad.frequency.value = 49;
-    const pg = c.createGain(); pg.gain.value = 0.07;
-    pad.connect(pg).connect(master); pad.start();
-    nodes.push(wind, lfo, pad);
-    moanT = rand(7, 13);
+    // gusts — the wind breathes in and out instead of droning
+    const gust = c.createOscillator(); gust.type = "sine";
+    gust.frequency.value = 0.055;
+    const gustG = c.createGain(); gustG.gain.value = 0.042;
+    gust.connect(gustG).connect(wg.gain); gust.start();
+    nodes.push(wind, lfo, gust);
+    moanT = rand(6, 12);
   }
   function update(dt) {
     if (!on) return;
@@ -633,11 +636,11 @@ const Music = (() => {
     const c = Sound.actx(); if (!c || on) return;
     on = true; t = 0; step = 0;
     master = c.createGain(); master.gain.value = 0.0001;
-    master.gain.linearRampToValueAtTime(0.55, c.currentTime + 8);
+    master.gain.linearRampToValueAtTime(0.92, c.currentTime + 7);
     master.connect(Sound.master());
     [55, 110].forEach(f => {                    // soft sine drone, no buzz
       const o = c.createOscillator(); o.type = "sine"; o.frequency.value = f;
-      const g = c.createGain(); g.gain.value = 0.045;
+      const g = c.createGain(); g.gain.value = 0.06;
       o.connect(g).connect(master); o.start(); drone.push(o);
     });
   }
@@ -647,12 +650,12 @@ const Music = (() => {
     while (t >= 0.6) {
       t -= 0.6; step++;
       const chord = prog[((step / 8) | 0) % prog.length];
-      if (step % 8 === 0) chord.forEach(f => note(f, 4.2, 0.045, "sine", 0.3));
-      if (step % 2 === 0) note(chord[0] / 2, 1.4, 0.055, "triangle");
-      if (Math.random() < 0.55)
-        note(lead[step % lead.length], 0.85, 0.04, "triangle", 0.35);
+      if (step % 8 === 0) chord.forEach(f => note(f, 4.2, 0.07, "sine", 0.3));
+      if (step % 2 === 0) note(chord[0] / 2, 1.4, 0.09, "triangle");
+      if (Math.random() < 0.62)
+        note(lead[step % lead.length], 0.85, 0.066, "triangle", 0.35);
       if (step % 4 === 2 && Math.random() < 0.6)
-        note(chord[1] * 2, 0.5, 0.025, "sine", 0.4);   // soft counter-bell
+        note(chord[1] * 2, 0.5, 0.04, "sine", 0.4);   // soft counter-bell
     }
   }
   function stop() {
@@ -666,27 +669,34 @@ const Music = (() => {
   return { start, update, stop };
 })();
 
-/* ─── terrain ─────────────────────────────────────────────────────────────── */
+/* ─── terrain — a rolling land that sinks to a southern shore ─────────────── */
 function groundHeight(x, z) {
-  return (Math.sin(x * 0.045) * 1.5 + Math.cos(z * 0.05) * 1.4
-        + Math.sin((x + z) * 0.028) * 1.6) * 0.6;
+  let h = (Math.sin(x * 0.016) * 2.2 + Math.cos(z * 0.018) * 2.0
+        + Math.sin((x + z) * 0.011) * 2.4) * 0.55;
+  // the inhabited heart of the world is gently flattened for its streets
+  h *= 1 - clamp(1 - Math.hypot(x, z) / 95, 0, 1) * 0.72;
+  // the land slopes down into the sea along the southern edge
+  const shore = clamp((z - 95) / 150, 0, 1);
+  return h * (1 - shore) - shore * shore * 5.5;
 }
-const GROUND = 250, GSEG = 170;
+const GROUND = 580, GSEG = 210;
 (function buildGround() {
   const geo = new THREE.PlaneGeometry(GROUND, GROUND, GSEG, GSEG);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const col = new Float32Array(pos.count * 3);
-  const cLow = new THREE.Color(0x141118), cMid = new THREE.Color(0x232017);
-  const cHi  = new THREE.Color(0x2c2a1c);
-  const tmp = new THREE.Color();
+  const dirt = new THREE.Color(0x2a2418), grass = new THREE.Color(0x27301c),
+        sand = new THREE.Color(0x9a8456), grave = new THREE.Color(0x17150f),
+        tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
-    const y = groundHeight(x, z);
-    pos.setY(i, y);
-    const t = clamp((y + 4) / 8, 0, 1);
-    tmp.copy(t < 0.5 ? cLow : cMid).lerp(t < 0.5 ? cMid : cHi, (t % 0.5) * 2);
-    tmp.multiplyScalar(rand(0.86, 1.08));
+    pos.setY(i, groundHeight(x, z));
+    tmp.copy(dirt).lerp(grass,
+      clamp(0.55 - Math.abs(x) / 380 - Math.abs(z) / 380, 0, 1));
+    if (x < -55 && z < -30)               // the graveyard ground is bare
+      tmp.lerp(grave, clamp((-55 - x) / 90 + (-30 - z) / 90, 0, 1));
+    tmp.lerp(sand, clamp((z - 96) / 96, 0, 1));   // the shore turns to sand
+    tmp.multiplyScalar(rand(0.84, 1.12));
     col[i*3] = tmp.r; col[i*3+1] = tmp.g; col[i*3+2] = tmp.b;
   }
   geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
@@ -696,9 +706,31 @@ const GROUND = 250, GSEG = 170;
   mesh.receiveShadow = true;
   scene.add(mesh);
 })();
+/* ─── the sea ─────────────────────────────────────────────────────────────── */
+let seaMesh = null;
+const SEA_Y = -3.4;
+(function buildSea() {
+  const geo = new THREE.PlaneGeometry(1400, 880);
+  geo.rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    color: 0x1a3450, roughness: 0.16, metalness: 0.62 }));
+  mesh.position.set(0, SEA_Y, ARENA + 300);
+  scene.add(mesh);
+  seaMesh = mesh;
+  // a pale band of foam where the water meets the sand
+  const foam = new THREE.Mesh(new THREE.PlaneGeometry(560, 14),
+    new THREE.MeshBasicMaterial({ color: 0x8fb0be, transparent: true,
+      opacity: 0.4 }));
+  foam.rotation.x = -Math.PI / 2;
+  foam.position.set(0, SEA_Y + 0.9, 206);
+  scene.add(foam);
+})();
+function updateSea(t) {
+  if (seaMesh) seaMesh.position.y = SEA_Y + Math.sin(t * 0.5) * 0.22;
+}
 
-/* sparse interactive grass (toned down) */
-const GRASS_N = 360;
+/* sparse interactive grass scattered across the land */
+const GRASS_N = 560;
 const grassBlade = [];
 let grass = null;
 (function buildGrass() {
@@ -710,8 +742,7 @@ let grass = null;
   grass.receiveShadow = true;
   const d = new THREE.Object3D();
   for (let i = 0; i < GRASS_N; i++) {
-    const a = rand(0, TAU), rr = Math.sqrt(Math.random()) * (ARENA - 4);
-    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+    const x = rand(-ARENA + 10, ARENA - 10), z = rand(-ARENA + 10, 118);
     grassBlade.push({ x, z, y: groundHeight(x, z),
       phase: rand(0, TAU), h: rand(0.7, 1.4) });
     d.position.set(x, grassBlade[i].y, z);
@@ -761,12 +792,12 @@ const mists = [];
   gr.addColorStop(1, "rgba(150,155,175,0)");
   g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
   const tex = new THREE.CanvasTexture(c);
-  const geo = new THREE.PlaneGeometry(60, 60);
+  const geo = new THREE.PlaneGeometry(72, 72);
   geo.rotateX(-Math.PI / 2);
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 14; i++) {
     const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex,
       transparent: true, opacity: 0.12, depthWrite: false }));
-    m.position.set(rand(-ARENA, ARENA), rand(2.5, 5), rand(-ARENA, ARENA));
+    m.position.set(rand(-ARENA, ARENA), rand(2.5, 6), rand(-ARENA, ARENA));
     m.userData = { vx: rand(-1.4, 1.4), vz: rand(-1.4, 1.4),
       spin: rand(-0.1, 0.1) };
     scene.add(m); mists.push(m);
@@ -781,6 +812,24 @@ function mat(color, rough) {
 function metalMat(color, metal) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.4,
     metalness: metal == null ? 0.6 : metal });
+}
+/* a soft radial sprite — used for every glow, flare, lamp and firefly */
+const flareTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,255,255,1)");
+  gr.addColorStop(0.32, "rgba(255,255,255,0.6)");
+  gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+function glowSprite(x, y, z, size, color, opacity) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+    color: color, transparent: true, opacity: opacity == null ? 0.5 : opacity,
+    depthWrite: false, blending: THREE.AdditiveBlending }));
+  s.position.set(x, y, z); s.scale.setScalar(size);
+  scene.add(s); return s;
 }
 
 /* ─── colliders ───────────────────────────────────────────────────────────────
@@ -950,57 +999,387 @@ function addMausoleum(x, z) {
   scene.add(g);
   colliders.push({ x, z, hw: 6.8, hd: 5.8, box: true, wall: true });
 }
-(function buildArena() {
-  // boundary — broken ring wall with towers and gaps (visually irregular)
-  const wm = mat(0x202028, 1), n = 58;
-  for (let i = 0; i < n; i++) {
-    if (Math.random() < 0.12) continue;          // gaps in the ruin
-    const a = (i / n) * TAU;
-    const x = Math.cos(a) * ARENA, z = Math.sin(a) * ARENA;
-    const h = rand(5.5, 11);
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(ARENA * TAU / n + 1.4, h, 3.4), wm);
-    m.position.set(x, groundHeight(x, z) + h / 2 - 0.5, z);
-    m.rotation.y = -a + Math.PI / 2;
-    m.castShadow = m.receiveShadow = true;
-    scene.add(m);
-    if (i % 9 === 0) {                            // watch towers
-      const th = rand(14, 18);
-      const t = new THREE.Mesh(
-        new THREE.CylinderGeometry(3.4, 4.0, th, 9), wm);
-      t.position.set(x, groundHeight(x, z) + th / 2 - 0.5, z);
-      t.castShadow = true; scene.add(t);
+/* ─── world buildings — a living gothic land ──────────────────────────────── */
+function addRoad(x1, z1, x2, z2, w) {
+  const roadMat = mat(0x231f1a, 1);
+  const segs = Math.max(2, Math.round(Math.hypot(x2 - x1, z2 - z1) / 13));
+  for (let i = 0; i < segs; i++) {
+    const ax = lerp(x1, x2, i / segs), az = lerp(z1, z2, i / segs);
+    const bx = lerp(x1, x2, (i + 1) / segs), bz = lerp(z1, z2, (i + 1) / segs);
+    const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5,
+      Math.hypot(bx - ax, bz - az) + 0.6), roadMat);
+    m.position.set(mx, groundHeight(mx, mz) + 0.1, mz);
+    m.rotation.y = Math.atan2(bx - ax, bz - az);
+    m.receiveShadow = true; scene.add(m);
+  }
+}
+function addBush(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const m = mat(pick([0x1c2814, 0x222c16, 0x18240f]), 1);
+  for (let i = 0; i < 3; i++) {
+    const b = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(rand(0.7, 1.2), 0), m);
+    b.position.set(rand(-0.7, 0.7), rand(0.5, 1.1), rand(-0.7, 0.7));
+    b.castShadow = true; g.add(b);
+  }
+  scene.add(g);
+}
+function addLamp(x, z, lit) {
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const iron = mat(0x1a1a1e, 1);
+  const post = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.26, 5.6, 6), iron);
+  post.position.y = 2.8; post.castShadow = true; g.add(post);
+  const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.78, 1.0, 0.78),
+    new THREE.MeshStandardMaterial({ color: 0x3a2e14, emissive: 0xffc24a,
+      emissiveIntensity: 1.35 }));
+  lantern.position.y = 5.3; g.add(lantern);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.55, 4), iron);
+  cap.position.y = 6.0; g.add(cap);
+  scene.add(g);
+  glowSprite(x, y + 5.3, z, 5.6, 0xffc24a, 0.55);
+  if (lit) {
+    const l = new THREE.PointLight(0xffb24a, 2.2, 34, 2);
+    l.position.set(x, y + 5.2, z); scene.add(l);
+  }
+  colliders.push({ x, z, r: 0.55 });
+}
+function addFenceRun(x1, z1, x2, z2) {
+  const wood = mat(0x2a2018, 1);
+  const segs = Math.max(1, Math.round(Math.hypot(x2 - x1, z2 - z1) / 3.2));
+  for (let i = 0; i <= segs; i++) {
+    const px = lerp(x1, x2, i / segs), pz = lerp(z1, z2, i / segs);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.9, 0.3), wood);
+    post.position.set(px, groundHeight(px, pz) + 0.95, pz);
+    post.castShadow = true; scene.add(post);
+  }
+  const mx = (x1 + x2) / 2, mz = (z1 + z2) / 2;
+  const len = Math.hypot(x2 - x1, z2 - z1);
+  for (const ry of [0.75, 1.45]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, len), wood);
+    rail.position.set(mx, groundHeight(mx, mz) + ry, mz);
+    rail.rotation.y = Math.atan2(x2 - x1, z2 - z1);
+    scene.add(rail);
+  }
+}
+function boxCollider(x, z, w, dp, rot) {
+  const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
+  colliders.push({ x, z, hw: (c * w + s * dp) / 2 + 0.3,
+    hd: (s * w + c * dp) / 2 + 0.3, box: true, wall: true });
+}
+function addHouse(x, z, rot) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z); g.rotation.y = rot;
+  const w = rand(7, 10), dp = rand(7, 10), wh = rand(4.6, 6.4);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
+    mat(pick([0x6a5848, 0x5a5246, 0x6e5e4c, 0x4f4a42, 0x736050]), 0.95));
+  body.position.y = wh / 2; body.castShadow = body.receiveShadow = true;
+  g.add(body);
+  const roof = new THREE.Mesh(
+    new THREE.ConeGeometry(Math.hypot(w, dp) * 0.62, rand(3, 4.4), 4),
+    mat(pick([0x3a2620, 0x2c2220, 0x402a22]), 1));
+  roof.position.y = wh + rand(1.4, 2.0); roof.rotation.y = Math.PI / 4;
+  roof.castShadow = true; g.add(roof);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.5, 0.3),
+    mat(0x2a1c12, 0.9));
+  door.position.set(rand(-w * 0.2, w * 0.2), 1.25, dp / 2 + 0.05); g.add(door);
+  const winMat = new THREE.MeshStandardMaterial({ color: 0x3a2e14,
+    emissive: 0xffb24a, emissiveIntensity: rand(0.5, 1.1) });
+  for (const sx of [-1, 1]) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.4, 0.2), winMat);
+    win.position.set(sx * w * 0.3, wh * 0.62, dp / 2 + 0.05); g.add(win);
+    const ws = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.3, 1.1), winMat);
+    ws.position.set(sx * (w / 2 + 0.03), wh * 0.6, 0); g.add(ws);
+  }
+  scene.add(g);
+  glowSprite(x, y + wh * 0.62, z, 7, 0xffb24a, 0.16);
+  boxCollider(x, z, w, dp, rot);
+}
+function addShop(x, z, rot) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z); g.rotation.y = rot;
+  const w = rand(8, 11), dp = rand(7, 9), wh = rand(4.6, 5.6);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
+    mat(pick([0x5a4a52, 0x4a5256, 0x60504a]), 0.95));
+  body.position.y = wh / 2; body.castShadow = body.receiveShadow = true;
+  g.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.6, dp + 0.6),
+    mat(0x2a2420, 1));
+  roof.position.y = wh + 0.3; roof.castShadow = true; g.add(roof);
+  const glass = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 0.66, wh * 0.5, 0.2),
+    new THREE.MeshStandardMaterial({ color: 0x2a3a2a, emissive: 0xffd27a,
+      emissiveIntensity: 1.0 }));
+  glass.position.set(0, wh * 0.42, dp / 2 + 0.06); g.add(glass);
+  const awn = new THREE.Mesh(new THREE.BoxGeometry(w * 0.82, 0.3, 2.4),
+    mat(pick([0x8a2820, 0x286a4a, 0x2a4a8a, 0xc9a23a]), 1));
+  awn.position.set(0, wh * 0.66, dp / 2 + 1.1); awn.rotation.x = -0.32;
+  awn.castShadow = true; g.add(awn);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.3, 0.2),
+    mat(0x3a2e1a, 1));
+  sign.position.set(w * 0.28, wh * 0.86, dp / 2 + 0.5); g.add(sign);
+  scene.add(g);
+  glowSprite(x, y + wh * 0.46, z, 8, 0xffd27a, 0.24);
+  boxCollider(x, z, w, dp, rot);
+}
+function addChurch(x, z, big) {
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const stone = mat(big ? 0x4a4650 : 0x46443e, 1);
+  const w = big ? 16 : 9, dp = big ? 26 : 14, wh = big ? 13 : 8;
+  const nave = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp), stone);
+  nave.position.y = wh / 2; nave.castShadow = nave.receiveShadow = true;
+  g.add(nave);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.74, wh * 0.42, 4),
+    mat(0x2a2630, 1));
+  roof.position.y = wh + wh * 0.2; roof.rotation.y = Math.PI / 4;
+  roof.scale.z = dp / w; roof.castShadow = true; g.add(roof);
+  const th = wh * 1.85;
+  const tower = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 0.44, th, w * 0.44), stone);
+  tower.position.set(0, th / 2, dp / 2 + w * 0.2);
+  tower.castShadow = true; g.add(tower);
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(w * 0.36, wh, 4),
+    mat(0x241f2a, 1));
+  spire.position.set(0, th + wh * 0.46, dp / 2 + w * 0.2);
+  spire.rotation.y = Math.PI / 4; spire.castShadow = true; g.add(spire);
+  const cgld = metalMat(0xc9a23a, 0.5);
+  const cv = new THREE.Mesh(new THREE.BoxGeometry(0.32, 2.0, 0.32), cgld);
+  cv.position.set(0, th + wh * 1.05, dp / 2 + w * 0.2); g.add(cv);
+  const cx = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.32, 0.32), cgld);
+  cx.position.set(0, th + wh * 1.0, dp / 2 + w * 0.2); g.add(cx);
+  const winMat = new THREE.MeshStandardMaterial({ color: 0x2a1e3a,
+    emissive: 0xffcf6a, emissiveIntensity: 0.95 });
+  for (let i = -2; i <= 2; i++) for (const sx of [-1, 1]) {
+    const win = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, wh * 0.52, 1.7), winMat);
+    win.position.set(sx * (w / 2 + 0.04), wh * 0.5, i * dp * 0.16);
+    g.add(win);
+  }
+  scene.add(g);
+  glowSprite(x, y + th, z + dp / 2 + w * 0.2, 9, 0xffcf6a, 0.3);
+  colliders.push({ x, z, hw: w / 2 + 0.4, hd: dp / 2 + 0.4, box: true,
+    wall: true });
+  colliders.push({ x, z: z + dp / 2 + w * 0.2, r: w * 0.34, wall: true });
+}
+function addMarketHall(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const w = 34, dp = 20, wh = 9;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
+    mat(0x564e44, 1));
+  body.position.y = wh / 2; body.castShadow = body.receiveShadow = true;
+  g.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 3, 1.3, dp + 3),
+    mat(0x322a24, 1));
+  roof.position.y = wh + 0.65; roof.castShadow = true; g.add(roof);
+  for (let i = -3; i <= 3; i++) {
+    const col = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.7, 0.82, wh + 1, 8), mat(0x6a6258, 1));
+    col.position.set(i * w * 0.14, (wh + 1) / 2, dp / 2 + 2.3);
+    col.castShadow = true; g.add(col);
+  }
+  const port = new THREE.Mesh(new THREE.BoxGeometry(w * 0.92, 1, 5.4),
+    mat(0x322a24, 1));
+  port.position.set(0, wh + 0.5, dp / 2 + 2.5); g.add(port);
+  const glow = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 0.86, wh * 0.52, 0.3),
+    new THREE.MeshStandardMaterial({ color: 0x3a2e14, emissive: 0xffd27a,
+      emissiveIntensity: 0.95 }));
+  glow.position.set(0, wh * 0.42, dp / 2 + 0.25); g.add(glow);
+  const banner = new THREE.Mesh(new THREE.BoxGeometry(11, 2.6, 0.25),
+    mat(0x8a2820, 1));
+  banner.position.set(0, wh * 0.8, dp / 2 + 2.7); g.add(banner);
+  scene.add(g);
+  glowSprite(x, y + wh * 0.5, z, 15, 0xffd27a, 0.32);
+  colliders.push({ x, z, hw: w / 2 + 0.4, hd: dp / 2 + 0.4, box: true,
+    wall: true });
+}
+function addStall(x, z, rot) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z); g.rotation.y = rot;
+  const wood = mat(0x4a3722, 1);
+  const table = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.3, 2.0), wood);
+  table.position.y = 1.5; table.castShadow = true; g.add(table);
+  for (const sx of [-1.5, 1.5]) for (const sz of [-0.8, 0.8]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.5, 0.22), wood);
+    leg.position.set(sx, 0.75, sz); g.add(leg);
+  }
+  for (const sx of [-1.5, 1.5]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.3, 0.2), wood);
+    post.position.set(sx, 1.65, -0.9); g.add(post);
+  }
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.2, 2.7),
+    mat(pick([0x8a2820, 0x286a4a, 0xc9a23a, 0x2a4a8a]), 1));
+  canopy.position.set(0, 3.35, 0.25); canopy.rotation.x = -0.24;
+  canopy.castShadow = true; g.add(canopy);
+  for (let i = 0; i < 3; i++) {
+    const ware = new THREE.Mesh(
+      new THREE.SphereGeometry(rand(0.22, 0.36), 6, 5),
+      mat(pick([0x8a3a1a, 0x6a7a2a, 0xc9a23a]), 1));
+    ware.position.set(rand(-1.2, 1.2), 1.86, rand(-0.6, 0.6)); g.add(ware);
+  }
+  scene.add(g);
+  colliders.push({ x, z, r: 2.3 });
+}
+function addBeachHut(x, z, rot) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z); g.rotation.y = rot;
+  const w = rand(5, 7), dp = rand(5, 7), wh = rand(3.2, 4.2);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
+    mat(pick([0x8a7a5a, 0x7a8a8e, 0x9a8a6a, 0x6a8a8a]), 1));
+  body.position.y = wh / 2; body.castShadow = body.receiveShadow = true;
+  g.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 1.6, 0.4, dp + 1.6),
+    mat(0x4a3a28, 1));
+  roof.position.y = wh + 0.3; roof.rotation.x = rand(-0.12, 0.12);
+  roof.castShadow = true; g.add(roof);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.2, 0.2),
+    mat(0x3a2a1a, 1));
+  door.position.set(0, 1.1, dp / 2 + 0.05); g.add(door);
+  scene.add(g);
+  boxCollider(x, z, w, dp, rot);
+}
+function addPier(x, zStart) {
+  const deck = mat(0x3a2c1c, 1), len = 70, segs = 14, seg = len / segs;
+  for (let i = 0; i < segs; i++) {
+    const pz = zStart + i * seg;
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(7, 0.5, seg + 0.2),
+      deck);
+    plank.position.set(x, -1.0, pz); plank.receiveShadow = true;
+    scene.add(plank);
+    if (i % 2 === 0) for (const sx of [-3, 3]) {
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.32, 0.32, 8, 6), deck);
+      post.position.set(x + sx, -4.6, pz); scene.add(post);
     }
   }
-  // a great mausoleum and a ruined chapel break up the open ground
-  addMausoleum(-30, -26);
-  addMausoleum(34, 30);
-  // chapel ruin — an arc of fallen pillars
+  const lampPost = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.2, 4, 6), mat(0x1a1a1e, 1));
+  lampPost.position.set(x, 0.7, zStart + len - 4); scene.add(lampPost);
+  const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.7),
+    new THREE.MeshStandardMaterial({ color: 0x3a2e14, emissive: 0xffc24a,
+      emissiveIntensity: 1.3 }));
+  lantern.position.set(x, 2.9, zStart + len - 4); scene.add(lantern);
+  glowSprite(x, 2.9, zStart + len - 4, 5, 0xffc24a, 0.55);
+}
+function addFountain(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const stone = mat(0x5a5650, 1);
+  const basin = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.4, 3.8, 1.3, 16), stone);
+  basin.position.y = 0.65; basin.castShadow = basin.receiveShadow = true;
+  g.add(basin);
+  const water = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.0, 3.0, 0.3, 16),
+    new THREE.MeshStandardMaterial({ color: 0x2a5a7a, roughness: 0.2,
+      metalness: 0.5, emissive: 0x0a2030, emissiveIntensity: 0.6 }));
+  water.position.y = 1.15; g.add(water);
+  const col = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.75, 2.8, 8), stone);
+  col.position.y = 2.5; g.add(col);
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.72, 10, 8), stone);
+  top.position.y = 4.1; g.add(top);
+  scene.add(g);
+  colliders.push({ x, z, r: 3.9 });
+}
+function addPerimeter() {
+  const wm = mat(0x222028, 1);
+  const sides = [[-ARENA, -ARENA, ARENA, -ARENA],
+    [-ARENA, -ARENA, -ARENA, ZSHORE + 24],
+    [ARENA, -ARENA, ARENA, ZSHORE + 24]];
+  for (const s of sides) {
+    const segs = Math.round(Math.hypot(s[2] - s[0], s[3] - s[1]) / 15);
+    for (let i = 0; i < segs; i++) {
+      const px = lerp(s[0], s[2], (i + 0.5) / segs);
+      const pz = lerp(s[1], s[3], (i + 0.5) / segs);
+      const h = rand(9, 14);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(16, h, 4.2), wm);
+      m.position.set(px, groundHeight(px, pz) + h / 2 - 1.5, pz);
+      m.rotation.y = Math.atan2(s[2] - s[0], s[3] - s[1]);
+      m.castShadow = m.receiveShadow = true; scene.add(m);
+    }
+  }
+}
+/* ─── lay out the whole world ─────────────────────────────────────────────── */
+(function buildWorld() {
+  addPerimeter();
+  // central plaza — the player begins here
+  addFountain(-15, 8);
+  for (const p of [[-28, -24], [28, -24], [-28, 32], [28, 32]])
+    addLamp(p[0], p[1], true);
+  // roads out to every district
+  addRoad(0, 0, -150, -120, 9);
+  addRoad(0, 0, 130, -70, 9);
+  addRoad(0, 0, -150, 55, 9);
+  addRoad(0, 0, 55, 95, 9);
+  addRoad(0, 0, 0, 170, 10);
+  // ---- graveyard (north-west) ----
+  addMausoleum(-168, -150);
+  addMausoleum(-118, -185);
+  addMausoleum(-208, -98);
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 6; c++) {
+    const gx = -212 + c * 14 + rand(-2.5, 2.5);
+    const gz = -198 + r * 14 + rand(-2.5, 2.5);
+    if (!blocked(gx, gz, 3.5))
+      addProp(Math.random() < 0.5 ? "grave" : "cross", gx, gz);
+  }
+  for (let i = 0; i < 10; i++) {
+    const px = rand(-225, -68), pz = rand(-225, -56);
+    if (!blocked(px, pz, 5))
+      addProp(pick(["statue", "cross", "rock", "wallchunk"]), px, pz);
+  }
+  for (let i = 0; i < 5; i++)
+    addBrazier(-150 + rand(-70, 70), -135 + rand(-70, 70));
   for (let i = 0; i < 7; i++) {
-    const a = -0.9 + i * 0.3;
-    addProp("pillar", 26 + Math.cos(a) * 16, -8 + Math.sin(a) * 16);
+    const tx = rand(-225, -70), tz = rand(-225, -56);
+    if (!blocked(tx, tz, 5)) addProp("tree", tx, tz);
   }
-  // dead heart-tree near, but not on, the centre
-  addProp("tree", 16, 18);
-  addProp("tree", -22, 14);
-  // graveyard rows
-  for (let r = 0; r < 4; r++)
-    for (let c = 0; c < 5; c++)
-      addProp(Math.random() < 0.5 ? "grave" : "cross",
-        -52 + c * 7 + rand(-1.5, 1.5), 28 + r * 7 + rand(-1.5, 1.5));
-  // scattered ruin — modest amount, all of it solid and readable
-  const scatter = ["grave", "cross", "statue", "rock", "rock", "wallchunk"];
+  // ---- town of houses & shops (east) ----
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 5; col++) {
+      const hx = 74 + col * 30 + rand(-3, 3);
+      const hz = -150 + row * 42 + rand(-3, 3);
+      if (blocked(hx, hz, 9)) continue;
+      const rot = (row % 2) * Math.PI;
+      (Math.random() < 0.3 ? addShop : addHouse)(hx, hz, rot);
+    }
+    for (let col = 0; col < 4; col++)
+      addLamp(89 + col * 30, -150 + row * 42 + 21, false);
+  }
+  // ---- church district (west) ----
+  addChurch(-158, 44, true);
+  addChurch(-205, 92, false);
+  addFenceRun(-128, 10, -128, 120);
+  addFenceRun(-128, 120, -228, 120);
+  for (let i = 0; i < 12; i++) {
+    const gx = -220 + rand(0, 80), gz = 14 + rand(0, 100);
+    if (!blocked(gx, gz, 4))
+      addProp(Math.random() < 0.5 ? "grave" : "cross", gx, gz);
+  }
+  addLamp(-128, 40, true); addLamp(-128, 90, false);
+  // ---- market / mall (south of centre) ----
+  addMarketHall(52, 96);
+  for (let i = 0; i < 11; i++) {
+    const sx2 = 6 + (i % 6) * 16, sz2 = 116 + ((i / 6) | 0) * 12;
+    if (!blocked(sx2, sz2, 3)) addStall(sx2, sz2, rand(0, TAU));
+  }
+  addLamp(20, 112, true); addLamp(86, 112, true);
+  // ---- seaside (south edge) ----
+  for (let i = 0; i < 7; i++) {
+    const hx = -190 + i * 56 + rand(-8, 8);
+    addBeachHut(hx, rand(132, 158), rand(0, TAU));
+  }
+  addPier(-78, 168); addPier(96, 168);
+  for (let i = 0; i < 6; i++)
+    addLamp(-200 + i * 80, rand(150, 168), false);
+  // ---- greenery between the districts ----
   for (let i = 0; i < 26; i++) {
-    let x, z, tries = 0;
-    do { const a = rand(0, TAU), rr = rand(16, ARENA - 8);
-      x = Math.cos(a) * rr; z = Math.sin(a) * rr; tries++;
-    } while ((Math.hypot(x, z) < 16 || blocked(x, z, 5)) && tries < 30);
-    if (tries < 30) addProp(pick(scatter), x, z);
+    const tx = rand(-ARENA + 20, ARENA - 20), tz = rand(-ARENA + 20, 110);
+    if (Math.hypot(tx, tz) > 26 && !blocked(tx, tz, 5)) addProp("tree", tx, tz);
   }
-  // firelight
-  for (let i = 0; i < 6; i++) {
-    const a = rand(0, TAU), rr = rand(20, ARENA - 16);
-    addBrazier(Math.cos(a) * rr, Math.sin(a) * rr);
+  for (let i = 0; i < 30; i++) {
+    const bx = rand(-ARENA + 20, ARENA - 20), bz = rand(-ARENA + 20, 150);
+    if (Math.hypot(bx, bz) > 22 && !blocked(bx, bz, 3)) addBush(bx, bz);
   }
 })();
 
@@ -1557,16 +1936,6 @@ function updateBolts(dt) {
 }
 
 /* ─── flares — additive bloom sprites for fire, hits & abilities ──────────── */
-const flareTex = (() => {
-  const c = document.createElement("canvas"); c.width = c.height = 64;
-  const g = c.getContext("2d");
-  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gr.addColorStop(0, "rgba(255,255,255,1)");
-  gr.addColorStop(0.32, "rgba(255,255,255,0.6)");
-  gr.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
-})();
 const FLARE_N = 90;
 const flares = [];
 for (let i = 0; i < FLARE_N; i++) {
@@ -1695,12 +2064,12 @@ function updateScreenFlash(dt) {
 /* ─── fireflies — drifting motes of ghostlight ────────────────────────────── */
 const fireflies = [];
 (function () {
-  for (let i = 0; i < 32; i++) {
+  for (let i = 0; i < 54; i++) {
     const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
       color: pick([0xbfe06a, 0x8ad0ff, 0xe0c060]), transparent: true,
       opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-    const a = rand(0, TAU), rr = rand(8, ARENA - 10);
-    m.position.set(Math.cos(a) * rr, rand(1.5, 6.5), Math.sin(a) * rr);
+    m.position.set(rand(-ARENA + 14, ARENA - 14), rand(1.5, 7),
+      rand(-ARENA + 14, 130));
     m.scale.setScalar(rand(0.45, 1.05));
     scene.add(m);
     fireflies.push({ m, phase: rand(0, TAU), sp: rand(0.3, 0.9),
@@ -2493,15 +2862,15 @@ function spawnZombie(type, rare) {
   const d = ETYPES[type];
   let x, z, ok = false, tries = 0;
   while (!ok && tries < 36) {
-    const a = rand(0, TAU), dist = rand(20, 38);
+    const a = rand(0, TAU), dist = rand(20, 40);
     x = player.x + Math.cos(a) * dist; z = player.z + Math.sin(a) * dist;
     tries++;
-    if (Math.hypot(x, z) > ARENA - 7) continue;
+    if (Math.abs(x) > ARENA - 9 || z < -ARENA + 9 || z > ZSHORE - 4) continue;
     if (blocked(x, z, 3)) continue;
     ok = true;
   }
-  if (!ok) { x = clamp(x, -ARENA + 8, ARENA - 8);
-    z = clamp(z, -ARENA + 8, ARENA - 8); }
+  if (!ok) { x = clamp(x, -ARENA + 12, ARENA - 12);
+    z = clamp(z, -ARENA + 12, ZSHORE - 8); }
   const gy = groundHeight(x, z);
   const obj = buildZombie(type, rare);
   obj.position.set(x, gy - d.h * 0.95, z);
@@ -2647,10 +3016,17 @@ function pulseAbil(id) {
   el.classList.add("pulse");
   setTimeout(() => el.classList.remove("pulse"), 130);
 }
+function currentDistrict(x, z) {
+  if (z > 118) return "THE SEASIDE";
+  if (x < -52 && z < -28) return "THE GRAVEYARD";
+  if (x > 52 && z < 14) return "THE OLD TOWN";
+  if (x < -96 && z > -28) return "THE CATHEDRAL WARD";
+  if (z > 42 && Math.abs(x) < 104) return "THE MARKET";
+  return "MORTIMER'S PLAZA";
+}
 function updateHUD() {
   UI.lvl.textContent = "LEVEL " + player.level;
-  UI.district.textContent =
-    DISTRICTS[Math.min(DISTRICTS.length - 1, ((wave - 1) / 3) | 0)];
+  UI.district.textContent = currentDistrict(player.x, player.z);
   UI.wave.textContent = "WAVE " + wave;
   UI.score.textContent = "KILLS " + kills + "  ·  SCORE " + score;
   const hpf = clamp(player.hp / player.maxHp, 0, 1);
@@ -3094,11 +3470,10 @@ function updatePlayer(dt) {
   else
     e.stamina = Math.min(P.staminaMax, e.stamina + P.staminaRegen * dt);
 
-  // map limits — circular boundary + solid props
+  // map limits — the world's edge + solid structures
   resolveColliders(e, P.r);
-  const cd = Math.hypot(e.x, e.z);
-  if (cd > ARENA - P.r) { e.x *= (ARENA - P.r) / cd;
-    e.z *= (ARENA - P.r) / cd; }
+  e.x = clamp(e.x, -ARENA + P.r + 3, ARENA - P.r - 3);
+  e.z = clamp(e.z, -ARENA + P.r + 3, ZSHORE);
   e.y = groundHeight(e.x, e.z);
 
   let lt = (e.dashT > 0 ? 0.5 : e.sprinting ? 0.26 : 0) - (e.atk ? 0.1 : 0);
@@ -3305,9 +3680,8 @@ function updateZombies(dt) {
       }
     }
     resolveColliders(z, z.r);
-    const cd = Math.hypot(z.x, z.z);
-    if (cd > ARENA - z.r) { z.x *= (ARENA - z.r) / cd;
-      z.z *= (ARENA - z.r) / cd; }
+    z.x = clamp(z.x, -ARENA + z.r + 3, ARENA - z.r - 3);
+    z.z = clamp(z.z, -ARENA + z.r + 3, ZSHORE + 4);
 
     z.groanT -= dt;
     if (z.groanT <= 0) {
@@ -3384,7 +3758,11 @@ function updateAmbient(dt, t) {
     if (m.position.z > ARENA) m.position.z = -ARENA;
     if (m.position.z < -ARENA) m.position.z = ARENA;
   }
-  if (player) moon.target.position.set(player.x, 0, player.z);
+  if (player) {
+    moon.target.position.set(player.x, 0, player.z);
+    moon.position.set(player.x + 62, 100, player.z + 44);
+  }
+  updateSea(t);
 }
 function updateToasts(dt) {
   if (bannerT > 0) { bannerT -= dt;
