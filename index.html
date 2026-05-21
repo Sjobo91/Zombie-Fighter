@@ -313,7 +313,7 @@ const P = {
   baseHp: 140, baseDmg: 14, baseCrit: 0.13, baseCritMul: 2.1,
   atkRange: 8.4, atkArc: 1.2,
   atkWindup: 0.11, atkStrike: 0.13, atkRecover: 0.18,
-  smashRange: 12, smashDmg: 44, smashCd: 4.4,
+  smashRange: 12, smashDmg: 44, smashCd: 2.6,
   dashCd: 1.7, dashTime: 0.18, dashIframes: 0.34,
   staminaMax: 100, staminaDrain: 30, staminaRegen: 22,
 };
@@ -923,81 +923,107 @@ function buildWarhammer() {
   return g;
 }
 
-/* ─── survivor (detailed, visible legs, two-handed giant sword) ───────────── */
+/* ─── survivor — a hulking warrior, broad shoulders and heavy arms ────────── */
 function buildSurvivor() {
   const g = new THREE.Group();
   const cloth = mat(0x2c2832), darkLeather = mat(0x241a1c),
-        steel = metalMat(0x6a7079, 0.55), skin = mat(0xb58d63, 0.7),
-        plate = metalMat(0x595f68, 0.5);
-  // legs — clearly separated so you watch yourself stride
+        steel = metalMat(0x6a7079, 0.55), skin = mat(0xb07a4e, 0.62),
+        plate = metalMat(0x595f68, 0.5), iron = metalMat(0x3a3d44, 0.5),
+        gold = metalMat(0xc9a23a, 0.6);
+  // ---- thick, planted legs ----
   const legs = [];
-  for (const sx of [-0.44, 0.44]) {
-    const leg = new THREE.Group(); leg.position.set(sx, 1.78, 0);
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.95, 0.58),
+  for (const sx of [-0.5, 0.5]) {
+    const leg = new THREE.Group(); leg.position.set(sx, 1.92, 0);
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.68, 1.02, 0.72),
       mat(0x322b2f));
-    thigh.position.y = -0.46; leg.add(thigh);
-    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.27, 8, 6), plate);
-    knee.position.y = -0.92; leg.add(knee);
-    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.86, 0.5),
+    thigh.position.y = -0.48; leg.add(thigh);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.33, 8, 6), plate);
+    knee.position.y = -1.0; leg.add(knee);
+    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.94, 0.62),
       darkLeather);
-    shin.position.y = -1.35; leg.add(shin);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.42, 0.86),
+    shin.position.y = -1.5; leg.add(shin);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.48, 1.04),
       mat(0x191418));
-    boot.position.set(0, -1.74, 0.16); leg.add(boot);
+    boot.position.set(0, -1.96, 0.22); leg.add(boot);
     leg.traverse(o => { if (o.isMesh) o.castShadow = true; });
     g.add(leg); legs.push(leg);
   }
-  // upper body — leans into sprint / dash
-  const upper = new THREE.Group(); upper.position.y = 1.78; g.add(upper);
-  const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.6, 0.8, 1.5, 10), cloth);
-  torso.position.y = 0.82; upper.add(torso);
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(1.28, 1.08, 0.86), steel);
-  chest.position.y = 0.95; upper.add(chest);
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.32, 0.98),
+  // ---- upper body — leans into sprint, dash and the smash ----
+  const upper = new THREE.Group(); upper.position.y = 1.92; g.add(upper);
+  // broad muscular torso
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.46, 0.96), cloth);
+  torso.position.y = 0.96; upper.add(torso);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(1.74, 1.22, 1.06), steel);
+  chest.position.y = 1.06; upper.add(chest);
+  for (const sx of [-0.44, 0.44]) {            // sculpted pectorals
+    const pec = new THREE.Mesh(new THREE.SphereGeometry(0.42, 8, 6), steel);
+    pec.position.set(sx, 1.22, 0.46); pec.scale.set(1, 0.82, 0.7);
+    upper.add(pec);
+  }
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.44, 1.0),
     mat(0x15110f));
-  belt.position.y = 0.14; upper.add(belt);
-  // short cape behind — kept short so your legs always read
+  belt.position.y = 0.2; upper.add(belt);
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.22), gold);
+  buckle.position.set(0, 0.2, 0.54); upper.add(buckle);
+  // tattered blood-red war cape
   const cloak = new THREE.Mesh(
-    new THREE.ConeGeometry(0.98, 2.0, 9, 1, true), mat(0x1f1418));
-  cloak.position.set(0, 0.85, -0.4); cloak.rotation.x = 0.2;
+    new THREE.ConeGeometry(1.15, 2.5, 8, 1, true), mat(0x5a1518));
+  cloak.position.set(0, 0.95, -0.52); cloak.rotation.x = 0.22;
   cloak.material.side = THREE.DoubleSide; upper.add(cloak);
-  for (const sx of [-0.86, 0.86]) {
-    const pa = new THREE.Mesh(
-      new THREE.SphereGeometry(0.44, 10, 6, 0, TAU, 0, Math.PI / 2), plate);
-    pa.position.set(sx, 1.5, 0); upper.add(pa);
-  }
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 12), skin);
-  head.position.y = 2.06; head.scale.set(1, 1.06, 1); upper.add(head);
-  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.64, 1.05, 10),
-    darkLeather);
-  hood.position.y = 2.42; upper.add(hood);
-  const eyes = [];
-  for (const sx of [-0.16, 0.16]) {
-    const e = new THREE.Mesh(new THREE.SphereGeometry(0.075, 6, 6),
-      new THREE.MeshBasicMaterial({ color: 0xffd06a }));
-    e.position.set(sx, 2.04, 0.42); upper.add(e); eyes.push(e);
-  }
-  // arms + weapon mount
-  const arm = new THREE.Group(); arm.position.set(0, 1.06, 0.5); upper.add(arm);
+  // huge spiked pauldrons
   for (const sx of [-1, 1]) {
-    const fa = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 1.0),
-      mat(0x342c30));
-    fa.position.set(sx * 0.34, 0, 0.42); fa.rotation.y = -sx * 0.42;
-    arm.add(fa);
-    const gaunt = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.42),
+    const pauld = new THREE.Mesh(
+      new THREE.SphereGeometry(0.64, 10, 8, 0, TAU, 0, Math.PI * 0.62), plate);
+    pauld.position.set(sx * 1.02, 1.66, 0); upper.add(pauld);
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.74, 5), iron);
+    spike.position.set(sx * 1.18, 2.0, 0); spike.rotation.z = -sx * 0.5;
+    upper.add(spike);
+  }
+  // thick neck, blocky head, crested war-helm
+  const neck = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.34, 0.44, 0.4, 8), skin);
+  neck.position.y = 1.86; upper.add(neck);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.86, 0.8), skin);
+  head.position.y = 2.42; upper.add(head);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.32, 0.7), skin);
+  jaw.position.set(0, 2.06, 0.05); upper.add(jaw);
+  const helm = new THREE.Mesh(
+    new THREE.SphereGeometry(0.51, 12, 10, 0, TAU, 0, Math.PI * 0.6), iron);
+  helm.position.y = 2.66; upper.add(helm);
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.22, 0.88), iron);
+  brow.position.y = 2.52; upper.add(brow);
+  const crest = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.44, 1.08),
+    mat(0x8a2018));
+  crest.position.y = 3.04; upper.add(crest);
+  const eyes = [];
+  for (const sx of [-0.2, 0.2]) {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.08, 0.06),
+      new THREE.MeshBasicMaterial({ color: 0xffd06a }));
+    e.position.set(sx, 2.44, 0.41); upper.add(e); eyes.push(e);
+  }
+  // ---- massive arms — drawn into one group that swings with the weapon ----
+  const arm = new THREE.Group(); arm.position.set(0, 1.52, 0.16); upper.add(arm);
+  for (const sx of [-1, 1]) {
+    const bicep = new THREE.Mesh(new THREE.SphereGeometry(0.41, 8, 7), skin);
+    bicep.position.set(sx * 0.8, 0.04, 0.16); bicep.scale.set(1, 1.15, 1);
+    arm.add(bicep);
+    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 1.2), skin);
+    fore.position.set(sx * 0.5, -0.12, 0.66); fore.rotation.y = -sx * 0.42;
+    arm.add(fore);
+    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.48, 0.52),
       steel);
-    gaunt.position.set(sx * 0.16, 0, 0.86); arm.add(gaunt);
+    fist.position.set(sx * 0.2, -0.14, 1.2); arm.add(fist);
   }
   const weaponMount = new THREE.Group();
-  weaponMount.position.set(0, -0.05, 0.95);
-  weaponMount.rotation.x = Math.PI / 2;          // blade points forward
+  weaponMount.position.set(0, -0.14, 1.34);
+  weaponMount.rotation.x = Math.PI / 2;
   arm.add(weaponMount);
   const sword = buildGreatsword();
   weaponMount.add(sword);
   const torch = new THREE.PointLight(0xffb878, 2.3, 44, 1.6);
-  torch.position.set(0, 3.4, 0); g.add(torch);
+  torch.position.set(0, 3.8, 0); g.add(torch);
   upper.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  arm.traverse(o => { if (o.isMesh) o.castShadow = true; });
   g.userData = { upper, cloak, arm, weaponMount, legs, head, eyes,
     sword, hammer: null, weaponKind: "sword", torch };
   return g;
@@ -1379,6 +1405,8 @@ function makePlayer() {
     walkP: 0, moving: false, stepT: 0, lean: 0,
     atk: false, atkT: 0, atkW: 0, atkS: 0, atkR: 0, atkHits: null,
     atkSlowT: 0,
+    smash: false, smashT: 0, smashW: 0, smashS: 0, smashR: 0,
+    smashDone: false,
     smashCd: 0, dashCd: 0, dashT: 0, moveAng: 0, iframes: 0, hurt: 0,
     dashTrailT: 0,
     alive: true,
@@ -1613,7 +1641,7 @@ function grantAbility(id) {
 
 /* ─── combat ──────────────────────────────────────────────────────────────── */
 function tryAttack() {
-  if (player.atk || player.dashT > 0 || !player.alive) return;
+  if (player.atk || player.smash || player.dashT > 0 || !player.alive) return;
   player.atk = true; player.atkT = 0;
   player.atkW = P.atkWindup / player.atkSpeed;
   player.atkS = P.atkStrike / player.atkSpeed;
@@ -1622,39 +1650,88 @@ function tryAttack() {
   player.atkSlowT = ATK_SLOW_DUR;
   Sound.swing();
 }
+/* RIGHT MOUSE — a committed, heavy SMASH with the weapon you wield.
+   It overrides a light swing in progress — the SMASH always takes over. */
 function trySmash() {
-  if (player.smashCd > 0 || !player.alive || player.atk) return;
+  if (player.smashCd > 0 || !player.alive || player.smash ||
+      player.dashT > 0) return;
+  player.atk = false;                          // the smash interrupts a slash
   player.smashCd = P.smashCd;
-  const isHammer = hasA("hammer");
-  Sound.smash(); shake(isHammer ? 0.9 : 0.55);
-  const rng = P.smashRange * (isHammer ? 1.4 : 1);
-  const dmg = (P.smashDmg + player.level * 3 + player.dmg * 0.8) *
-    player.dmgMul * (isHammer ? 1.6 : 1);
-  for (const z of zombies) {
-    if (z.state === "die" || z.state === "rising") continue;
-    const dx = z.x - player.x, dz = z.z - player.z;
-    if (Math.hypot(dx, dz) < rng + z.r) {
-      hitZombie(z, dmg, true, Math.atan2(dx, dz), isHammer ? 2.2 : 3.0);
-      if (isHammer && z.state !== "die") { z.stun = 1.6; z.frozen = false; }
+  player.smash = true; player.smashT = 0; player.smashDone = false;
+  player.smashW = 0.27; player.smashS = 0.12; player.smashR = 0.34;
+  player.atkSlowT = ATK_SLOW_DUR * 1.7;
+  Sound.swing();
+}
+/* the smash lands mid-swing — a colossal cleave, or a ground-shattering slam */
+function smashStrike() {
+  const e = player, ham = hasA("hammer");
+  const dmg = e.dmg * e.dmgMul * (ham ? 4.2 : 3.0) + e.level * 4;
+  hitStop = 0.09;
+  if (ham) {
+    const ix = e.x + Math.sin(e.aim) * 6.2;
+    const iz = e.z + Math.cos(e.aim) * 6.2;
+    quakeImpact(ix, groundHeight(ix, iz), iz, dmg);
+  } else {
+    shake(0.85); Sound.smash();
+    const range = P.atkRange * 1.5, arc = P.atkArc * 1.3;
+    for (const z of zombies) {
+      if (z.state === "die" || z.state === "rising") continue;
+      const dx = z.x - e.x, dz = z.z - e.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > range + z.r) continue;
+      if (Math.abs(angDiff(e.aim, Math.atan2(dx, dz))) > arc) continue;
+      const crit = Math.random() < e.critChance + 0.35;
+      const ang = Math.atan2(dx, dz);
+      hitZombie(z, dmg * (crit ? e.critMul : 1), crit, ang, 6.0);
+      if (z.state !== "die") {
+        if (hasA("fire")) { z.burn = 4; z.burnDps = 9 + e.level * 1.6; }
+        if (hasA("frost")) applyChill(z);
+      }
+    }
+    smashRing.setColor(0xffe2a0);
+    smashRing.show(e.x, e.y + 0.2, e.z, range, 0.46);
+    const fx = e.x + Math.sin(e.aim) * 5, fz = e.z + Math.cos(e.aim) * 5;
+    spawnParts(fx, e.y + 1.3, fz, 42,
+      { color: 0xfff2dc, speed: 21, up: 4, life: 0.5 });
+    flashLight(fx, e.y + 1.6, fz, 0.36, 0xffd27a);
+    grassFlatten = { x: e.x, z: e.z, r: range, t: 0 };
+  }
+}
+/* GOD'S HAMMER impact — flattens what's close, quakes the wider horde */
+function quakeImpact(x, y, z, dmg) {
+  Sound.smash(); Sound.boom();
+  shake(1.5); hitStop = 0.12;
+  smashRing.setColor(0xf4c850);
+  smashRing.show(x, y + 0.15, z, 22, 0.5);
+  boomRing.setColor(0xb88838);
+  boomRing.show(x, y + 0.2, z, 34, 0.72);
+  windRing.setColor(0x8a6c44);
+  windRing.show(x, y + 0.25, z, 16, 0.4);
+  spawnParts(x, y + 0.5, z, 90,
+    { color: 0x6a5236, speed: 24, up: 13, life: 1.0 });
+  spawnParts(x, y + 0.5, z, 46,
+    { color: 0x2c2418, speed: 15, up: 18, life: 1.4 });
+  spawnParts(x, y + 0.5, z, 30,
+    { color: 0xf4c850, speed: 20, up: 6, life: 0.6 });
+  flashLight(x, y + 2, z, 0.5, 0xf4c850);
+  grassFlatten = { x, z, r: 20, t: 0 };
+  for (const zb of zombies) {
+    if (zb.state === "die" || zb.state === "rising") continue;
+    const dx = zb.x - x, dz = zb.z - z, dd = Math.hypot(dx, dz);
+    if (dd < 12 + zb.r) {
+      hitZombie(zb, dmg * clamp(1 - dd / 26, 0.35, 1), true,
+        Math.atan2(dx, dz), 3.4);
+      if (zb.state !== "die") { zb.stun = 0.7; zb.quake = 3.6; }
+    } else if (dd < 27) {
+      zb.quake = Math.max(zb.quake, 3.0);     // caught in the tremor
+      zb.stagger = Math.max(zb.stagger, 0.25);
     }
   }
-  spawnParts(player.x, player.y + 0.5, player.z, isHammer ? 64 : 46,
-    { color: isHammer ? 0xf0c040 : 0xcaa24a, speed: isHammer ? 22 : 17,
-      up: 5, life: 0.6 });
-  smashRing.setColor(isHammer ? 0xf0c040 : 0xffd680);
-  smashRing.show(player.x, player.y + 0.15, player.z, rng,
-    isHammer ? 0.5 : 0.42);
-  if (isHammer) {
-    boomRing.setColor(0xf0c040);
-    boomRing.show(player.x, player.y + 0.2, player.z, rng * 1.5, 0.55);
-    pulseAbil("hammer");
-  }
-  grassFlatten = { x: player.x, z: player.z, r: rng + 3, t: 0 };
-  flashLight(player.x, player.y + 1, player.z, 0.5,
-    isHammer ? 0xf0c040 : 0xffd27a);
+  pulseAbil("hammer");
 }
 function tryDash() {
   if (player.dashCd > 0 || player.dashT > 0 || !player.alive) return;
+  player.atk = false; player.smash = false;     // dash cancels a strike
   let mx = 0, mz = 0;
   if (keys["KeyW"] || keys["ArrowUp"]) mz -= 1;
   if (keys["KeyS"] || keys["ArrowDown"]) mz += 1;
@@ -1912,7 +1989,7 @@ function spawnZombie(type, rare) {
     flash: 0, atkCd: rand(0.3, 1.2), stagger: 0, kx: 0, kz: 0,
     groanT: rand(2, 9), dieT: 0,
     burn: 0, burnDps: 0, chill: 0, chillHits: 0, stun: 0, frozen: false,
-    dodgeT: 0, dodgeAng: 0,
+    quake: 0, dodgeT: 0, dodgeAng: 0,
   });
   zombiesAlive++;
   spawnParts(x, gy + 0.3, z, 20,
@@ -2415,20 +2492,27 @@ function updatePlayer(dt) {
     e.z *= (ARENA - P.r) / cd; }
   e.y = groundHeight(e.x, e.z);
 
-  const lt = (e.dashT > 0 ? 0.5 : e.sprinting ? 0.26 : 0) -
-    (e.atk ? 0.12 : 0);
-  e.lean = lerp(e.lean, lt, 0.2);
+  let lt = (e.dashT > 0 ? 0.5 : e.sprinting ? 0.26 : 0) - (e.atk ? 0.1 : 0);
+  if (e.smash) lt = e.smashT < e.smashW ? -0.34 : 0.58;   // rear back, slam
+  e.lean = lerp(e.lean, lt, 0.26);
 
   if (e.smashCd > 0) e.smashCd -= dt;
   if (e.dashCd > 0) e.dashCd -= dt;
   if (e.iframes > 0) e.iframes -= dt;
   if (e.hurt > 0) e.hurt -= dt;
 
-  if (mouseDown && !e.atk && e.dashT <= 0) tryAttack();
+  if (mouseDown && !e.atk && !e.smash && e.dashT <= 0) tryAttack();
   if (e.atk) {
     e.atkT += dt;
     if (e.atkT >= e.atkW && e.atkT < e.atkW + e.atkS) meleeStrike();
     if (e.atkT >= e.atkW + e.atkS + e.atkR) e.atk = false;
+  }
+  if (e.smash) {
+    e.smashT += dt;
+    if (!e.smashDone && e.smashT >= e.smashW) {
+      smashStrike(); e.smashDone = true;
+    }
+    if (e.smashT >= e.smashW + e.smashS + e.smashR) e.smash = false;
   }
   if (e.hp < e.maxHp * 0.28 && e.alive) {
     heartT -= dt;
@@ -2448,23 +2532,56 @@ function poseSurvivor() {
   const sw = e.moving ? (e.sprinting ? 1.0 : 0.72) : 0.06;
   u.legs[0].rotation.x = Math.sin(e.walkP) * sw;
   u.legs[1].rotation.x = Math.sin(e.walkP + Math.PI) * sw;
-  let arm = -0.5;
+  // ---- weapon stance & strikes — arm pose is [pitch, yaw, roll] ----
+  const idleP = [-0.62, 0.5, -0.56];           // greatsword shouldered
+  let pX = idleP[0], pY = idleP[1], pZ = idleP[2];
+  const ham = u.weaponKind === "hammer";
   if (e.atk) {
+    // quick slash — up off the shoulder, then down and across the body
     const a = e.atkT, w = e.atkW, s = e.atkS, r = e.atkR;
-    if (a < w) arm = lerp(-0.5, -2.3, easeOut(a / w));
-    else if (a < w + s) arm = lerp(-2.3, 1.5, easeIn((a - w) / s));
-    else arm = lerp(1.5, -0.5, clamp((a - w - s) / r, 0, 1));
+    const wnd = [-1.55, 1.0, -0.72], hit = [0.62, -1.12, 0.62];
+    if (a < w) { const t = easeOut(a / w);
+      pX = lerp(idleP[0], wnd[0], t); pY = lerp(idleP[1], wnd[1], t);
+      pZ = lerp(idleP[2], wnd[2], t); }
+    else if (a < w + s) { const t = easeIn((a - w) / s);
+      pX = lerp(wnd[0], hit[0], t); pY = lerp(wnd[1], hit[1], t);
+      pZ = lerp(wnd[2], hit[2], t); }
+    else { const t = clamp((a - w - s) / r, 0, 1);
+      pX = lerp(hit[0], idleP[0], t); pY = lerp(hit[1], idleP[1], t);
+      pZ = lerp(hit[2], idleP[2], t); }
+  } else if (e.smash) {
+    // the SMASH — a vast wind-up overhead, then a brutal slam down
+    const a = e.smashT, w = e.smashW, s = e.smashS, r = e.smashR;
+    const wnd = ham ? [-2.85, 0.0, 0.0] : [-2.8, 0.62, -0.56];
+    const hit = ham ? [1.42, 0.0, 0.0]  : [1.36, -1.22, 0.78];
+    if (a < w) { const t = easeIn(a / w);
+      pX = lerp(idleP[0], wnd[0], t); pY = lerp(idleP[1], wnd[1], t);
+      pZ = lerp(idleP[2], wnd[2], t); }
+    else if (a < w + s) { let t = (a - w) / s; t = t * t;
+      pX = lerp(wnd[0], hit[0], t); pY = lerp(wnd[1], hit[1], t);
+      pZ = lerp(wnd[2], hit[2], t); }
+    else { const t = easeOut(clamp((a - w - s) / r, 0, 1));
+      pX = lerp(hit[0], idleP[0], t); pY = lerp(hit[1], idleP[1], t);
+      pZ = lerp(hit[2], idleP[2], t); }
   }
-  u.arm.rotation.y = arm;
-  u.arm.rotation.x = -0.15 + (e.atk ? -0.32 : 0);
+  u.arm.rotation.set(pX, pY, pZ);
   for (const eye of u.eyes)
     eye.material.color.setHex(e.hurt > 0 ? 0xff5a3a : 0xffd06a);
+  // slash arc — for the quick slash and the sword smash
+  let arcOn = false, arcK = 0, arcScl = 1;
   if (e.atk && e.atkT >= e.atkW && e.atkT < e.atkW + e.atkS + 0.05) {
-    const k = clamp((e.atkT - e.atkW) / e.atkS, 0, 1);
+    arcOn = true; arcK = clamp((e.atkT - e.atkW) / e.atkS, 0, 1);
+  } else if (e.smash && !ham && e.smashT >= e.smashW &&
+             e.smashT < e.smashW + e.smashS + 0.1) {
+    arcOn = true; arcK = clamp((e.smashT - e.smashW) / e.smashS, 0, 1);
+    arcScl = 1.55;
+  }
+  if (arcOn) {
     swingArc.visible = true;
     swingArc.position.set(e.x, e.y + 0.2, e.z);
     swingArc.rotation.y = e.aim - Math.PI / 2;
-    swingArc.material.opacity = (1 - k) * 0.7;
+    swingArc.scale.setScalar(arcScl);
+    swingArc.material.opacity = (1 - arcK) * 0.72;
   } else swingArc.visible = false;
 }
 
@@ -2520,6 +2637,7 @@ function updateZombies(dt) {
     let chillMul = 1;
     if (z.chill > 0) { z.chill -= dt; chillMul = z.frozen ? 0 : 0.45; }
     else z.frozen = false;
+    if (z.quake > 0) { z.quake -= dt; chillMul *= 0.4; }   // tremor slow
     if (z.stun > 0) { z.stun -= dt; if (z.stun <= 0) z.frozen = false; }
 
     z.x += z.kx * dt; z.z += z.kz * dt;
