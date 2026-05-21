@@ -3,1366 +3,1070 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Mortimer's Horde — Survival</title>
+<title>Mortimer's Horde</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #050506; overscroll-behavior: none; }
-  body { font: 13px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif;
-         color: #c4bfb4; overflow: hidden; user-select: none; }
-  #stage { position: fixed; inset: 0; }
-  #stage canvas { display: block; touch-action: none; cursor: crosshair; }
-
-  /* permanent vignette — darkens the screen edges for dread */
-  #vignette { position: fixed; inset: 0; z-index: 2; pointer-events: none;
-              box-shadow: inset 0 0 210px 30px rgba(0,0,0,.66); }
-
-  /* HUD */
-  .hud { position: fixed; pointer-events: none; z-index: 5;
-         text-shadow: 0 1px 3px rgba(0,0,0,.95); }
-  .hud .label { font-size: 9px; letter-spacing: .26em; text-transform: uppercase;
-                color: #6a665d; margin-bottom: 3px; }
-  .hud .value { font: 700 23px/1 "Arial Narrow", "Segoe UI", sans-serif;
-                letter-spacing: .07em; text-transform: uppercase; color: #b3aea1; }
-
-  #healthHud   { left: 18px; top: 16px; }
-  #waveHud     { right: 18px; top: 16px; text-align: right; }
-  #ammoHud     { right: 18px; bottom: 18px; text-align: right; }
-  #scoreHud    { left: 18px; bottom: 18px; }
-
-  /* Health bar */
-  .bar { width: 232px; height: 9px; background: rgba(0,0,0,.65);
-         border: 1px solid rgba(150,42,32,.55); border-radius: 1px; overflow: hidden; }
-  .bar > i { display: block; height: 100%;
-             background: linear-gradient(90deg, #3a0c08, #a32619);
-             transition: width .18s ease; }
-
-  /* Crosshair */
-  #crosshair { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px;
-               transform: translate(-50%,-50%); z-index: 4; pointer-events: none;
-               opacity: .5; }
-  #crosshair::before, #crosshair::after {
-    content: ""; position: absolute; background: #9a948a;
-  }
-  #crosshair::before { left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-50%); }
-  #crosshair::after  { top: 50%; left: 0; height: 1px; width: 100%; transform: translateY(-50%); }
-  #crosshair.hit { animation: hitPulse .18s ease; }
-  @keyframes hitPulse { 0%{transform:translate(-50%,-50%) scale(1.7); opacity:.95}
-                        100%{transform:translate(-50%,-50%) scale(1); opacity:.5} }
-
-  /* Center messages */
-  .center { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
-            z-index: 7; text-align: center; pointer-events: auto; }
-  .center .big { font: 800 46px/1.05 "Arial Narrow", "Segoe UI", sans-serif;
-                 letter-spacing: .06em; text-transform: uppercase; color: #b6b0a3;
-                 margin-bottom: 12px; text-shadow: 0 2px 20px rgba(150,24,14,.55); }
-  .center .sub { font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
-                 color: #706b61; max-width: 420px; margin: 0 auto 18px; line-height: 1.9; }
-  .btn { display: inline-block; padding: 12px 30px; border: 1px solid #6a3028;
-         background: rgba(120,30,22,.12); color: #c2b8a8; cursor: pointer;
-         font: 700 11px/1 "Arial Narrow", sans-serif; letter-spacing: .3em;
-         text-transform: uppercase; transition: all .15s; }
-  .btn:hover { background: #a32619; border-color: #a32619; color: #0a0a0a; }
-
-  #overlay { position: fixed; inset: 0; z-index: 6;
-             background: radial-gradient(ellipse at center, rgba(4,4,5,.62), rgba(2,2,3,.97));
-             pointer-events: auto; }
-  #overlay.hidden { display: none; }
-
-  /* Wave announcement banner */
-  #waveBanner { position: fixed; left: 50%; top: 26%; transform: translate(-50%,-50%);
-                z-index: 8; text-align: center; pointer-events: none;
-                opacity: 0; transition: opacity .4s; }
-  #waveBanner.on { opacity: 1; }
-  #waveBanner .b1 { font-size: 10px; letter-spacing: .4em; text-transform: uppercase; color: #7d4038; }
-  #waveBanner .b2 { font: 800 52px/1 "Arial Narrow", "Segoe UI", sans-serif;
-                    letter-spacing: .06em; text-transform: uppercase; color: #b6b0a3;
-                    margin-top: 6px; text-shadow: 0 2px 22px rgba(150,25,15,.6); }
-
-  /* Damage vignette */
-  #damageVignette { position: fixed; inset: 0; z-index: 3; pointer-events: none;
-                    box-shadow: inset 0 0 120px 30px rgba(150,12,12,0);
-                    transition: box-shadow .25s ease; }
-  #damageVignette.on { box-shadow: inset 0 0 220px 80px rgba(150,12,12,.62); }
-
-  /* Hit marker text */
-  .floater { position: fixed; z-index: 7; pointer-events: none;
-             font: 700 20px/1 "Arial Narrow", monospace; color: #9a948a;
-             text-shadow: 1px 1px 0 #000, 0 0 6px rgba(0,0,0,.9); }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { cursor: none; }
+  #game { display: block; position: fixed; inset: 0; }
 </style>
 </head>
 <body>
-  <div id="stage"></div>
-  <div id="vignette"></div>
-
-  <div id="crosshair"></div>
-  <div id="damageVignette"></div>
-
-  <div class="hud" id="healthHud">
-    <div class="label">Vitality</div>
-    <div class="bar"><i id="healthFill" style="width:100%"></i></div>
-  </div>
-
-  <div class="hud" id="waveHud">
-    <div class="label">Wave</div>
-    <div class="value" id="waveNum">1</div>
-  </div>
-
-  <div class="hud" id="ammoHud">
-    <div class="label">Weapon</div>
-    <div class="value" id="weaponText">Splintered Club</div>
-  </div>
-
-  <div class="hud" id="scoreHud">
-    <div class="label">Kills · Score</div>
-    <div class="value" id="scoreText">0 · 0</div>
-  </div>
-
-  <div id="waveBanner">
-    <div class="b1" id="waveBannerSub">Brace yourself</div>
-    <div class="b2" id="waveBannerBig">Wave 1</div>
-  </div>
-
-  <div id="overlay">
-    <div class="center" id="centerCard">
-      <div class="big">Mortimer's Horde</div>
-      <div class="sub">
-        The town is overrun. Hold the dark as long as you can.<br><br>
-        WASD move · Mouse look · Click swing · Shift+W sprint
-      </div>
-      <button class="btn" id="startBtn">Begin</button>
-    </div>
-  </div>
-
-<!-- Three.js — try multiple CDNs in case one is blocked / down -->
+<canvas id="game"></canvas>
 <script>
-(function loadThree() {
-  var urls = [
-    "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.149.0/three.min.js",
-    "https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js",
-    "https://unpkg.com/three@0.149.0/build/three.min.js"
-  ];
-  var i = 0;
-  function next() {
-    if (i >= urls.length) {
-      document.body.innerHTML =
-        '<div style="color:#f3edff;font-family:sans-serif;padding:40px;max-width:520px;margin:60px auto;">'
-      + '<h2 style="font-family:Georgia,serif">Could not load Three.js</h2>'
-      + '<p>None of the CDN URLs were reachable. Check your internet connection or try opening this file from a local web server (e.g. <code>python -m http.server</code>) rather than via <code>file://</code>.</p>'
-      + '</div>';
-      return;
-    }
-    var s = document.createElement("script");
-    s.src = urls[i++];
-    s.onload = function () { if (window.startMortimersHorde) window.startMortimersHorde(); };
-    s.onerror = next;
-    document.head.appendChild(s);
-  }
-  next();
-})();
-</script>
-<script>
+"use strict";
 /* =========================================================================
-   MORTIMER'S HORDE — third-person zombie survival
-   Single self-contained file. Three.js (r149) via a 3-CDN fallback chain;
-   vanilla JavaScript otherwise.
+   MORTIMER'S HORDE — a 2D top-down survival horror
+   Single self-contained file. Plain Canvas 2D, WebAudio for sound. No build
+   step, no external assets — every pixel and sound is generated in code.
 
-   Layout — each system is fenced with a labelled separator comment:
-     helpers, asset builders, audio, world, player, zombies,
-     waves, upgrades, hud, state machine, main loop
+   You are a lone survivor with a cleaver and a failing flashlight. The dead
+   shamble out of the dark in waves. Hold out.
 
-   Game flow is an explicit finite state machine:
-     TITLE - PLAYING - UPGRADE_PICK ;  PLAYING - GAME_OVER - TITLE
-   Gameplay systems only update while phase === PLAYING.
-
-   --- HORROR OVERHAUL ---
-   Art direction reworked from the cartoon prototype to grim realism:
-   realistic Lambert materials (no toon ramp, no cell outlines), dark moody
-   lighting, heavy fog, a warm survivor light pool against the dark, gaunt
-   menacing zombies and a clearly-human hooded player. Difficulty tuned so
-   wave-1 zombies die in one hit (+1 hit per wave) and melee reach is longer.
+   Sections: config · helpers · input · audio · world · blood · camera ·
+   player · zombies · waves · lighting · hud & screens · state · main loop
    ========================================================================= */
+(function () {
 
-window.startMortimersHorde = function () {
-  if (window._mortimerStarted) return;
-  window._mortimerStarted = true;
+/* ─── config ─────────────────────────────────────────────────────────────── */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const lightCanvas = document.createElement("canvas");   // offscreen darkness mask
+const lctx = lightCanvas.getContext("2d");
+let W = 0, H = 0;
+function resize() {
+  W = canvas.width = lightCanvas.width = window.innerWidth;
+  H = canvas.height = lightCanvas.height = window.innerHeight;
+}
+window.addEventListener("resize", resize);
+resize();
 
-/* ─── helpers ──────────────────────────────────────────────────────────────
-   Pure math / easing / colour utilities. No game state here.                */
+const WORLD = { w: 2800, h: 2200 };
 
+const PLAYER_SPEED = 190, PLAYER_SPRINT = 312, PLAYER_R = 15, PLAYER_HP = 100;
+const MELEE_RANGE = 104, MELEE_ARC = 1.15;            // reach + hit-cone half-angle
+const SWING_WINDUP = 0.10, SWING_STRIKE = 0.13, SWING_RECOVER = 0.17;
+const SWING_TOTAL = SWING_WINDUP + SWING_STRIKE + SWING_RECOVER;
+const MELEE_DAMAGE = 1;                               // wave-1 zombie dies in one hit
+const FLASH_LEN = 440, FLASH_HALF = 0.42, GLOW_R = 128;
+const DECAL_MAX = 170;
+
+/* ─── helpers ────────────────────────────────────────────────────────────── */
 const TAU = Math.PI * 2;
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const lerp  = (a, b, t) => a + (b - a) * t;
 const rand  = (a, b) => a + Math.random() * (b - a);
-const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-const easeInQuad   = (t) => t * t;
+const randi = (a, b) => (a + Math.random() * (b - a + 1)) | 0;
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp  = (a, b, t) => a + (b - a) * t;
+const easeOut = (t) => 1 - (1 - t) * (1 - t);
+const easeIn  = (t) => t * t;
+function angDiff(a, b) { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; }
 
-// shortest-arc angular interpolation (radians)
-function lerpAngle(a, b, t) {
-  let diff = b - a;
-  while (diff >  Math.PI) diff -= TAU;
-  while (diff < -Math.PI) diff += TAU;
-  return a + diff * t;
-}
+/* ─── input ──────────────────────────────────────────────────────────────── */
+const keys = Object.create(null);
+const mouse = { x: W / 2, y: H / 2 };
+window.addEventListener("keydown", (e) => { keys[e.code] = true; });
+window.addEventListener("keyup",   (e) => { keys[e.code] = false; });
+canvas.addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+canvas.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  if (state === ST.TITLE) startGame();
+  else if (state === ST.GAMEOVER) { if (gameOverT > 1.1) startGame(); }
+  else if (state === ST.PLAYING && player.alive) startSwing();
+});
 
-// multiply a hex colour's brightness, clamped — used for shading variants
-function shade(hex, mul) {
-  const c = new THREE.Color(hex);
-  c.r = clamp(c.r * mul, 0, 1);
-  c.g = clamp(c.g * mul, 0, 1);
-  c.b = clamp(c.b * mul, 0, 1);
-  return "#" + c.getHexString();
-}
-
-// shared scratch values — reused every frame, never reallocated in the loop
-const _chase = new THREE.Vector3();
-const _fwd   = new THREE.Vector3();
-const _rgt   = new THREE.Vector3();
-const _qTmp  = new THREE.Quaternion();
-
-/* ─── asset builders ───────────────────────────────────────────────────────
-   Procedural meshes built once from Three.js primitives. Realistically lit
-   (MeshLambertMaterial — no toon ramp, no cell outlines). Zombies are gaunt
-   and decayed; the player is a clearly-human hooded survivor.                */
-
-// realistic matte material in one call
-function mat(color) { return new THREE.MeshLambertMaterial({ color: color }); }
-
-// vertical gradient — used for the dark night sky
-function makeGradientTexture(top, bot) {
-  const c = document.createElement("canvas"); c.width = 4; c.height = 256;
-  const ctx = c.getContext("2d");
-  const g = ctx.createLinearGradient(0,0,0,256);
-  g.addColorStop(0, top); g.addColorStop(1, bot);
-  ctx.fillStyle = g; ctx.fillRect(0,0,4,256);
-  const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true;
-  return tex;
-}
-
-/* zombie — gaunt, hunched, decayed. The `torso` group keeps rotation 0 so the
-   wave/knockback animation drives it cleanly; the hunch is baked into child
-   meshes. Returns parts { root, head, torso, armL/R, legL/R, materials }.    */
-function buildZombie(variant = 0) {
-  const palettes = [
-    { skin:"#76836b", cloth:"#262521", clothD:"#141309", blood:"#3a120c", bone:"#b8af99" },
-    { skin:"#8a8377", cloth:"#20242a", clothD:"#101216", blood:"#34100a", bone:"#c1b69f" },
-    { skin:"#697a6c", cloth:"#2a241b", clothD:"#15110a", blood:"#3e1410", bone:"#b2a991" },
-    { skin:"#928777", cloth:"#1d1b20", clothD:"#0e0d10", blood:"#421a10", bone:"#bcb29b" },
-  ];
-  const p = palettes[variant % palettes.length];
-  const matSkin  = mat(p.skin);
-  const matSkinD = mat(shade(p.skin, 0.66));
-  const matCloth = mat(p.cloth);
-  const matClothD= mat(p.clothD);
-  const matBlood = mat(p.blood);
-  const matBone  = mat(p.bone);
-  const matVoid  = mat("#0a0a0c");                                    // hollow shadow
-  const emberMat = new THREE.MeshBasicMaterial({ color: "#5e120c" });  // faint dead eye
-
-  const root = new THREE.Group();
-  const parts = {};
-
-  /* torso — group stays at rotation 0; the forward hunch is baked into meshes */
-  const torso = new THREE.Group();
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.26, 0.5), matCloth);
-  chest.rotation.x = 0.34; chest.castShadow = true; torso.add(chest);
-  // exposed ribs through torn flesh
-  for (let i = 0; i < 3; i++) {
-    const rib = new THREE.Mesh(new THREE.BoxGeometry(0.6 - i*0.07, 0.07, 0.1), matBone);
-    rib.position.set(0, 0.26 - i*0.2, 0.4 - i*0.06); rib.rotation.x = 0.34;
-    torso.add(rib);
+/* ─── audio ──────────────────────────────────────────────────────────────────
+   Procedural WebAudio. The context is created on the first click.            */
+const Sound = (() => {
+  let ac = null;
+  function ctxA() {
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    return ac;
   }
-  const cavity = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.46, 0.12), matVoid);
-  cavity.position.set(0, 0.04, 0.3); cavity.rotation.x = 0.34; torso.add(cavity);
-  // dried bloodstain
-  const stain = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.5, 0.04), matBlood);
-  stain.position.set(-0.2, -0.3, 0.31); stain.rotation.x = 0.34; torso.add(stain);
-  // tattered hem
-  for (let i = 0; i < 5; i++) {
-    const t = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.26, 3), matClothD);
-    t.rotation.x = Math.PI; t.position.set(-0.38 + i*0.19, -0.72, 0.14);
-    torso.add(t);
+  function noiseBuf(c, dur) {
+    const b = c.createBuffer(1, Math.max(1, (dur * c.sampleRate) | 0), c.sampleRate);
+    return b;
   }
-
-  /* head — gaunt, jutting forward and down */
-  const head = new THREE.Group();
-  const skull = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.84, 0.78), matSkin);
-  skull.castShadow = true; head.add(skull);
-  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.18, 0.1), matSkinD);
-  brow.position.set(0, 0.16, 0.35); head.add(brow);
-  // deep hollow eye sockets with a faint dead ember
-  const sockGeom = new THREE.BoxGeometry(0.22, 0.2, 0.18);
-  const sockL = new THREE.Mesh(sockGeom, matVoid); sockL.position.set(-0.18, 0.0, 0.33); head.add(sockL);
-  const sockR = sockL.clone(); sockR.position.x = 0.18; head.add(sockR);
-  const emberGeom = new THREE.SphereGeometry(0.045, 8, 6);
-  const emberL = new THREE.Mesh(emberGeom, emberMat); emberL.position.set(-0.18, 0.0, 0.4); head.add(emberL);
-  const emberR = emberL.clone(); emberR.position.x = 0.18; head.add(emberR);
-  // hollow cheeks
-  const cheekL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.26, 0.12), matSkinD);
-  cheekL.position.set(-0.27, -0.18, 0.29); head.add(cheekL);
-  const cheekR = cheekL.clone(); cheekR.position.x = 0.27; head.add(cheekR);
-  // agape jaw + jagged teeth
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.24, 0.4), matSkin);
-  jaw.position.set(0, -0.46, 0.1); jaw.rotation.x = 0.42; head.add(jaw);
-  const maw = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.2, 0.16), matVoid);
-  maw.position.set(0, -0.3, 0.29); head.add(maw);
-  for (let i = 0; i < 4; i++) {
-    const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.1, 4), matBone);
-    tooth.position.set(-0.14 + i*0.095, -0.24, 0.35); head.add(tooth);
-  }
-  // sparse matted hair
-  for (let i = 0; i < 3; i++) {
-    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.2), matClothD);
-    hair.position.set(-0.2 + i*0.2, 0.42, -0.04 + (i%2)*0.1); head.add(hair);
-  }
-  head.position.set(0, 1.12, 0.32);   // jut forward
-  head.rotation.x = 0.3;              // tilt down
-
-  /* arms — long, gaunt, reaching. upper.rotation.x is overwritten by the AI
-     while the zombie is active, so the rest pose here is just a fallback.    */
-  function buildArm() {
-    const arm = new THREE.Group();
-    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.32), matCloth);
-    arm.add(shoulder);
-    const upper = new THREE.Group();
-    const ua = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.74, 0.19), matSkin);
-    ua.position.y = -0.4; upper.add(ua);
-    arm.add(upper);
-    const forearm = new THREE.Group(); forearm.position.y = -0.78;
-    const fa = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.74, 0.16), matSkin);
-    fa.position.y = -0.38; forearm.add(fa);
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.18, 0.24), matSkinD);
-    hand.position.y = -0.82; forearm.add(hand);
-    for (let i = 0; i < 3; i++) {                          // clawed fingers
-      const fng = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.17, 4), matBone);
-      fng.rotation.x = -1.9; fng.position.set(-0.055 + i*0.055, -0.95, 0.12);
-      forearm.add(fng);
-    }
-    upper.add(forearm);
-    upper.rotation.x = -1.2;
-    forearm.rotation.x = -0.4;
-    arm.userData = { upper, forearm };
-    return arm;
-  }
-  const armL = buildArm(); armL.position.set(-0.6, 0.6, 0.05);
-  const armR = buildArm(); armR.position.set( 0.6, 0.6, 0.05);
-
-  /* legs — thin and stiff */
-  function buildLeg() {
-    const leg = new THREE.Group();
-    const thighPiv = new THREE.Group();
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.62, 0.27), matClothD);
-    thigh.position.y = -0.31; thighPiv.add(thigh);
-    const shin = new THREE.Group(); shin.position.y = -0.62;
-    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.6, 0.23), matSkinD);
-    sh.position.y = -0.3; shin.add(sh);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.15, 0.44), matClothD);
-    foot.position.set(0, -0.66, 0.1); shin.add(foot);
-    thighPiv.add(shin);
-    leg.add(thighPiv);
-    leg.userData = { thighPiv, shin };
-    return leg;
-  }
-  const legL = buildLeg(); legL.position.set(-0.23, -0.44, 0);
-  const legR = buildLeg(); legR.position.set( 0.23, -0.44, 0);
-
-  root.add(torso); root.add(head); root.add(armL); root.add(armR); root.add(legL); root.add(legR);
-  root.position.y = 1.8;
-
-  parts.root = root; parts.head = head; parts.torso = torso;
-  parts.armL = armL; parts.armR = armR; parts.legL = legL; parts.legR = legR;
-  parts.materials = { matSkin, matCloth };
-  return parts;
-}
-
-/* player — a clearly-human hooded survivor. Upright posture (contrast to the
-   hunched dead). Returns { root, torso, head, armL/R, legL/R, stickPivot }.  */
-function buildPlayer() {
-  const matSkin   = mat("#b5876a");
-  const matJacket = mat("#262a2e");
-  const matJacketD= mat("#16181b");
-  const matHood   = mat("#1e2024");
-  const matPants  = mat("#191a1d");
-  const matBoot   = mat("#0d0d0e");
-  const matStubble= mat("#2a2620");
-  const matEye    = new THREE.MeshBasicMaterial({ color: "#0a0a0a" });
-
-  const root = new THREE.Group();
-  const parts = {};
-
-  /* torso — heavy jacket, upright */
-  const torso = new THREE.Group();
-  const jacket = new THREE.Mesh(new THREE.BoxGeometry(1.24, 1.34, 0.78), matJacket);
-  jacket.castShadow = true; torso.add(jacket);
-  // open jacket front panel (darker, slightly proud)
-  const front = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.2, 0.06), matJacketD);
-  front.position.set(0, 0, 0.41); torso.add(front);
-  // shoulder yoke
-  const yoke = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.3, 0.84), matJacketD);
-  yoke.position.y = 0.6; torso.add(yoke);
-
-  /* head — human, hood up */
-  const head = new THREE.Group();
-  const skull = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.9, 0.86), matSkin);
-  skull.castShadow = true; head.add(skull);
-  // hood — crown, back and side drapes leave the face open
-  const hoodTop = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.42, 1.0), matHood);
-  hoodTop.position.set(0, 0.42, -0.04); head.add(hoodTop);
-  const hoodBack = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.92, 0.36), matHood);
-  hoodBack.position.set(0, 0.05, -0.46); head.add(hoodBack);
-  const hoodL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.94, 1.0), matHood);
-  hoodL.position.set(-0.6, 0.0, -0.06); head.add(hoodL);
-  const hoodR = hoodL.clone(); hoodR.position.x = 0.6; head.add(hoodR);
-  // shadowed brow under the hood
-  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.2, 0.1), matJacketD);
-  brow.position.set(0, 0.26, 0.4); head.add(brow);
-  // eyes — set, human, watchful
-  const eyeGeom = new THREE.BoxGeometry(0.12, 0.07, 0.06);
-  const eyeL = new THREE.Mesh(eyeGeom, matEye); eyeL.position.set(-0.19, 0.06, 0.44); head.add(eyeL);
-  const eyeR = eyeL.clone(); eyeR.position.x = 0.19; head.add(eyeR);
-  // nose + stubbled jaw
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.12), matSkin);
-  nose.position.set(0, -0.08, 0.46); head.add(nose);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.34, 0.5), matStubble);
-  jaw.position.set(0, -0.34, 0.24); head.add(jaw);
-  head.position.set(0, 1.06, 0);
-
-  /* arms — two-handed grip stance. The arm GROUP is twisted by the swing
-     animation; the grip pose lives in the upper / forearm groups.            */
-  function buildArm(side) {
-    const arm = new THREE.Group();
-    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.36, 0.44), matJacket);
-    arm.add(shoulder);
-    const upper = new THREE.Group();
-    const ua = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.6, 0.3), matJacket);
-    ua.position.y = -0.33; upper.add(ua);
-    arm.add(upper);
-    const forearm = new THREE.Group(); forearm.position.y = -0.64;
-    const fa = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.52, 0.27), matJacketD);
-    fa.position.y = -0.28; forearm.add(fa);
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.2, 0.3), matSkin);
-    hand.position.y = -0.62; forearm.add(hand);
-    upper.add(forearm);
-    if (side === 'R') {
-      upper.rotation.x = -0.45; upper.rotation.z = -0.15;
-      forearm.rotation.x = -1.25; forearm.rotation.y = -0.25;
-    } else {
-      upper.rotation.x = -0.55; upper.rotation.z = 0.15;
-      forearm.rotation.x = -1.35; forearm.rotation.y = 0.35;
-    }
-    arm.userData = { upper, forearm, hand };
-    return arm;
-  }
-  const armL = buildArm('L'); armL.position.set(-0.76, 0.46, 0);
-  const armR = buildArm('R'); armR.position.set( 0.76, 0.46, 0);
-
-  /* weapon — a splintered, nail-studded club. Mesh runs along +X so rotating
-     the pivot around Y sweeps a true horizontal arc.                         */
-  const stickPivot = new THREE.Group();
-  stickPivot.position.set(0.0, 0.55, 0.5);
-  const stickMesh = new THREE.Group();
-  const matWood = mat("#3a2a1a");
-  const matWoodD= mat("#21160d");
-  const matNail = mat("#2a2c30");
-
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.5, 6), matWood);
-  shaft.rotation.z = Math.PI/2; shaft.position.x = 0.7; stickMesh.add(shaft);
-  const head1 = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.3), matWoodD);
-  head1.position.x = 1.2; stickMesh.add(head1);
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.34, 8), matWoodD);
-  grip.rotation.z = Math.PI/2; grip.position.x = 0.14; stickMesh.add(grip);
-  // protruding nails near the head
-  for (let i = 0; i < 4; i++) {
-    const nail = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.22, 4), matNail);
-    const ang = i * (TAU/4) + 0.4;
-    nail.position.set(1.2, Math.sin(ang)*0.22, Math.cos(ang)*0.22);
-    nail.rotation.x = -ang; stickMesh.add(nail);
-  }
-  stickPivot.add(stickMesh);
-
-  const E = THREE.Euler, Q = THREE.Quaternion;
-  // overhand chop — REST: up by the shoulder · WIND: reared up behind the
-  // head · STRIKE: swung down and across the body
-  const qRest   = new Q().setFromEuler(new E( 0.00,  0.15,  1.15));
-  const qWind   = new Q().setFromEuler(new E(-0.35,  0.20,  1.78));
-  const qStrike = new Q().setFromEuler(new E( 0.35, -1.05, -0.85));
-  stickPivot.quaternion.copy(qRest);
-  stickPivot.userData = { qRest, qWind, qStrike };
-
-  /* legs */
-  function buildLeg() {
-    const leg = new THREE.Group();
-    const thighPiv = new THREE.Group();
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.66, 0.4), matPants);
-    thigh.position.y = -0.33; thighPiv.add(thigh);
-    const shin = new THREE.Group(); shin.position.y = -0.66;
-    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.62, 0.36), matPants);
-    sh.position.y = -0.31; shin.add(sh);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.56), matBoot);
-    boot.position.set(0, -0.66, 0.08); shin.add(boot);
-    thighPiv.add(shin);
-    leg.add(thighPiv);
-    leg.userData = { thighPiv, shin };
-    return leg;
-  }
-  const legL = buildLeg(); legL.position.set(-0.27, -0.36, 0);
-  const legR = buildLeg(); legR.position.set( 0.27, -0.36, 0);
-
-  /* slash streak — a bright crescent that flashes along the chop path */
-  const slashFx = new THREE.Mesh(
-    new THREE.RingGeometry(1.7, 3.7, 24, 1, 0.5, 2.4),
-    new THREE.MeshBasicMaterial({ color: 0xf4efe2, transparent: true, opacity: 0,
-                                  side: THREE.DoubleSide, depthWrite: false }));
-  slashFx.position.set(0.0, 0.7, 1.7);
-  slashFx.rotation.set(0.25, 0, -0.95);
-  slashFx.visible = false;
-
-  root.add(torso); root.add(head); root.add(armL); root.add(armR);
-  root.add(stickPivot); root.add(slashFx); root.add(legL); root.add(legR);
-  root.position.y = 1.65;
-
-  parts.root = root; parts.torso = torso; parts.head = head;
-  parts.armL = armL; parts.armR = armR; parts.legL = legL; parts.legR = legR;
-  parts.stickPivot = stickPivot; parts.slashFx = slashFx;
-  return parts;
-}
-
-/* ─── audio ─────────────────────────────────────────────────────────────────
-   Procedurally-generated WebAudio sound bank. No external files. The context
-   is created lazily on first use (after a user gesture).                     */
-// shared WebAudio context — created lazily on first use (after a user gesture)
-let _actx = null;
-function audioCtx() {
-  if (!_actx) { try { _actx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} }
-  return _actx;
-}
-
-const Audio = (() => {
-  // swing — a sharp blade-through-air slash; the filter sweeps down fast
+  // a sharp blade-through-air slash
   function swing() {
-    const c = audioCtx(); if (!c) return;
+    const c = ctxA(); if (!c) return;
     const t = c.currentTime;
-    const bs = c.createBufferSource();
-    const buf = c.createBuffer(1, 0.24 * c.sampleRate, c.sampleRate);
-    const d = buf.getChannelData(0);
+    const b = noiseBuf(c, 0.22), d = b.getChannelData(0);
     for (let i = 0; i < d.length; i++) {
       const x = i / d.length;
-      const env = Math.pow(1 - x, 1.7) * Math.min(1, x * 9);   // sharp attack, quick decay
-      d[i] = (Math.random()*2 - 1) * env;
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - x, 1.8) * Math.min(1, x * 10);
     }
-    bs.buffer = buf;
-    const f = c.createBiquadFilter();
-    f.type = "bandpass"; f.Q.value = 3.2;
-    f.frequency.setValueAtTime(3800, t);
-    f.frequency.exponentialRampToValueAtTime(520, t + 0.22);    // the downward whoosh
-    const g = c.createGain(); g.gain.value = 0.55;
-    bs.connect(f).connect(g).connect(c.destination);
-    bs.start(t); bs.stop(t + 0.26);
+    const s = c.createBufferSource(); s.buffer = b;
+    const f = c.createBiquadFilter(); f.type = "bandpass"; f.Q.value = 3;
+    f.frequency.setValueAtTime(3600, t);
+    f.frequency.exponentialRampToValueAtTime(560, t + 0.2);
+    const g = c.createGain(); g.gain.value = 0.4;
+    s.connect(f).connect(g).connect(c.destination); s.start(t); s.stop(t + 0.24);
   }
-  // hit — a wet, meaty cut: a low-passed squelch over a deep thud
+  // a wet, meaty cut: low-passed squelch over a deep thud
   function hit() {
-    const c = audioCtx(); if (!c) return;
+    const c = ctxA(); if (!c) return;
     const t = c.currentTime;
-    const bs = c.createBufferSource();
-    const buf = c.createBuffer(1, 0.17 * c.sampleRate, c.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2 - 1) * Math.pow(1 - i/d.length, 2.2);
-    bs.buffer = buf;
-    const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 850;
-    const sg = c.createGain(); sg.gain.value = 0.55;
-    bs.connect(lp).connect(sg).connect(c.destination);
-    bs.start(t); bs.stop(t + 0.19);
+    const b = noiseBuf(c, 0.17), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2.2);
+    const s = c.createBufferSource(); s.buffer = b;
+    const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 820;
+    const g = c.createGain(); g.gain.value = 0.5;
+    s.connect(lp).connect(g).connect(c.destination); s.start(t); s.stop(t + 0.18);
     const o = c.createOscillator(), og = c.createGain();
-    o.type = "sine"; o.frequency.setValueAtTime(170, t);
-    o.frequency.exponentialRampToValueAtTime(46, t + 0.14);
-    og.gain.setValueAtTime(0.6, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.17);
-    o.connect(og).connect(c.destination); o.start(t); o.stop(t + 0.18);
+    o.type = "sine"; o.frequency.setValueAtTime(165, t);
+    o.frequency.exponentialRampToValueAtTime(46, t + 0.13);
+    og.gain.setValueAtTime(0.5, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    o.connect(og).connect(c.destination); o.start(t); o.stop(t + 0.17);
   }
   function groan() {
-    const c = audioCtx(); if (!c) return;
+    const c = ctxA(); if (!c) return;
     const t = c.currentTime;
     const o = c.createOscillator(), g = c.createGain();
     o.type = "sawtooth";
-    o.frequency.setValueAtTime(58 + Math.random()*16, t);
-    o.frequency.linearRampToValueAtTime(38, t+0.6);
-    g.gain.setValueAtTime(0.0, t);
-    g.gain.linearRampToValueAtTime(0.07, t+0.12);
-    g.gain.linearRampToValueAtTime(0.001, t+0.7);
-    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.75);
+    o.frequency.setValueAtTime(54 + Math.random() * 20, t);
+    o.frequency.linearRampToValueAtTime(34, t + 0.7);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.15);
+    g.gain.linearRampToValueAtTime(0.0001, t + 0.8);
+    const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 500;
+    o.connect(f).connect(g).connect(c.destination); o.start(t); o.stop(t + 0.85);
   }
   function hurt() {
-    const c = audioCtx(); if (!c) return;
+    const c = ctxA(); if (!c) return;
     const t = c.currentTime;
     const o = c.createOscillator(), g = c.createGain();
-    o.type = "sawtooth"; o.frequency.value = 180;
-    g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.3);
-    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.31);
+    o.type = "sawtooth"; o.frequency.setValueAtTime(190, t);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.25);
+    g.gain.setValueAtTime(0.32, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.31);
   }
-  return { swing, hit, groan, hurt };
+  function step() {
+    const c = ctxA(); if (!c) return;
+    const t = c.currentTime;
+    const b = noiseBuf(c, 0.05), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const s = c.createBufferSource(); s.buffer = b;
+    const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 320;
+    const g = c.createGain(); g.gain.value = 0.18;
+    s.connect(lp).connect(g).connect(c.destination); s.start(t); s.stop(t + 0.06);
+  }
+  function waveStart() {
+    const c = ctxA(); if (!c) return;
+    const t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "sawtooth"; o.frequency.setValueAtTime(90, t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 1.1);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.2, t + 0.2);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+    const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 260;
+    o.connect(f).connect(g).connect(c.destination); o.start(t); o.stop(t + 1.35);
+  }
+  function heartbeat() {
+    const c = ctxA(); if (!c) return;
+    const t = c.currentTime;
+    [0, 0.16].forEach((off) => {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = "sine"; o.frequency.setValueAtTime(62, t + off);
+      o.frequency.exponentialRampToValueAtTime(34, t + off + 0.12);
+      g.gain.setValueAtTime(0.34, t + off); g.gain.exponentialRampToValueAtTime(0.001, t + off + 0.16);
+      o.connect(g).connect(c.destination); o.start(t + off); o.stop(t + off + 0.18);
+    });
+  }
+  return { ctxA, swing, hit, groan, hurt, step, waveStart, heartbeat };
 })();
 
-/* Ambience — a low horror drone with occasional dissonant stings. Started
-   when a run begins, stopped on game over.                                  */
+/* low horror drone with occasional dissonant stings */
 const Ambience = (() => {
-  let running = false, voices = [], master = null, stingTimer = null;
+  let running = false, voices = [], master = null, stingTimer = 0;
   function start() {
-    const c = audioCtx(); if (!c || running) return;
+    const c = Sound.ctxA(); if (!c || running) return;
     running = true;
     master = c.createGain();
     master.gain.setValueAtTime(0.0001, c.currentTime);
-    master.gain.linearRampToValueAtTime(0.5, c.currentTime + 4);
-    const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 240;
+    master.gain.linearRampToValueAtTime(0.5, c.currentTime + 5);
+    const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 220;
     lp.connect(master); master.connect(c.destination);
-    // low, slightly detuned drone — the detune gives a slow uneasy beating
-    [[43, 0.13, "sawtooth"], [43.7, 0.13, "sawtooth"], [65, 0.07, "sine"]].forEach(v => {
+    [[41, 0.14, "sawtooth"], [41.6, 0.14, "sawtooth"], [62, 0.08, "sine"]].forEach((v) => {
       const o = c.createOscillator(); o.type = v[2]; o.frequency.value = v[0];
       const g = c.createGain(); g.gain.value = v[1];
-      o.connect(g).connect(lp); o.start();
-      voices.push(o);
+      o.connect(g).connect(lp); o.start(); voices.push(o);
     });
-    // slow breathing swell on the master gain
-    const lfo = c.createOscillator(); lfo.frequency.value = 0.07;
-    const lfoG = c.createGain(); lfoG.gain.value = 0.18;
-    lfo.connect(lfoG).connect(master.gain); lfo.start();
-    voices.push(lfo);
-    scheduleSting();
-  }
-  function scheduleSting() {
-    stingTimer = setTimeout(() => {
-      if (!running) return;
-      sting(); scheduleSting();
-    }, 7000 + Math.random()*12000);
+    const lfo = c.createOscillator(); lfo.frequency.value = 0.06;
+    const lg = c.createGain(); lg.gain.value = 0.2;
+    lfo.connect(lg).connect(master.gain); lfo.start(); voices.push(lfo);
+    stingTimer = rand(6, 12);
   }
   function sting() {
-    const c = audioCtx(); if (!c) return;
+    const c = Sound.ctxA(); if (!c) return;
     const t = c.currentTime;
-    const base = 260 + Math.random()*420;
-    [base, base*1.414].forEach(f => {                  // a tritone — deeply uneasy
+    const base = 240 + Math.random() * 460;
+    [base, base * 1.414].forEach((f) => {
       const o = c.createOscillator(); o.type = "triangle"; o.frequency.value = f;
       const g = c.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.05, t + 0.7);
-      g.gain.linearRampToValueAtTime(0.0001, t + 3.0);
-      o.connect(g).connect(c.destination); o.start(t); o.stop(t + 3.1);
+      g.gain.linearRampToValueAtTime(0.04, t + 0.8);
+      g.gain.linearRampToValueAtTime(0.0001, t + 3.2);
+      o.connect(g).connect(c.destination); o.start(t); o.stop(t + 3.3);
     });
+  }
+  function update(dt) {
+    if (!running) return;
+    stingTimer -= dt;
+    if (stingTimer <= 0) { sting(); stingTimer = rand(7, 15); }
   }
   function stop() {
     if (!running) return;
     running = false;
-    clearTimeout(stingTimer);
-    const c = audioCtx();
-    if (c && master) master.gain.linearRampToValueAtTime(0.0001, c.currentTime + 1.4);
+    const c = Sound.ctxA();
+    if (c && master) master.gain.linearRampToValueAtTime(0.0001, c.currentTime + 1.2);
     const dying = voices; voices = [];
-    setTimeout(() => dying.forEach(o => { try { o.stop(); } catch(e){} }), 1600);
+    setTimeout(() => dying.forEach((o) => { try { o.stop(); } catch (e) {} }), 1400);
   }
-  return { start, stop };
+  return { start, stop, update };
 })();
 
-/* ─── world ─────────────────────────────────────────────────────────────────
-   A dark, derelict town at night — building shells ring the play area,
-   debris and dead trees scatter the ground. Lit almost entirely by the
-   player's own light against heavy fog. Collision is a simple arena radius
-   for now (ARENA_RADIUS); the expanding-town zone system is the next step.   */
-function buildEnvironment(scene) {
-  scene.background = makeGradientTexture("#0b0d14", "#020204");
+/* ─── world ──────────────────────────────────────────────────────────────────
+   The ruined town. Decor is generated once per run and drawn beneath the
+   action; nothing here blocks movement (kept deliberately simple).           */
+let decor = [], grime = [];
+function buildWorld() {
+  decor = []; grime = [];
+  // ground grime — dark blotches and cracks scattered over the asphalt
+  for (let i = 0; i < 150; i++) {
+    grime.push({
+      x: rand(0, WORLD.w), y: rand(0, WORLD.h),
+      r: rand(14, 64), tone: randi(0, 2), rot: rand(0, TAU),
+    });
+  }
+  // props
+  const N = 46;
+  for (let i = 0; i < N; i++) {
+    const k = Math.random();
+    const x = rand(120, WORLD.w - 120), y = rand(120, WORLD.h - 120);
+    const rot = rand(0, TAU);
+    if (k < 0.16)      decor.push({ t: "car",     x, y, rot });
+    else if (k < 0.28) decor.push({ t: "dumpster",x, y, rot });
+    else if (k < 0.52) decor.push({ t: "crate",   x, y, rot, s: rand(0.7, 1.25) });
+    else if (k < 0.70) decor.push({ t: "barrel",  x, y, rot });
+    else if (k < 0.86) decor.push({ t: "rubble",  x, y, rot, s: rand(0.8, 1.5) });
+    else               decor.push({ t: "planks",  x, y, rot });
+  }
+}
 
-  // dark, cold earth / cracked street
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(95, 48), mat("#0c0d0b"));
-  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
-  scene.add(ground);
+function drawWorld() {
+  // asphalt
+  ctx.fillStyle = "#141417";
+  ctx.fillRect(0, 0, WORLD.w, WORLD.h);
+  // grime blotches
+  const tones = ["#101013", "#1b1a16", "#0c0d10"];
+  for (const g of grime) {
+    ctx.save();
+    ctx.translate(g.x, g.y); ctx.rotate(g.rot);
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = tones[g.tone];
+    ctx.beginPath();
+    ctx.ellipse(0, 0, g.r, g.r * 0.66, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  // boundary — a ring of dark rubble walls so the edge reads as ruins
+  ctx.strokeStyle = "#0a0a0c"; ctx.lineWidth = 60;
+  ctx.strokeRect(-30, -30, WORLD.w + 60, WORLD.h + 60);
+  // props
+  for (const p of decor) drawProp(p);
+}
 
-  // a barely-there ring marking the ground you can hold
-  const ring = new THREE.Mesh(new THREE.RingGeometry(26.4, 27.4, 56), mat("#16150f"));
-  ring.rotation.x = -Math.PI/2; ring.position.y = 0.02; scene.add(ring);
-
-  // dim hazy moon, low and sickly
-  const moon = new THREE.Mesh(new THREE.SphereGeometry(2.6, 20, 14),
-    new THREE.MeshBasicMaterial({ color: "#39414f" }));
-  moon.position.set(-30, 19, -40); scene.add(moon);
-
-  // derelict building shells ringing the arena
-  const buildMats = [mat("#15161a"), mat("#101015"), mat("#13110f")];
-  const roofMat = mat("#08080a");
-  const winDark = mat("#050507");
-  const winLit  = new THREE.MeshBasicMaterial({ color: "#241803" });   // a faint distant light
-  function makeBuilding() {
-    const g = new THREE.Group();
-    const w = rand(5, 9.5), h = rand(7, 15), d = rand(5, 9);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
-      buildMats[Math.floor(Math.random()*buildMats.length)]);
-    body.position.y = h/2; body.castShadow = true; body.receiveShadow = true; g.add(body);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(w+0.5, 0.5, d+0.5), roofMat);
-    roof.position.y = h + 0.2; g.add(roof);
-    const cols = Math.max(1, Math.round(w / 2.6));
-    const rows = Math.max(1, Math.round(h / 3.4));
-    for (let c = 0; c < cols; c++) {
-      const wx = cols === 1 ? 0 : -((w-2.4)/2) + c * ((w-2.4)/(cols-1));
-      for (let r = 0; r < rows; r++) {
-        if (Math.random() < 0.25) continue;
-        const lit = Math.random() < 0.1;
-        const win = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.3, 0.3), lit ? winLit : winDark);
-        win.position.set(wx, 1.9 + r*3.2, d/2 + 0.08);
-        g.add(win);
-      }
+function drawProp(p) {
+  ctx.save();
+  ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+  // soft contact shadow
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.beginPath(); ctx.ellipse(4, 6, 26, 16, 0, 0, TAU); ctx.fill();
+  if (p.t === "car") {
+    ctx.fillStyle = "#1d1f22";
+    rrect(-46, -22, 92, 44, 9); ctx.fill();
+    ctx.fillStyle = "#121316";
+    rrect(-22, -16, 40, 32, 6); ctx.fill();          // cabin
+    ctx.fillStyle = "#0c0c0e";
+    ctx.fillRect(-44, -25, 18, 8); ctx.fillRect(26, 17, 18, 8);  // wheels
+    ctx.strokeStyle = "rgba(120,40,30,0.25)"; ctx.lineWidth = 3;
+    rrect(-46, -22, 92, 44, 9); ctx.stroke();        // rust rim
+  } else if (p.t === "dumpster") {
+    ctx.fillStyle = "#23241d";
+    rrect(-30, -20, 60, 40, 4); ctx.fill();
+    ctx.fillStyle = "#15160f";
+    ctx.fillRect(-30, -20, 60, 8);
+  } else if (p.t === "crate") {
+    const s = p.s; ctx.scale(s, s);
+    ctx.fillStyle = "#2a2014";
+    rrect(-16, -16, 32, 32, 2); ctx.fill();
+    ctx.strokeStyle = "#150f08"; ctx.lineWidth = 3;
+    rrect(-16, -16, 32, 32, 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-16, -16); ctx.lineTo(16, 16);
+    ctx.moveTo(16, -16); ctx.lineTo(-16, 16); ctx.stroke();
+  } else if (p.t === "barrel") {
+    ctx.fillStyle = "#2a2622";
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.fill();
+    ctx.strokeStyle = "#0f0d0b"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 9, 0, TAU); ctx.stroke();
+  } else if (p.t === "rubble") {
+    const s = p.s; ctx.scale(s, s);
+    ctx.fillStyle = "#202024";
+    for (let i = 0; i < 6; i++) {
+      ctx.save(); ctx.rotate(i * 1.05);
+      ctx.fillRect(rand(2, 10), -rand(4, 8), rand(8, 18), rand(8, 14));
+      ctx.restore();
     }
-    return g;
-  }
-  for (let i = 0; i < 9; i++) {
-    const a = (i/9)*TAU + rand(-0.16, 0.16);
-    const r = 34 + rand(0, 8);
-    const b = makeBuilding();
-    b.position.set(Math.cos(a)*r, 0, Math.sin(a)*r);
-    b.rotation.y = Math.atan2(-Math.cos(a), -Math.sin(a));   // window face toward centre
-    scene.add(b);
-  }
-
-  // dead, gnarled trees
-  const treeMat = mat("#0d0a0c");
-  for (let i = 0; i < 6; i++) {
-    const r = 24 + Math.random()*7, a = Math.random()*TAU;
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 4.4, 6), treeMat);
-    trunk.position.set(Math.cos(a)*r, 2.2, Math.sin(a)*r);
-    trunk.rotation.z = (Math.random()-0.5)*0.3; trunk.castShadow = true;
-    scene.add(trunk);
-    for (let j = 0; j < 3; j++) {
-      const br = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.11, 1.5, 5), treeMat);
-      br.position.set(0, 1.1 + j*0.6, 0);
-      br.rotation.z = (Math.random()-0.5)*1.5 + (j%2 ? 0.7 : -0.7);
-      br.rotation.x = (Math.random()-0.5)*0.7;
-      trunk.add(br);
-    }
-  }
-
-  // broken streetlamps — unlit, just dark silhouettes
-  const lampMat = mat("#101012"), lampHead = new THREE.MeshBasicMaterial({ color:"#1a1505" });
-  for (let i = 0; i < 3; i++) {
-    const a = i*(TAU/3) + 0.5, r = 19;
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 6, 6), lampMat);
-    post.position.set(Math.cos(a)*r, 3, Math.sin(a)*r);
-    post.rotation.z = (Math.random()-0.5)*0.25; post.castShadow = true;
-    scene.add(post);
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.5), lampHead);
-    lamp.position.set(post.position.x, 6, post.position.z); scene.add(lamp);
-  }
-
-  // scattered debris — crates, rubble, planks, a wrecked car
-  const crateMat = mat("#231c12"), rubbleMat = mat("#141414"), plankMat = mat("#1d150c");
-  for (let i = 0; i < 16; i++) {
-    const r = 4 + Math.random()*21, a = Math.random()*TAU;
-    const x = Math.cos(a)*r, z = Math.sin(a)*r;
-    const kind = Math.random();
-    if (kind < 0.4) {
-      const s = rand(0.5, 1.0);
-      const crate = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), crateMat);
-      crate.position.set(x, s/2, z); crate.rotation.y = Math.random()*TAU;
-      crate.castShadow = true; scene.add(crate);
-    } else if (kind < 0.75) {
-      const rb = new THREE.Mesh(new THREE.BoxGeometry(rand(0.5,1.4), rand(0.2,0.5), rand(0.5,1.4)), rubbleMat);
-      rb.position.set(x, 0.15, z); rb.rotation.y = Math.random()*TAU; scene.add(rb);
-    } else {
-      const pl = new THREE.Mesh(new THREE.BoxGeometry(rand(1.2,2.4), 0.12, 0.24), plankMat);
-      pl.position.set(x, 0.08, z); pl.rotation.y = Math.random()*TAU;
-      pl.rotation.z = (Math.random()-0.5)*0.3; scene.add(pl);
+  } else { // planks
+    ctx.fillStyle = "#241a0f";
+    for (let i = 0; i < 3; i++) {
+      ctx.save(); ctx.rotate(i * 0.4 - 0.4);
+      ctx.fillRect(-26, -3 + i, 52, 6);
+      ctx.restore();
     }
   }
-  // a wrecked car hulk
-  const carMat = mat("#171715"), car = new THREE.Group();
-  const cBody = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.9, 4.4), carMat);
-  cBody.position.y = 0.7; cBody.castShadow = true; car.add(cBody);
-  const cCab = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.8, 2.0), carMat);
-  cCab.position.set(0, 1.45, -0.3); car.add(cCab);
-  car.position.set(rand(-14,14), 0, rand(-14,14)); car.rotation.y = Math.random()*TAU;
-  scene.add(car);
-
-  return { ground, moon };
+  ctx.restore();
 }
 
-/* ─── player ────────────────────────────────────────────────────────────────
-   Movement, melee combat and procedural animation. Reads `state` and the
-   `keys` map; mutates `state.pos` and the player meshes. updatePlayer() runs
-   once per frame while phase === PLAYING.                                    */
-
-// movement (units/second) — both modifiable by upgrades in Milestone 4
-const WALK_SPEED   = 5.0;
-const SPRINT_SPEED = 8.5;
-const ARENA_RADIUS = 27;          // simple circular bound; zones replace this later
-
-// melee swing timing (ms from swing start) and reach
-const SWING_WINDUP_END   = 210;   // 0-210ms   : club rears up behind the head
-const SWING_STRIKE_END   = 400;   // 210-400ms : the chop down across the body — HIT WINDOW
-const SWING_RECOVERY_END = 620;   // 400-620ms : returns to rest
-const SWING_COOLDOWN     = 520;   // gap before another swing is allowed
-const MELEE_RANGE  = 7.0;         // long reach — a committed overhand chop
-const MELEE_CONE   = 0.3;         // cos(half-angle) — 0.3 ≈ 73 degrees
-const MELEE_DAMAGE = 2;
-
-// input
-const keys = Object.create(null);
-
-document.addEventListener("keydown", (e) => {
-  keys[e.code] = true;
-  if (e.code === "ShiftLeft" || e.code === "ShiftRight") state.sprinting = true;
-});
-document.addEventListener("keyup", (e) => {
-  keys[e.code] = false;
-  if (e.code === "ShiftLeft" || e.code === "ShiftRight") state.sprinting = false;
-});
-document.addEventListener("mousemove", (e) => {
-  if (!pointerLocked || state.phase !== Phase.PLAYING) return;
-  const s = 0.0022;
-  state.yaw   -= e.movementX * s;
-  state.pitch += e.movementY * s;   // standard (non-inverted) Y
-  state.pitch = clamp(state.pitch, -0.6, 0.85);
-});
-document.addEventListener("mousedown", (e) => {
-  if (state.phase !== Phase.PLAYING) return;
-  if (e.button === 0) trySwing();
-});
-
-// begin a swing if not mid-swing and off cooldown
-function trySwing() {
-  const now = performance.now();
-  if (state.swinging) return;
-  if (now - state.swingStartAt < SWING_COOLDOWN) return;
-  state.swinging = true;
-  state.swingStartAt = now;
-  state.swingHitIds.clear();
-  Audio.swing();
+function rrect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
-// resolve hits for the current swing — a forward cone, one hit per zombie
-function checkMeleeHits(now) {
-  const fx = -Math.sin(state.yaw);   // player forward (opposite the camera offset)
-  const fz = -Math.cos(state.yaw);
-
-  for (let i = 0; i < zombies.length; i++) {
-    const zd = zombies[i];
-    if (!zd.alive) continue;
-    if (state.swingHitIds.has(zd)) continue;
-
-    const dx = zd.parts.root.position.x - state.pos.x;
-    const dz = zd.parts.root.position.z - state.pos.z;
-    const dist = Math.sqrt(dx*dx + dz*dz);
-    if (dist > MELEE_RANGE || dist < 0.01) continue;
-
-    const nx = dx / dist, nz = dz / dist;
-    if (nx*fx + nz*fz < MELEE_CONE) continue;   // outside the forward cone
-
-    // hit!
-    state.swingHitIds.add(zd);
-    zd.hp -= MELEE_DAMAGE;
-    Audio.hit();
-    spawnBlood(zd.parts.root.position.x, 2.0, zd.parts.root.position.z);
-    crosshair.classList.add("hit");
-    setTimeout(() => crosshair.classList.remove("hit"), 180);
-    spawnHitFloater(zd.hp <= 0 ? "DOWN!" : "+" + MELEE_DAMAGE, zd.hp <= 0);
-
-    // knockback — shove the zombie away from the player
-    zd.knockX = fx * 0.6;
-    zd.knockZ = fz * 0.6;
-    zd.knockUntil = now + 220;
-    zd.attackCooldown = Math.max(zd.attackCooldown, 0.5);   // brief stagger
-
-    if (zd.hp <= 0) killZombie(zd);
-  }
+/* ─── blood ──────────────────────────────────────────────────────────────────
+   decals: lasting pools on the ground.  spatter: short-lived flung droplets. */
+let decals = [], spatter = [];
+function addDecal(x, y, r) {
+  decals.push({ x, y, r, rot: rand(0, TAU), a: 0.85 });
+  if (decals.length > DECAL_MAX) decals.shift();
 }
-
-// apply damage to the player; triggers GAME_OVER at 0
-function damagePlayer(amt) {
-  state.health = Math.max(0, state.health - amt);
-  state.lastDamageAt = performance.now();
-  damageVignette.classList.add("on");
-  setTimeout(() => damageVignette.classList.remove("on"), 220);
-  Audio.hurt();
-  updateHealthUI();
-  if (state.health <= 0 && state.phase === Phase.PLAYING) gameOver();
-}
-
-function updatePlayer(dt) {
-  const now = performance.now();
-
-  // movement input, relative to camera yaw
-  state.moveVec.set(0, 0);
-  if (keys["KeyW"]) state.moveVec.y += 1;
-  if (keys["KeyS"]) state.moveVec.y -= 1;
-  if (keys["KeyA"]) state.moveVec.x -= 1;
-  if (keys["KeyD"]) state.moveVec.x += 1;
-  if (state.moveVec.lengthSq() > 0) state.moveVec.normalize();
-
-  // "forward" is the camera-offset direction; walking forward = away from it
-  _fwd.set(Math.sin(state.yaw), 0, Math.cos(state.yaw));
-  _rgt.set(Math.sin(state.yaw + Math.PI/2), 0, Math.cos(state.yaw + Math.PI/2));
-
-  const speed = (state.sprinting && state.moveVec.y > 0) ? SPRINT_SPEED : WALK_SPEED;
-  state.pos.x += (_rgt.x * state.moveVec.x - _fwd.x * state.moveVec.y) * speed * dt;
-  state.pos.z += (_rgt.z * state.moveVec.x - _fwd.z * state.moveVec.y) * speed * dt;
-
-  // keep within the arena
-  const distFromCenter = Math.hypot(state.pos.x, state.pos.z);
-  if (distFromCenter > ARENA_RADIUS) {
-    const a = Math.atan2(state.pos.z, state.pos.x);
-    state.pos.x = Math.cos(a) * ARENA_RADIUS;
-    state.pos.z = Math.sin(a) * ARENA_RADIUS;
-  }
-
-  // place + face the player (player faces the camera-forward direction)
-  player.root.position.set(state.pos.x, 1.65, state.pos.z);
-  player.root.rotation.y = state.yaw + Math.PI;
-
-  // walk-cycle leg bob
-  const moving = state.moveVec.lengthSq() > 0.01;
-  if (moving) {
-    state.bobTime += dt * (state.sprinting ? 12 : 8);
-    const swing = state.sprinting ? 0.7 : 0.5;
-    player.legL.userData.thighPiv.rotation.x =  Math.sin(state.bobTime) * swing;
-    player.legR.userData.thighPiv.rotation.x = -Math.sin(state.bobTime) * swing;
-  } else {
-    player.legL.userData.thighPiv.rotation.x = lerp(player.legL.userData.thighPiv.rotation.x, 0, 0.2);
-    player.legR.userData.thighPiv.rotation.x = lerp(player.legR.userData.thighPiv.rotation.x, 0, 0.2);
-  }
-
-  // melee swing — an overhand chop via quaternion slerp
-  const sp = player.stickPivot;
-  const { qRest, qWind, qStrike } = sp.userData;
-  const fx = player.slashFx;
-  if (state.swinging) {
-    const elapsed = now - state.swingStartAt;
-    let armPitch = 0;
-    if (elapsed < SWING_WINDUP_END) {
-      const t = easeOutCubic(elapsed / SWING_WINDUP_END);
-      _qTmp.slerpQuaternions(qRest, qWind, t);
-      armPitch = lerp(0, -1.5, t);              // arms rear up behind the head
-      fx.visible = false;
-    } else if (elapsed < SWING_STRIKE_END) {
-      const t = easeInQuad((elapsed - SWING_WINDUP_END) / (SWING_STRIKE_END - SWING_WINDUP_END));
-      _qTmp.slerpQuaternions(qWind, qStrike, t);
-      armPitch = lerp(-1.5, 0.5, t);            // chop down and across the body
-      checkMeleeHits(now);
-      fx.visible = true;                        // the cut streak flashes
-      fx.material.opacity = (1 - t) * 0.8;
-      fx.scale.setScalar(0.85 + t * 0.5);
-    } else if (elapsed < SWING_RECOVERY_END) {
-      const t = easeOutCubic((elapsed - SWING_STRIKE_END) / (SWING_RECOVERY_END - SWING_STRIKE_END));
-      _qTmp.slerpQuaternions(qStrike, qRest, t);
-      armPitch = lerp(0.5, 0, t);
-      fx.visible = false;
-    } else {
-      state.swinging = false;
-      _qTmp.copy(qRest);
-      fx.visible = false;
-    }
-    sp.quaternion.copy(_qTmp);
-    player.armR.rotation.x = armPitch;
-    player.armL.rotation.x = armPitch;
-  } else {
-    sp.quaternion.slerp(qRest, 0.15);
-    player.armR.rotation.x = lerp(player.armR.rotation.x, 0, 0.2);
-    player.armL.rotation.x = lerp(player.armL.rotation.x, 0, 0.2);
-    fx.visible = false;
-  }
-}
-
-/* ─── zombies ───────────────────────────────────────────────────────────────
-   Spawning, chase/attack AI and animation. Each entry of `zombies` is:
-   { parts, hp, maxHp, speed, attackCooldown, alive, dyingAt, walkPhase,
-     groanAt, knockX/Z, knockUntil, fallAxis, fallDir }.
-   M1 NOTE: zombies are still allocated per spawn — pooling arrives in M2.    */
-const zombies = [];
-
-/* blood — a short-lived particle spray flung when a zombie is struck.
-   Shared geometry + material; particles are plain meshes removed on expiry. */
-const blood = [];
-const bloodGeo = new THREE.SphereGeometry(0.085, 5, 4);
-const bloodMat = new THREE.MeshBasicMaterial({ color: 0x7c0f08 });
-function spawnBlood(x, y, z) {
-  for (let i = 0; i < 14; i++) {
-    const m = new THREE.Mesh(bloodGeo, bloodMat);
-    m.position.set(x, y, z);
-    scene.add(m);
-    blood.push({ mesh: m, vx: rand(-3.6,3.6), vy: rand(2,6.5), vz: rand(-3.6,3.6),
-                 age: 0, life: rand(0.4, 0.85) });
+function spawnBlood(x, y, dir, amount) {
+  for (let i = 0; i < amount; i++) {
+    const a = dir + rand(-0.9, 0.9);
+    const sp = rand(60, 320);
+    spatter.push({
+      x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      life: rand(0.25, 0.6), age: 0, r: rand(1.6, 4.2),
+    });
   }
 }
 function updateBlood(dt) {
-  for (let i = blood.length - 1; i >= 0; i--) {
-    const b = blood[i];
-    b.age += dt;
-    if (b.age >= b.life) { scene.remove(b.mesh); blood.splice(i, 1); continue; }
-    b.vy -= 15 * dt;
-    b.mesh.position.x += b.vx * dt;
-    b.mesh.position.y += b.vy * dt;
-    b.mesh.position.z += b.vz * dt;
-    if (b.mesh.position.y < 0.06) { b.mesh.position.y = 0.06; b.vy *= -0.3; b.vx *= 0.6; b.vz *= 0.6; }
-    b.mesh.scale.setScalar(clamp(1 - b.age / b.life, 0.25, 1));
+  for (let i = spatter.length - 1; i >= 0; i--) {
+    const s = spatter[i];
+    s.age += dt;
+    if (s.age >= s.life) {
+      if (Math.random() < 0.5) addDecal(s.x, s.y, rand(3, 7));
+      spatter.splice(i, 1); continue;
+    }
+    s.vx *= 0.86; s.vy *= 0.86;
+    s.x += s.vx * dt; s.y += s.vy * dt;
+  }
+}
+function drawDecals() {
+  for (const d of decals) {
+    ctx.save();
+    ctx.translate(d.x, d.y); ctx.rotate(d.rot);
+    ctx.globalAlpha = d.a;
+    ctx.fillStyle = "#3d0907";
+    ctx.beginPath(); ctx.ellipse(0, 0, d.r, d.r * 0.72, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = d.a * 0.6;
+    ctx.fillStyle = "#511008";
+    ctx.beginPath(); ctx.ellipse(0, 0, d.r * 0.55, d.r * 0.4, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+function drawSpatter() {
+  ctx.fillStyle = "#7c1109";
+  for (const s of spatter) {
+    const k = 1 - s.age / s.life;
+    ctx.globalAlpha = clamp(k + 0.2, 0, 1);
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r * (0.5 + k * 0.5), 0, TAU); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ─── camera ─────────────────────────────────────────────────────────────── */
+const cam = { x: WORLD.w / 2, y: WORLD.h / 2, shake: 0 };
+function updateCamera(dt) {
+  cam.x = lerp(cam.x, player.x, 0.12);
+  cam.y = lerp(cam.y, player.y, 0.12);
+  cam.shake = Math.max(0, cam.shake - dt * 42);
+}
+function shake(amt) { cam.shake = Math.min(26, cam.shake + amt); }
+
+/* ─── player ─────────────────────────────────────────────────────────────── */
+let player = null;
+function makePlayer() {
+  return {
+    x: WORLD.w / 2, y: WORLD.h / 2, angle: 0,
+    hp: PLAYER_HP, maxHp: PLAYER_HP, alive: true,
+    swinging: false, swingT: 0, swingDir: 1, swingHits: null,
+    walk: 0, moving: false, stepT: 0, hurt: 0,
+  };
+}
+function startSwing() {
+  if (player.swinging) return;
+  player.swinging = true;
+  player.swingT = 0;
+  player.swingDir = -player.swingDir;          // alternate sweep direction
+  player.swingHits = new Set();
+  Sound.swing();
+}
+function updatePlayer(dt) {
+  // aim toward the mouse (player is near screen centre)
+  const px = player.x - cam.x + W / 2;
+  const py = player.y - cam.y + H / 2;
+  player.angle = Math.atan2(mouse.y - py, mouse.x - px);
+
+  // movement
+  let mx = 0, my = 0;
+  if (keys["KeyW"] || keys["ArrowUp"])    my -= 1;
+  if (keys["KeyS"] || keys["ArrowDown"])  my += 1;
+  if (keys["KeyA"] || keys["ArrowLeft"])  mx -= 1;
+  if (keys["KeyD"] || keys["ArrowRight"]) mx += 1;
+  const sprint = keys["ShiftLeft"] || keys["ShiftRight"];
+  player.moving = (mx !== 0 || my !== 0);
+  if (player.moving) {
+    const inv = 1 / Math.hypot(mx, my);
+    const sp = sprint ? PLAYER_SPRINT : PLAYER_SPEED;
+    player.x = clamp(player.x + mx * inv * sp * dt, 40, WORLD.w - 40);
+    player.y = clamp(player.y + my * inv * sp * dt, 40, WORLD.h - 40);
+    player.walk += dt * (sprint ? 15 : 10);
+    player.stepT -= dt;
+    if (player.stepT <= 0) { Sound.step(); player.stepT = sprint ? 0.27 : 0.36; }
+  } else {
+    player.walk = lerp(player.walk, 0, 0.2);
+  }
+
+  // swing
+  if (player.swinging) {
+    player.swingT += dt;
+    if (player.swingT >= SWING_TOTAL) player.swinging = false;
+    else if (player.swingT >= SWING_WINDUP && player.swingT < SWING_WINDUP + SWING_STRIKE) {
+      meleeHits();
+    }
+  }
+
+  if (player.hurt > 0) player.hurt -= dt;
+
+  // low-health heartbeat
+  if (player.hp < 32) {
+    heartT -= dt;
+    if (heartT <= 0) { Sound.heartbeat(); heartT = lerp(0.5, 1.0, player.hp / 32); }
   }
 }
 
-function spawnZombie() {
-  const variant = Math.floor(Math.random()*4);
-  const z = buildZombie(variant);
-  // spawn on the outer ring, around the player
-  const r = 22 + Math.random()*5;
-  const a = Math.random()*TAU;
-  z.root.position.set(Math.cos(a)*r + state.pos.x, 1.8, Math.sin(a)*r + state.pos.z);
-  scene.add(z.root);
+let heartT = 0;
 
-  const speed = rand(1.2, 2.4) + state.wave*0.08;
-  // HP scales with the wave: wave 1 dies in one hit, +1 hit needed per wave.
-  const hp = MELEE_DAMAGE * state.wave;
-  zombies.push({
-    parts: z, hp, maxHp: hp, speed,
-    attackCooldown: 0, alive: true, dyingAt: 0,
-    walkPhase: Math.random()*TAU,
-    groanAt: performance.now() + rand(2000, 8000),
-  });
-  state.zombiesAlive++;
+// the visible weapon angle for the current swing phase
+function weaponAngle() {
+  if (!player.swinging) return player.angle + 0.45 * player.swingDir;
+  const t = player.swingT, A = (MELEE_ARC + 0.3) * player.swingDir;
+  if (t < SWING_WINDUP) {
+    return player.angle + lerp(0.45 * player.swingDir, A, easeOut(t / SWING_WINDUP));
+  } else if (t < SWING_WINDUP + SWING_STRIKE) {
+    return player.angle + lerp(A, -A, easeIn((t - SWING_WINDUP) / SWING_STRIKE));
+  }
+  const k = (t - SWING_WINDUP - SWING_STRIKE) / SWING_RECOVER;
+  return player.angle + lerp(-A, 0.45 * player.swingDir, k);
 }
 
-// take a zombie down — score, topple animation setup
-function killZombie(zd) {
-  zd.alive = false;
-  zd.dyingAt = performance.now();
-  state.zombiesAlive--;
-  state.kills++;
-  state.score += 100;
-  updateScoreUI();
-  zd.fallAxis = Math.random() < 0.5 ? "x" : "z";
-  zd.fallDir  = Math.random() < 0.5 ? 1 : -1;
+function meleeHits() {
+  let hits = 0;
+  for (const z of zombies) {
+    if (z.state === "dying" || player.swingHits.has(z)) continue;
+    const dx = z.x - player.x, dy = z.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > MELEE_RANGE + z.r) continue;
+    if (Math.abs(angDiff(player.angle, Math.atan2(dy, dx))) > MELEE_ARC) continue;
+    // hit
+    player.swingHits.add(z);
+    z.hp -= MELEE_DAMAGE;
+    z.flash = 0.12;
+    const kb = 230;
+    z.vx += (dx / dist) * kb; z.vy += (dy / dist) * kb;
+    z.stagger = 0.35;
+    spawnBlood(z.x, z.y, Math.atan2(dy, dx), 14);
+    hits++;
+    if (z.hp <= 0) killZombie(z);
+  }
+  if (hits > 0) {
+    Sound.hit();
+    hitStop = 0.055;
+    shake(5 + hits);
+  }
+}
+
+function drawPlayer() {
+  const x = player.x, y = player.y;
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.beginPath(); ctx.ellipse(x + 3, y + 7, 19, 12, 0, 0, TAU); ctx.fill();
+
+  // slash arc FX during the strike
+  if (player.swinging) {
+    const t = player.swingT;
+    if (t >= SWING_WINDUP && t < SWING_WINDUP + SWING_STRIKE + 0.06) {
+      const k = clamp((t - SWING_WINDUP) / SWING_STRIKE, 0, 1);
+      const A = (MELEE_ARC + 0.3) * player.swingDir;
+      const from = player.angle + A;
+      const to = weaponAngle();
+      ctx.save();
+      ctx.globalAlpha = (1 - k) * 0.8;
+      ctx.strokeStyle = "#fff3df";
+      ctx.lineWidth = 7;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(x, y, MELEE_RANGE * 0.86, Math.min(from, to), Math.max(from, to));
+      ctx.stroke();
+      ctx.globalAlpha = (1 - k) * 0.35;
+      ctx.lineWidth = 16;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  const bob = Math.sin(player.walk) * 1.6;
+  ctx.save();
+  ctx.translate(x, y + bob);
+  ctx.rotate(player.angle);
+
+  // weapon — a heavy cleaver, drawn at the swing angle (relative to facing)
+  const wa = weaponAngle() - player.angle;
+  ctx.save();
+  ctx.rotate(wa);
+  ctx.fillStyle = "#15100a";                      // grip
+  ctx.fillRect(6, -2.5, 13, 5);
+  ctx.fillStyle = "#9aa0a6";                      // blade
+  ctx.beginPath();
+  ctx.moveTo(18, -4); ctx.lineTo(48, -9);
+  ctx.lineTo(52, 7); ctx.lineTo(18, 5); ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#d6dade";                      // edge glint
+  ctx.beginPath();
+  ctx.moveTo(18, -4); ctx.lineTo(48, -9); ctx.lineTo(48, -6); ctx.lineTo(18, -2); ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // coat / torso
+  ctx.fillStyle = "#23252a";
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 17, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = "#34373d"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 17, 0, 0, TAU); ctx.stroke();
+  // collar
+  ctx.fillStyle = "#191b1f";
+  ctx.beginPath(); ctx.ellipse(2, 0, 7, 11, 0, 0, TAU); ctx.fill();
+  // head — hood up
+  ctx.fillStyle = "#1b1d21";
+  ctx.beginPath(); ctx.arc(5, 0, 9, 0, TAU); ctx.fill();
+  ctx.fillStyle = "#caa07e";                      // a sliver of face
+  ctx.beginPath(); ctx.arc(8, 0, 4.2, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  // hurt tint
+  if (player.hurt > 0) {
+    ctx.save();
+    ctx.globalAlpha = clamp(player.hurt * 2.2, 0, 0.6);
+    ctx.fillStyle = "#c0241a";
+    ctx.beginPath(); ctx.arc(x, y + bob, 20, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function damagePlayer(amt) {
+  if (!player.alive) return;
+  player.hp -= amt;
+  player.hurt = 0.4;
+  Sound.hurt();
+  shake(13);
+  if (player.hp <= 0) { player.hp = 0; player.alive = false; gameOver(); }
+}
+
+/* ─── zombies ────────────────────────────────────────────────────────────── */
+let zombies = [], zombiesAlive = 0;
+function spawnZombie() {
+  // appear out of the dark, just beyond the player's view
+  const a = rand(0, TAU);
+  const dist = Math.max(W, H) * 0.62 + rand(40, 240);
+  const x = clamp(player.x + Math.cos(a) * dist, 30, WORLD.w - 30);
+  const y = clamp(player.y + Math.sin(a) * dist, 30, WORLD.h - 30);
+  const hp = wave;
+  zombies.push({
+    x, y, angle: 0, vx: 0, vy: 0,
+    hp, maxHp: hp, r: 14 * rand(0.92, 1.18),
+    speed: rand(48, 70) + wave * 3.2,
+    state: "chase", anim: rand(0, TAU), flash: 0, stagger: 0,
+    attackCD: rand(0.3, 1), dieT: 0, tone: randi(0, 2),
+    groanT: rand(2, 9),
+  });
+  zombiesAlive++;
+}
+
+const ZTONES = [
+  { skin: "#5c6353", cloth: "#22231d" },
+  { skin: "#67615a", cloth: "#1d2024" },
+  { skin: "#566058", cloth: "#241e16" },
+];
+
+function killZombie(z) {
+  z.state = "dying"; z.dieT = 0;
+  zombiesAlive--;
+  kills++; score += 10 + wave * 2;
+  addDecal(z.x, z.y, rand(14, 22));
+  spawnBlood(z.x, z.y, rand(0, TAU), 22);
+  shake(3);
 }
 
 function updateZombies(dt) {
-  const now = performance.now();
-
   for (let i = zombies.length - 1; i >= 0; i--) {
-    const zd = zombies[i];
+    const z = zombies[i];
+    if (z.flash > 0) z.flash -= dt;
 
-    // dying animation: topple, sink, fade, then remove
-    if (!zd.alive) {
-      const t = (now - zd.dyingAt) / 1000;
-      if (t < 1.2) {
-        const angle = clamp(t * 1.6, 0, Math.PI/2);
-        if (zd.fallAxis === "x") zd.parts.root.rotation.x = -angle * zd.fallDir;
-        else                     zd.parts.root.rotation.z =  angle * zd.fallDir;
-        zd.parts.root.position.y = 1.8 - t*0.2;
-      } else if (t < 3) {
-        zd.parts.root.position.y = 1.6 - (t-1.2)*0.5;
-        zd.parts.root.traverse(o => {
-          if (o.material && o.material.opacity != null) {
-            o.material.transparent = true;
-            o.material.opacity = clamp(1 - (t-1.2)/1.8, 0, 1);
-          }
-        });
-      } else {
-        scene.remove(zd.parts.root);
-        zd.parts.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
-        zombies.splice(i, 1);
-      }
+    if (z.state === "dying") {
+      z.dieT += dt;
+      z.vx *= 0.84; z.vy *= 0.84;
+      z.x += z.vx * dt; z.y += z.vy * dt;
+      if (z.dieT > 1.7) zombies.splice(i, 1);
       continue;
     }
 
-    // knockback (from melee) — overrides chase movement briefly
-    if (zd.knockUntil && now < zd.knockUntil) {
-      const knockT = (zd.knockUntil - now) / 220;
-      zd.parts.root.position.x += zd.knockX * knockT * dt * 8;
-      zd.parts.root.position.z += zd.knockZ * knockT * dt * 8;
-      zd.parts.torso.rotation.x = lerp(zd.parts.torso.rotation.x, -0.3, 0.3);
-      continue;
-    } else if (zd.parts.torso.rotation.x !== 0) {
-      zd.parts.torso.rotation.x = lerp(zd.parts.torso.rotation.x, 0, 0.2);
-    }
+    // knockback / momentum
+    z.x += z.vx * dt; z.y += z.vy * dt;
+    z.vx *= 0.86; z.vy *= 0.86;
+    if (z.stagger > 0) { z.stagger -= dt; z.anim += dt * 4; continue; }
 
-    // chase the player
-    _chase.set(state.pos.x - zd.parts.root.position.x, 0, state.pos.z - zd.parts.root.position.z);
-    const dist = _chase.length();
-    if (dist > 0.0001) _chase.normalize();
-    const targetYaw = Math.atan2(_chase.x, _chase.z);
-    zd.parts.root.rotation.y = lerpAngle(zd.parts.root.rotation.y, targetYaw, 0.12);
+    const dx = player.x - z.x, dy = player.y - z.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    z.angle = lerp(z.angle, Math.atan2(dy, dx), 0.12);
 
-    if (dist > 1.7) {
-      // move closer + walk cycle
-      zd.parts.root.position.x += _chase.x * zd.speed * dt;
-      zd.parts.root.position.z += _chase.z * zd.speed * dt;
-      zd.walkPhase += dt * (3 + zd.speed*0.5);
-      const sw = Math.sin(zd.walkPhase) * 0.4;
-      zd.parts.legL.userData.thighPiv.rotation.x = sw;
-      zd.parts.legR.userData.thighPiv.rotation.x = -sw;
-      zd.parts.torso.rotation.z = Math.sin(zd.walkPhase*0.5) * 0.06;
-      zd.parts.root.position.y = 1.8 + Math.abs(Math.sin(zd.walkPhase))*0.05;
-      zd.parts.armL.userData.upper.rotation.x = -1.3 + Math.sin(zd.walkPhase)*0.15;
-      zd.parts.armR.userData.upper.rotation.x = -1.3 - Math.sin(zd.walkPhase)*0.15;
+    if (dist > z.r + PLAYER_R + 6) {
+      z.x += (dx / dist) * z.speed * dt;
+      z.y += (dy / dist) * z.speed * dt;
+      z.anim += dt * (3 + z.speed * 0.03);
     } else {
-      // in range — attack
-      zd.attackCooldown -= dt;
-      const lunge = Math.sin(now * 0.012) * 0.3 - 1.6;
-      zd.parts.armL.userData.upper.rotation.x = lunge;
-      zd.parts.armR.userData.upper.rotation.x = lunge;
-      if (zd.attackCooldown <= 0) {
-        damagePlayer(10);
-        zd.attackCooldown = 1.1;
-      }
+      // in reach — claw at the survivor
+      z.attackCD -= dt;
+      z.anim += dt * 7;
+      if (z.attackCD <= 0) { damagePlayer(8 + wave); z.attackCD = 1.05; }
     }
 
-    // occasional groan, only when reasonably close (avoids sound spam)
-    if (now > zd.groanAt) {
-      if (dist < 18) Audio.groan();
-      zd.groanAt = now + rand(4000, 12000);
-    }
+    z.groanT -= dt;
+    if (z.groanT <= 0) { if (dist < 760) Sound.groan(); z.groanT = rand(4, 12); }
   }
 }
 
-/* ─── waves ──────────────────────────────────────────────────────────────────
-   Spawn scheduling, difficulty scaling and the end-of-wave bonus. updateWaves()
-   runs only while phase === PLAYING.
-   M1 NOTE: the brief's reworked formulas (5+N*2, 30-alive cap, 6s inter-wave
-   pause) are Milestone 3. The end-of-wave bonus is applied once (v1 applied it
-   every frame of the gap — a bug; brief 5.5 specifies it once).              */
-function startNextWave() {
-  state.wave++;
-  state.zombiesToSpawn = 4 + state.wave * 2;
-  waveNum.textContent = state.wave;
-  showBanner("Wave " + state.wave, state.wave === 1 ? "Brace yourself" : "More are coming");
+function drawZombie(z) {
+  const dying = z.state === "dying";
+  const fade = dying ? clamp(1 - z.dieT / 1.7, 0, 1) : 1;
+  ctx.save();
+  ctx.globalAlpha = fade;
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.beginPath(); ctx.ellipse(z.x + 3, z.y + 6, z.r + 4, z.r * 0.7, 0, 0, TAU); ctx.fill();
+
+  ctx.translate(z.x, z.y);
+  if (dying) ctx.scale(1 + z.dieT * 0.15, 1 + z.dieT * 0.15);
+  ctx.rotate(z.angle);
+  const sway = dying ? 0 : Math.sin(z.anim) * 0.16;
+  ctx.rotate(sway);
+
+  const tn = ZTONES[z.tone];
+  // reaching arms
+  ctx.strokeStyle = tn.skin; ctx.lineWidth = 5; ctx.lineCap = "round";
+  const reach = dying ? 4 : 10 + Math.sin(z.anim * 2) * 4;
+  ctx.beginPath(); ctx.moveTo(2, -6); ctx.lineTo(z.r + reach, -7);
+  ctx.moveTo(2, 6);  ctx.lineTo(z.r + reach, 7); ctx.stroke();
+  // torso — torn clothing
+  ctx.fillStyle = tn.cloth;
+  ctx.beginPath(); ctx.ellipse(0, 0, z.r * 0.9, z.r, 0, 0, TAU); ctx.fill();
+  // head, lolling forward
+  ctx.fillStyle = tn.skin;
+  ctx.beginPath(); ctx.arc(z.r * 0.5, Math.sin(z.anim) * 2, z.r * 0.62, 0, TAU); ctx.fill();
+  // sunken eyes
+  ctx.fillStyle = "#b8443a";
+  ctx.beginPath(); ctx.arc(z.r * 0.72, -3, 1.7, 0, TAU);
+  ctx.arc(z.r * 0.72, 3, 1.7, 0, TAU); ctx.fill();
+
+  // hit flash
+  if (z.flash > 0) {
+    ctx.globalAlpha = fade * clamp(z.flash * 7, 0, 0.8);
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.ellipse(0, 0, z.r * 1.05, z.r * 1.15, 0, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+
+  // hp pips above wounded zombies
+  if (!dying && z.maxHp > 1 && z.hp < z.maxHp) {
+    const w = 26, hpf = z.hp / z.maxHp;
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(z.x - w / 2, z.y - z.r - 12, w, 4);
+    ctx.fillStyle = "#a52a1f";
+    ctx.fillRect(z.x - w / 2, z.y - z.r - 12, w * hpf, 4);
+  }
 }
 
-function showBanner(big, sub) {
-  waveBannerBig.textContent = big;
-  waveBannerSub.textContent = sub;
-  waveBanner.classList.add("on");
-  setTimeout(() => waveBanner.classList.remove("on"), 2200);
-}
+/* ─── waves ──────────────────────────────────────────────────────────────── */
+let wave = 0, kills = 0, score = 0;
+let waveState = "active", waveTimer = 0, toSpawn = 0, spawnTimer = 0;
+let banner = null;
 
+function startWave(n) {
+  wave = n;
+  toSpawn = 4 + n * 2;
+  spawnTimer = 0.4;
+  waveState = "active";
+  banner = { big: "WAVE " + n, sub: n === 1 ? "They come for you" : "The horde swells", t: 2.4 };
+  Sound.waveStart();
+}
 function updateWaves(dt) {
-  const now = performance.now();
-  if (state.zombiesToSpawn > 0 && state.zombiesAlive < 12) {
-    if (Math.random() < 0.04) {            // throttled trickle spawn
-      spawnZombie();
-      state.zombiesToSpawn--;
+  if (banner) { banner.t -= dt; if (banner.t <= 0) banner = null; }
+  if (waveState === "active") {
+    if (toSpawn > 0) {
+      spawnTimer -= dt;
+      if (spawnTimer <= 0 && zombiesAlive < 26) {
+        spawnZombie(); toSpawn--;
+        spawnTimer = Math.max(0.32, 0.95 - wave * 0.05);
+      }
+    } else if (zombiesAlive <= 0) {
+      waveState = "rest"; waveTimer = 4.5;
+      banner = { big: "WAVE CLEARED", sub: "Catch your breath", t: 2.6 };
     }
-  } else if (state.zombiesToSpawn === 0 && state.zombiesAlive === 0) {
-    // wave cleared — bonus once, then schedule the next wave
-    if (!state.nextWaveAt) {
-      state.score += 250 * state.wave;
-      updateScoreUI();
-      state.nextWaveAt = now + 3500;
-    }
-    if (now >= state.nextWaveAt) {
-      state.nextWaveAt = 0;
-      startNextWave();
-    }
+  } else {
+    waveTimer -= dt;
+    if (waveTimer <= 0) startWave(wave + 1);
   }
 }
 
-/* ─── upgrades ───────────────────────────────────────────────────────────────
-   Between-wave card picker and run-state modifiers. Added in Milestone 4 —
-   this section is an intentional placeholder so the architecture is complete. */
-// (Milestone 4)
+/* ─── lighting ───────────────────────────────────────────────────────────────
+   The world is drawn fully, then a near-opaque darkness mask is laid over it
+   with the flashlight cone and a small glow around the player punched out.   */
+function renderLighting(px, py) {
+  lctx.globalCompositeOperation = "source-over";
+  lctx.clearRect(0, 0, W, H);
+  lctx.fillStyle = "rgba(6,7,11,0.9)";
+  lctx.fillRect(0, 0, W, H);
 
-/* ─── hud ────────────────────────────────────────────────────────────────────
-   Overlay DOM references and their update helpers. All HUD is plain DOM —
-   nothing is rendered as text in the 3D scene.                               */
-const stage          = document.getElementById("stage");
-const overlay        = document.getElementById("overlay");
-const centerCard     = document.getElementById("centerCard");
-const startBtn       = document.getElementById("startBtn");
-const healthFill     = document.getElementById("healthFill");
-const scoreText      = document.getElementById("scoreText");
-const waveNum        = document.getElementById("waveNum");
-const waveBanner     = document.getElementById("waveBanner");
-const waveBannerBig  = document.getElementById("waveBannerBig");
-const waveBannerSub  = document.getElementById("waveBannerSub");
-const crosshair      = document.getElementById("crosshair");
-const damageVignette = document.getElementById("damageVignette");
+  lctx.globalCompositeOperation = "destination-out";
+  // flashlight cone
+  lctx.save();
+  lctx.beginPath();
+  lctx.moveTo(px, py);
+  lctx.arc(px, py, FLASH_LEN, player.angle - FLASH_HALF, player.angle + FLASH_HALF);
+  lctx.closePath();
+  lctx.clip();
+  const cone = lctx.createRadialGradient(px, py, 0, px, py, FLASH_LEN);
+  cone.addColorStop(0, "rgba(255,255,255,0.97)");
+  cone.addColorStop(0.6, "rgba(255,255,255,0.62)");
+  cone.addColorStop(1, "rgba(255,255,255,0)");
+  lctx.fillStyle = cone;
+  lctx.fillRect(px - FLASH_LEN, py - FLASH_LEN, FLASH_LEN * 2, FLASH_LEN * 2);
+  lctx.restore();
+  // glow around the player
+  const glow = lctx.createRadialGradient(px, py, 0, px, py, GLOW_R);
+  glow.addColorStop(0, "rgba(255,255,255,0.9)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  lctx.fillStyle = glow;
+  lctx.fillRect(px - GLOW_R, py - GLOW_R, GLOW_R * 2, GLOW_R * 2);
 
-function updateScoreUI() {
-  scoreText.textContent = state.kills + " · " + state.score;
+  lctx.globalCompositeOperation = "source-over";
+  ctx.drawImage(lightCanvas, 0, 0);
+
+  // a faint warm wash inside the cone — the flashlight's colour
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.arc(px, py, FLASH_LEN * 0.92, player.angle - FLASH_HALF, player.angle + FLASH_HALF);
+  ctx.closePath();
+  ctx.clip();
+  const warm = ctx.createRadialGradient(px, py, 0, px, py, FLASH_LEN * 0.92);
+  warm.addColorStop(0, "rgba(255,196,120,0.16)");
+  warm.addColorStop(1, "rgba(255,196,120,0)");
+  ctx.fillStyle = warm;
+  ctx.fillRect(px - FLASH_LEN, py - FLASH_LEN, FLASH_LEN * 2, FLASH_LEN * 2);
+  ctx.restore();
 }
-function updateHealthUI() {
-  healthFill.style.width = (state.health / state.maxHealth * 100) + "%";
+
+/* ─── film grain + vignette ──────────────────────────────────────────────── */
+const noiseTile = document.createElement("canvas");
+noiseTile.width = noiseTile.height = 128;
+(function () {
+  const nc = noiseTile.getContext("2d");
+  const img = nc.createImageData(128, 128);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = (Math.random() * 255) | 0;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = (Math.random() * 90) | 0;
+  }
+  nc.putImageData(img, 0, 0);
+})();
+const noisePattern = ctx.createPattern(noiseTile, "repeat");
+
+function drawGrain() {
+  ctx.save();
+  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = noisePattern;
+  ctx.translate(-(Math.random() * 128) | 0, -(Math.random() * 128) | 0);
+  ctx.fillRect(0, 0, W + 128, H + 128);
+  ctx.restore();
+}
+function drawVignette() {
+  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32,
+                                     W / 2, H / 2, Math.max(W, H) * 0.74);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.82)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
 }
 
-// rising "+N" / "DOWN!" text near screen centre
-function spawnHitFloater(text, head) {
-  const el = document.createElement("div");
-  el.className = "floater";
-  el.textContent = text;
-  if (head) el.style.color = "#c0392b";
-  el.style.left = (window.innerWidth/2 + rand(-30, 30)) + "px";
-  el.style.top  = (window.innerHeight/2 + rand(-30, -10)) + "px";
-  document.body.appendChild(el);
-  const start = performance.now();
-  (function tick() {
-    const t = (performance.now() - start) / 700;
-    if (t >= 1) { el.remove(); return; }
-    el.style.transform = "translateY(" + (-t*60) + "px)";
-    el.style.opacity = (1 - t).toString();
-    requestAnimationFrame(tick);
-  })();
-}
+/* ─── hud & screens ──────────────────────────────────────────────────────── */
+function drawHUD() {
+  // health
+  ctx.save();
+  ctx.fillStyle = "#6a655c";
+  ctx.font = "9px 'Arial Narrow', Arial, sans-serif";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("V I T A L I T Y", 22, 26);
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.fillRect(22, 32, 240, 12);
+  const hpf = clamp(player.hp / player.maxHp, 0, 1);
+  const grad = ctx.createLinearGradient(22, 0, 262, 0);
+  grad.addColorStop(0, "#4a0c07"); grad.addColorStop(1, "#b32a1c");
+  ctx.fillStyle = grad;
+  ctx.fillRect(22, 32, 240 * hpf, 12);
+  ctx.strokeStyle = "rgba(150,44,32,0.6)"; ctx.lineWidth = 1;
+  ctx.strokeRect(22, 32, 240, 12);
 
-/* ─── state machine ──────────────────────────────────────────────────────────
-   Explicit game-flow FSM. `state` is the single global mutable record; every
-   gameplay system reads and writes through it.
+  // wave (top-right)
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#6a655c";
+  ctx.fillText("W A V E", W - 22, 26);
+  ctx.fillStyle = "#b6b0a3";
+  ctx.font = "700 30px 'Arial Narrow', Arial, sans-serif";
+  ctx.fillText(String(wave), W - 22, 54);
 
-     TITLE - PLAYING - UPGRADE_PICK ;  PLAYING - GAME_OVER - TITLE
+  // kills / score (bottom-left)
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#6a655c";
+  ctx.font = "9px 'Arial Narrow', Arial, sans-serif";
+  ctx.fillText("K I L L S", 22, H - 40);
+  ctx.fillText("S C O R E", 110, H - 40);
+  ctx.fillStyle = "#b6b0a3";
+  ctx.font = "700 22px 'Arial Narrow', Arial, sans-serif";
+  ctx.fillText(String(kills), 22, H - 20);
+  ctx.fillText(String(score), 110, H - 20);
+  ctx.restore();
 
-   UPGRADE_PICK is declared but unused until Milestone 4. "Try again" routes
-   GAME_OVER - TITLE via a page reload (a seamless reset is a later item).    */
-const Phase = { TITLE: "TITLE", PLAYING: "PLAYING", UPGRADE_PICK: "UPGRADE_PICK", GAME_OVER: "GAME_OVER" };
-
-const state = {
-  phase: Phase.TITLE,
-  health: 100, maxHealth: 100,
-  score: 0, kills: 0,
-  wave: 0,
-  zombiesAlive: 0, zombiesToSpawn: 0,
-  nextWaveAt: 0,
-  yaw: 0, pitch: 0.35,
-  pos: new THREE.Vector3(0, 0, 0),
-  sprinting: false,
-  moveVec: new THREE.Vector2(),
-  bobTime: 0,
-  lastDamageAt: -10,
-  swinging: false,
-  swingStartAt: -1000,
-  swingHitIds: new Set(),
-};
-
-// pointer lock is held only during PLAYING
-let pointerLocked = false;
-function lockPointer() {
-  if (document.pointerLockElement !== renderer.domElement) {
-    renderer.domElement.requestPointerLock();
+  if (banner) {
+    const a = clamp(banner.t, 0, 1) * clamp(banner.t > 2 ? (2.4 - banner.t) * 3 : 1, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#7d4038";
+    ctx.font = "12px 'Arial Narrow', Arial, sans-serif";
+    ctx.fillText(banner.sub.toUpperCase(), W / 2, H * 0.27 - 34);
+    ctx.fillStyle = "#bdb6a8";
+    ctx.font = "700 56px 'Arial Narrow', Arial, sans-serif";
+    ctx.shadowColor = "rgba(150,25,15,0.7)"; ctx.shadowBlur = 24;
+    ctx.fillText(banner.big, W / 2, H * 0.27);
+    ctx.restore();
   }
 }
-document.addEventListener("pointerlockchange", () => {
-  pointerLocked = (document.pointerLockElement === renderer.domElement);
-});
 
-// the single phase-transition entry point
-function setPhase(next) {
-  state.phase = next;
-  const playing = (next === Phase.PLAYING);
-  overlay.classList.toggle("hidden", playing);
-  if (playing) lockPointer();
-  else if (document.pointerLockElement) document.exitPointerLock();
+function drawCrosshair() {
+  ctx.save();
+  ctx.translate(mouse.x, mouse.y);
+  ctx.strokeStyle = "rgba(190,70,55,0.8)"; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, 9, 0, TAU);
+  ctx.moveTo(-14, 0); ctx.lineTo(-5, 0);
+  ctx.moveTo(14, 0); ctx.lineTo(5, 0);
+  ctx.moveTo(0, -14); ctx.lineTo(0, -5);
+  ctx.moveTo(0, 14); ctx.lineTo(0, 5);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(190,70,55,0.9)";
+  ctx.fillRect(-1, -1, 2, 2);
+  ctx.restore();
 }
 
-// TITLE -> PLAYING : fresh run
-function beginGame() {
-  state.health = state.maxHealth;
-  state.score = 0; state.kills = 0;
-  state.wave = 0;
-  state.zombiesAlive = 0; state.zombiesToSpawn = 0;
-  state.nextWaveAt = 0;
-  state.pos.set(0, 0, 0);
-  state.yaw = 0; state.pitch = 0.35;
-  state.sprinting = false;
-  state.swinging = false; state.swingStartAt = -1000;
-  state.swingHitIds.clear();
-  updateHealthUI();
-  updateScoreUI();
-  startNextWave();
-  setPhase(Phase.PLAYING);
+function drawTitle() {
+  ctx.fillStyle = "#070708";
+  ctx.fillRect(0, 0, W, H);
+  drawVignette();
+  drawGrain();
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#b0a99b";
+  ctx.font = "700 64px 'Arial Narrow', Arial, sans-serif";
+  ctx.shadowColor = "rgba(150,22,12,0.75)"; ctx.shadowBlur = 30;
+  ctx.fillText("MORTIMER'S HORDE", W / 2, H / 2 - 40);
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "#7a1a12"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(W / 2 - 200, H / 2 - 14); ctx.lineTo(W / 2 + 200, H / 2 - 14); ctx.stroke();
+  ctx.fillStyle = "#6f6a60";
+  ctx.font = "13px 'Arial Narrow', Arial, sans-serif";
+  ctx.fillText("THE DARK IS FULL OF THEM. YOUR LIGHT IS FAILING.", W / 2, H / 2 + 16);
+  ctx.fillStyle = "#8a8478";
+  ctx.font = "12px 'Arial Narrow', Arial, sans-serif";
+  ctx.fillText("WASD MOVE   ·   MOUSE AIM   ·   CLICK SWING   ·   SHIFT SPRINT", W / 2, H / 2 + 50);
+  const pulse = 0.55 + Math.sin(performance.now() * 0.004) * 0.4;
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = "#c7bdae";
+  ctx.font = "700 16px 'Arial Narrow', Arial, sans-serif";
+  ctx.fillText("CLICK TO BEGIN", W / 2, H / 2 + 102);
+  ctx.restore();
+  drawCrosshair();
+}
+
+function drawGameOver() {
+  drawVignette();
+  ctx.save();
+  ctx.globalAlpha = clamp(gameOverT, 0, 0.82);
+  ctx.fillStyle = "#0a0608";
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+  drawGrain();
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.globalAlpha = clamp(gameOverT * 1.4, 0, 1);
+  ctx.fillStyle = "#7c1b12";
+  ctx.font = "700 78px 'Arial Narrow', Arial, sans-serif";
+  ctx.shadowColor = "rgba(0,0,0,0.9)"; ctx.shadowBlur = 20;
+  ctx.fillText("YOU DIED", W / 2, H / 2 - 24);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#9a948a";
+  ctx.font = "16px 'Arial Narrow', Arial, sans-serif";
+  ctx.fillText("YOU SURVIVED " + wave + " WAVE" + (wave === 1 ? "" : "S")
+             + "   ·   " + kills + " KILLS   ·   SCORE " + score, W / 2, H / 2 + 24);
+  if (gameOverT > 1.1) {
+    const pulse = 0.5 + Math.sin(performance.now() * 0.004) * 0.45;
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = "#c7bdae";
+    ctx.font = "700 15px 'Arial Narrow', Arial, sans-serif";
+    ctx.fillText("CLICK TO TRY AGAIN", W / 2, H / 2 + 78);
+  }
+  ctx.restore();
+  drawCrosshair();
+}
+
+/* ─── state machine ──────────────────────────────────────────────────────── */
+const ST = { TITLE: 0, PLAYING: 1, GAMEOVER: 2 };
+let state = ST.TITLE;
+let hitStop = 0, gameOverT = 0;
+
+function startGame() {
+  player = makePlayer();
+  zombies = []; zombiesAlive = 0;
+  decals = []; spatter = [];
+  kills = 0; score = 0;
+  cam.x = player.x; cam.y = player.y; cam.shake = 0;
+  hitStop = 0; heartT = 0;
+  buildWorld();
+  startWave(1);
+  state = ST.PLAYING;
+  Sound.ctxA();
   Ambience.start();
 }
-
-// PLAYING -> GAME_OVER
 function gameOver() {
-  centerCard.innerHTML =
-      '<div class="big">You Were Devoured</div>'
-    + '<div class="sub">Survived ' + state.wave + ' wave' + (state.wave===1?"":"s")
-    + ' · ' + state.kills + ' kill' + (state.kills===1?"":"s")
-    + ' · score ' + state.score + '</div>'
-    + '<button class="btn" id="restartBtn">Try again</button>';
-  setPhase(Phase.GAME_OVER);
+  state = ST.GAMEOVER;
+  gameOverT = 0;
+  shake(20);
   Ambience.stop();
-  document.getElementById("restartBtn").addEventListener("click", () => location.reload());
 }
 
-/* ─── main loop ──────────────────────────────────────────────────────────────
-   Three.js core (renderer / scene / camera / lights), the per-frame update +
-   render, and boot wiring. The render loop runs continuously; gameplay systems
-   are stepped only while phase === PLAYING.                                   */
-
-// third-person orbit camera — base framing (modifiable by upgrades in M4)
-const CAM_DIST = 11.0;
-const CAM_HEIGHT = 6.5;
-
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 200);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-stage.appendChild(renderer.domElement);
-
-// fog — the dead loom out of the murk (lighter and deeper than before)
-scene.fog = new THREE.Fog(0x0c0e16, 10, 54);
-
-// lighting — a dim cold night with a warm survivor light pool
-const hemi = new THREE.HemisphereLight(0x3a4252, 0x0a0b0f, 0.95);
-scene.add(hemi);
-const moonLight = new THREE.DirectionalLight(0x9aa8c4, 0.7);
-moonLight.position.set(-24, 34, -18); moonLight.castShadow = true;
-moonLight.shadow.mapSize.set(1024, 1024);
-moonLight.shadow.camera.left = -34; moonLight.shadow.camera.right = 34;
-moonLight.shadow.camera.top = 34; moonLight.shadow.camera.bottom = -34;
-moonLight.shadow.camera.near = 0.1; moonLight.shadow.camera.far = 90;
-scene.add(moonLight);
-// warm light that follows the player — a pool of safety against the dark
-const playerLight = new THREE.PointLight(0xffb878, 3.0, 36);
-playerLight.position.set(0, 4.2, 0);
-scene.add(playerLight);
-
-// build the world and the player
-buildEnvironment(scene);
-const player = buildPlayer();
-scene.add(player.root);
-
-// third-person follow camera — computes position directly, no per-frame alloc
-function updateCamera() {
-  const ph = state.pitch, cy = state.yaw, chp = Math.cos(ph);
-  camera.position.set(
-    state.pos.x + Math.sin(cy) * chp * CAM_DIST,
-    CAM_HEIGHT + Math.sin(ph) * CAM_DIST,
-    state.pos.z + Math.cos(cy) * chp * CAM_DIST
-  );
-  camera.lookAt(state.pos.x, 2.3, state.pos.z);
-  playerLight.position.set(state.pos.x, 4.2, state.pos.z);
-  // subtle torch-like flicker — keeps the light pool uneasy
-  playerLight.intensity = 3.0 + Math.sin(performance.now()*0.014)*0.22 + (Math.random()-0.5)*0.45;
+/* ─── main loop ──────────────────────────────────────────────────────────── */
+function update(dt) {
+  updatePlayer(dt);
+  updateZombies(dt);
+  updateWaves(dt);
+  updateBlood(dt);
+  updateCamera(dt);
+  Ambience.update(dt);
 }
 
-const clock = new THREE.Clock();
-let raf = null;
+function render() {
+  if (state === ST.TITLE) { drawTitle(); return; }
 
-function frame() {
-  raf = requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), 0.05);
-  if (state.phase === Phase.PLAYING) {
-    updatePlayer(dt);
-    updateZombies(dt);
-    updateWaves(dt);
-    updateBlood(dt);
+  ctx.fillStyle = "#060608";
+  ctx.fillRect(0, 0, W, H);
+
+  // camera transform (with shake)
+  const sx = (Math.random() * 2 - 1) * cam.shake;
+  const sy = (Math.random() * 2 - 1) * cam.shake;
+  ctx.save();
+  ctx.translate(W / 2 - cam.x + sx, H / 2 - cam.y + sy);
+
+  drawWorld();
+  drawDecals();
+  drawSpatter();
+  // y-sorted actors for simple top-down overlap
+  const actors = zombies.slice();
+  actors.push(player);
+  actors.sort((a, b) => a.y - b.y);
+  for (const a of actors) {
+    if (a === player) drawPlayer();
+    else drawZombie(a);
   }
-  updateCamera();
-  renderer.render(scene, camera);
+  ctx.restore();
+
+  // lighting — player's screen position
+  const px = W / 2 - cam.x + sx + player.x;
+  const py = H / 2 - cam.y + sy + player.y;
+  renderLighting(px, py);
+
+  drawVignette();
+
+  // damage flash
+  if (player.hurt > 0) {
+    ctx.save();
+    ctx.globalAlpha = clamp(player.hurt * 1.5, 0, 0.5);
+    ctx.fillStyle = "#8c0f0a";
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+  // low-health red pulse
+  if (player.alive && player.hp < 32) {
+    ctx.save();
+    ctx.globalAlpha = (0.12 + Math.sin(performance.now() * 0.006) * 0.1) * (1 - player.hp / 32);
+    ctx.fillStyle = "#a01410";
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  drawGrain();
+  drawHUD();
+  drawCrosshair();
+
+  if (state === ST.GAMEOVER) drawGameOver();
 }
 
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+let last = 0;
+function loop(ts) {
+  requestAnimationFrame(loop);
+  let dt = (ts - last) / 1000;
+  last = ts;
+  if (!dt || dt > 0.05) dt = Math.min(dt || 0.016, 0.05);
 
-/* ── boot ── */
-setPhase(Phase.TITLE);
-startBtn.addEventListener("click", beginGame);
-// re-acquire pointer lock if it was dropped mid-run (e.g. via Esc)
-renderer.domElement.addEventListener("click", () => {
-  if (state.phase === Phase.PLAYING && !pointerLocked) lockPointer();
-});
-frame();
+  if (state === ST.PLAYING) {
+    if (hitStop > 0) hitStop -= dt;       // brief impact freeze
+    else update(dt);
+  } else if (state === ST.GAMEOVER) {
+    gameOverT += dt;
+    cam.shake = Math.max(0, cam.shake - dt * 42);
+  }
+  render();
+}
+requestAnimationFrame(loop);
 
-};  // end window.startMortimersHorde
+})();
 </script>
 </body>
 </html>
