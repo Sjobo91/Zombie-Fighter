@@ -3,146 +3,295 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" href="data:," />
 <title>Mortimer's Horde</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-  body { cursor: none; }
-  #game { display: block; position: fixed; inset: 0; }
+  html, body { margin: 0; height: 100%; background: #05040a; overflow: hidden;
+    font-family: 'Arial Narrow', Arial, sans-serif; color: #d8cdbb; }
+  #game { display: block; position: fixed; inset: 0; z-index: 0; }
+  #ui { position: fixed; inset: 0; z-index: 10; pointer-events: none;
+    user-select: none; -webkit-user-select: none; }
+
+  /* ---- in-game HUD ---- */
+  .topbar { position: absolute; top: 14px; left: 0; right: 0; display: flex;
+    justify-content: space-between; padding: 0 26px; font-weight: 700; }
+  #lvl { color: #e3bd57; font-size: 21px; }
+  #district { color: #7d7668; font-size: 12px; letter-spacing: 1px; }
+  #wave { color: #c8c0b0; font-size: 27px; letter-spacing: 2px;
+    text-shadow: 0 0 18px rgba(150,25,15,.7); }
+  #score { color: #8b8478; font-size: 16px; text-align: right; }
+
+  #hpwrap { position: absolute; left: 26px; bottom: 30px; width: 280px; }
+  #hpbar { height: 22px; background: #1c0707; border: 2px solid #3a2018;
+    border-radius: 4px; overflow: hidden; box-shadow: 0 0 14px rgba(0,0,0,.7);
+    position: relative; }
+  #hpfill { height: 100%; width: 100%;
+    background: linear-gradient(90deg, #6e0d09, #e8362a); transition: width .12s; }
+  #hptext { position: absolute; inset: 0; text-align: center; line-height: 22px;
+    font-size: 13px; font-weight: 700; color: #f0e6da; }
+  #stats { margin-top: 6px; font-size: 12px; color: #8b8478; font-weight: 700;
+    letter-spacing: 1px; }
+
+  #xpbar { position: absolute; left: 0; right: 0; bottom: 0; height: 7px;
+    background: rgba(0,0,0,.7); }
+  #xpfill { height: 100%; width: 0%;
+    background: linear-gradient(90deg, #caa23a, #f4e08a); transition: width .15s; }
+
+  #abilities { position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: 22px; display: flex; gap: 12px; }
+  .abil { width: 50px; height: 50px; background: rgba(8,8,10,.85);
+    border: 2px solid #2c2c33; border-radius: 7px; position: relative;
+    overflow: hidden; }
+  .abil .dot { position: absolute; left: 50%; top: 19px;
+    transform: translateX(-50%); width: 22px; height: 22px; border-radius: 50%; }
+  .abil .cd { position: absolute; left: 0; right: 0; bottom: 0; top: 100%;
+    background: rgba(0,0,0,.72); }
+  .abil .key { position: absolute; left: 0; right: 0; bottom: 3px;
+    text-align: center; font-size: 9px; color: #8b8478; }
+
+  #crosshair { position: absolute; width: 26px; height: 26px; margin: -13px;
+    pointer-events: none; display: none; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute;
+    background: rgba(200,80,62,.9); }
+  #crosshair::before { left: 12px; top: 0; width: 2px; height: 26px; }
+  #crosshair::after { top: 12px; left: 0; height: 2px; width: 26px; }
+
+  #banner { position: absolute; left: 0; right: 0; top: 21%; text-align: center;
+    opacity: 0; transition: opacity .4s; }
+  #banner .big { font-size: 56px; font-weight: 800; color: #c8c0b0;
+    text-shadow: 0 0 26px rgba(150,25,15,.75); }
+  #banner .sub { font-size: 13px; letter-spacing: 3px; color: #7d4f38; }
+
+  /* ---- full-screen overlays ---- */
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; pointer-events: auto;
+    background: radial-gradient(ellipse at center,
+      rgba(8,6,12,.72) 0%, rgba(4,3,7,.96) 80%); text-align: center; }
+  .overlay.hidden { display: none; }
+  .title-main { font-size: 70px; font-weight: 800; color: #b3aa9b;
+    text-shadow: 0 0 34px rgba(150,22,12,.85); margin: 0; }
+  .rule { width: 480px; height: 2px; background: #7a1a12; margin: 14px 0; }
+  .muted { color: #6f6a60; font-size: 13px; letter-spacing: 1px; }
+  .controls { color: #857f72; font-size: 12px; letter-spacing: 1px;
+    margin-top: 8px; }
+  .blink { color: #c9bfae; font-size: 17px; font-weight: 800; margin-top: 30px;
+    animation: blink 1.4s infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+  .fell { font-size: 80px; font-weight: 800; color: #7c1b12;
+    text-shadow: 0 0 22px rgba(0,0,0,.9); margin: 0; }
+
+  /* ---- choice cards ---- */
+  #choice .ctitle { font-size: 29px; font-weight: 800; color: #d8b75a;
+    letter-spacing: 1px; margin-bottom: 26px; }
+  .cards { display: flex; gap: 30px; }
+  .card { width: 250px; height: 308px; background: #121016;
+    border: 2px solid #3a3640; border-radius: 9px; display: flex;
+    flex-direction: column; align-items: center; padding: 28px 18px 0;
+    cursor: pointer; transition: border-color .12s, background .12s,
+      transform .12s; box-sizing: border-box; }
+  .card:hover { background: #1c1822; border-color: #d8b75a;
+    transform: translateY(-4px); }
+  .card.locked { opacity: .45; cursor: default; pointer-events: none;
+    filter: grayscale(.6); }
+  .card .emblem { width: 56px; height: 56px; border-radius: 50%;
+    margin-bottom: 22px; box-shadow: 0 0 26px currentColor; }
+  .card .cn { font-size: 23px; font-weight: 800; color: #e8ddc6;
+    margin-bottom: 12px; }
+  .card .cd2 { font-size: 15px; color: #9a9488; line-height: 1.4; }
+  .card .take { margin-top: auto; margin-bottom: 18px; font-size: 11px;
+    letter-spacing: 2px; color: #d8b75a; }
+  #choice .ready { margin-top: 22px; font-size: 12px; letter-spacing: 2px;
+    color: #6f6a60; height: 16px; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+
+<div id="ui">
+  <div class="topbar">
+    <div><div id="lvl">LEVEL 1</div><div id="district">THE BONEYARD</div></div>
+    <div id="wave">WAVE 1</div>
+    <div id="score">KILLS 0 &nbsp; SCORE 0</div>
+  </div>
+
+  <div id="hpwrap">
+    <div id="hpbar"><div id="hpfill"></div><div id="hptext">120 / 120</div></div>
+    <div id="stats">STR 0 &nbsp; VIT 0 &nbsp; SWI 0</div>
+  </div>
+
+  <div id="abilities">
+    <div class="abil"><div class="dot" style="background:#9298a1"></div>
+      <div class="cd" id="cd-atk"></div><div class="key">LMB</div></div>
+    <div class="abil"><div class="dot" style="background:#caa24a"></div>
+      <div class="cd" id="cd-smash"></div><div class="key">Q / RMB</div></div>
+    <div class="abil"><div class="dot" style="background:#9fd0ff"></div>
+      <div class="cd" id="cd-dash"></div><div class="key">SPACE</div></div>
+  </div>
+
+  <div id="xpbar"><div id="xpfill"></div></div>
+  <div id="banner"><div class="big"></div><div class="sub"></div></div>
+  <div id="crosshair"></div>
+
+  <div id="title" class="overlay">
+    <h1 class="title-main">MORTIMER'S HORDE</h1>
+    <div class="rule"></div>
+    <div class="muted">A 3D GOTHIC ARPG — CARVE THROUGH THE DEAD, GROW IN POWER</div>
+    <div class="controls">WASD MOVE · MOUSE AIM · CLICK CLEAVE ·
+      Q / RMB SMASH · SPACE DASH</div>
+    <div class="blink">CLICK TO BEGIN</div>
+  </div>
+
+  <div id="choice" class="overlay hidden">
+    <div class="ctitle"></div>
+    <div class="cards"></div>
+    <div class="ready"></div>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <h1 class="fell">YOU FELL</h1>
+    <div class="muted" id="over-stats"></div>
+    <div class="blink" id="over-again" style="visibility:hidden">
+      CLICK TO RISE AGAIN</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
 <script>
 "use strict";
 /* =========================================================================
-   MORTIMER'S HORDE — a 2.5D gothic action-RPG
-   Single self-contained file. Plain Canvas 2D + WebAudio. No build, no assets.
-
-   An angled top-down ARPG: a lone survivor cuts through the undead in a
-   ruined town that opens up district by district. Level up, allocate stats,
-   pick a boon after every wave, and earn milestone perks.
-
-   Sections: config · helpers · input · audio · world · area · figures ·
-   entities · combat · upgrades · progression · loot · fx · camera ·
-   lighting · hud · choice · screens · state · loop
+   MORTIMER'S HORDE — a 3D gothic action-RPG  (Three.js r149, WebGL)
+   A lone survivor cuts through the undead on rolling, living terrain:
+   real 3D ground, grass that bends as you pass, drifting mist, firelight.
    ========================================================================= */
 (function () {
+const THREE = window.THREE;
 
-/* ─── config ─────────────────────────────────────────────────────────────── */
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-const lightCanvas = document.createElement("canvas");
-const lctx = lightCanvas.getContext("2d");
-let W = 0, H = 0;
-function resize() {
-  W = canvas.width = lightCanvas.width = window.innerWidth;
-  H = canvas.height = lightCanvas.height = window.innerHeight;
-}
-window.addEventListener("resize", resize);
-resize();
-
-const WORLD = { w: 3200, h: 2560 };
-
+/* ─── tuning ──────────────────────────────────────────────────────────────── */
+const ARENA = 74;                       // playable radius
 const P = {
-  speed: 204, dashSpeed: 760, r: 16,
+  speed: 17, dashSpeed: 56, r: 1.15,
   baseHp: 120, baseDmg: 7, baseCrit: 0.13, baseCritMul: 2.0,
-  atkRange: 116, atkArc: 1.18,
-  atkWindup: 0.10, atkStrike: 0.13, atkRecover: 0.15,
-  smashRange: 172, smashDmg: 26, smashCd: 4.2,
-  dashCd: 1.8, dashTime: 0.17, dashIframes: 0.3,
+  atkRange: 7.6, atkArc: 1.15,
+  atkWindup: 0.10, atkStrike: 0.13, atkRecover: 0.16,
+  smashRange: 11, smashDmg: 26, smashCd: 4.2,
+  dashCd: 1.8, dashTime: 0.17, dashIframes: 0.32,
 };
+// hitting carries a consequence: each swing briefly slows your stride
+const ATK_SLOW_DUR = 0.55, ATK_SLOW_AMT = 0.28;
 
-// archetypes — HP is FIXED (no per-wave scaling); the horde gets meaner
-// through numbers, speed, damage and tougher types instead.
+// archetypes — HP is fixed; the horde grows through numbers, speed & damage
 const ETYPES = {
-  shambler: { hp: 6,   speed: 52, dmg: 8,  r: 15, h: 50,  xp: 9,  knock: 1.0 },
-  runner:   { hp: 5,   speed: 132,dmg: 6,  r: 12, h: 44,  xp: 13, knock: 1.4 },
-  brute:    { hp: 26,  speed: 46, dmg: 20, r: 23, h: 72,  xp: 34, knock: 0.45 },
-  giant:    { hp: 130, speed: 36, dmg: 34, r: 37, h: 108, xp: 130,knock: 0.16 },
+  shambler: { hp: 6,   speed: 4.4,  dmg: 9,  r: 1.2, h: 3.4, xp: 9,   sc: 1.0 },
+  runner:   { hp: 5,   speed: 10.5, dmg: 7,  r: 1.0, h: 3.0, xp: 13,  sc: 0.86 },
+  brute:    { hp: 26,  speed: 4.0,  dmg: 22, r: 2.0, h: 4.8, xp: 34,  sc: 1.55 },
+  giant:    { hp: 130, speed: 3.2,  dmg: 40, r: 3.4, h: 7.4, xp: 130, sc: 2.5 },
 };
+const DISTRICTS = ["THE BONEYARD", "THE IRON GATE", "THE OLD STREETS",
+                   "THE MARKET SQUARE", "THE OUTER WARD"];
 
-const DISTRICTS = ["The Graveyard", "The Iron Gate", "The Old Streets", "The Market Square", "The Outer Ward"];
-
-/* ─── helpers ────────────────────────────────────────────────────────────── */
+/* ─── helpers ─────────────────────────────────────────────────────────────── */
 const TAU = Math.PI * 2;
 const rand  = (a, b) => a + Math.random() * (b - a);
-const randi = (a, b) => (a + Math.random() * (b - a + 1)) | 0;
-const pick  = (arr) => arr[(Math.random() * arr.length) | 0];
+const pick  = (a) => a[(Math.random() * a.length) | 0];
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp  = (a, b, t) => a + (b - a) * t;
 const easeOut = (t) => 1 - (1 - t) * (1 - t);
 const easeIn  = (t) => t * t;
-function angDiff(a, b) { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; }
+function angDiff(a, b) { let d = b - a; while (d > Math.PI) d -= TAU;
+  while (d < -Math.PI) d += TAU; return d; }
 function pick3(pool) {
   const c = pool.slice(), out = [];
-  for (let i = 0; i < 3 && c.length; i++) out.push(c.splice((Math.random() * c.length) | 0, 1)[0]);
+  for (let i = 0; i < 3 && c.length; i++)
+    out.push(c.splice((Math.random() * c.length) | 0, 1)[0]);
   return out;
 }
 
-/* ─── input ──────────────────────────────────────────────────────────────── */
-const keys = Object.create(null);
-const mouse = { x: W / 2, y: H / 2, down: false };
-window.addEventListener("keydown", (e) => {
-  keys[e.code] = true;
-  if (state === ST.PLAYING) {
-    if (e.code === "Space") tryDash();
-    if (e.code === "KeyQ" || e.code === "KeyE") trySmash();
-  }
-});
-window.addEventListener("keyup", (e) => { keys[e.code] = false; });
-canvas.addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
-canvas.addEventListener("mousedown", (e) => {
-  if (e.button === 0) {
-    mouse.down = true;
-    if (state === ST.TITLE) startGame();
-    else if (state === ST.GAMEOVER) { if (gameOverT > 1.1) startGame(); }
-    else if (state === ST.CHOICE) clickChoice();
-    else if (state === ST.PLAYING) tryAttack();
-  } else if (e.button === 2 && state === ST.PLAYING) trySmash();
-});
-canvas.addEventListener("mouseup", (e) => { if (e.button === 0) mouse.down = false; });
-canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+/* ─── renderer / scene / camera ───────────────────────────────────────────── */
+const canvas = document.getElementById("game");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 
-/* ─── audio ──────────────────────────────────────────────────────────────── */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07060c);
+scene.fog = new THREE.FogExp2(0x07060c, 0.0142);
+
+const camera = new THREE.PerspectiveCamera(54, 1, 0.1, 600);
+const CAM_OFF = new THREE.Vector3(0, 31, 27);
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+
+/* ─── lights ──────────────────────────────────────────────────────────────── */
+scene.add(new THREE.HemisphereLight(0x3a4060, 0x0a0808, 0.55));
+const moon = new THREE.DirectionalLight(0x9fb0d8, 0.62);
+moon.position.set(60, 90, 40);
+moon.castShadow = true;
+moon.shadow.mapSize.set(2048, 2048);
+moon.shadow.camera.near = 1; moon.shadow.camera.far = 230;
+moon.shadow.camera.left = -ARENA; moon.shadow.camera.right = ARENA;
+moon.shadow.camera.top = ARENA; moon.shadow.camera.bottom = -ARENA;
+moon.shadow.bias = -0.0015;
+scene.add(moon);
+scene.add(moon.target);
+
+/* ─── audio ───────────────────────────────────────────────────────────────── */
 const Sound = (() => {
   let ac = null;
-  function actx() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } return ac; }
+  function actx() { if (!ac) { try {
+    ac = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) {} } return ac; }
   function tone(type, f0, f1, dur, vol, when) {
     const c = actx(); if (!c) return;
     const t = c.currentTime + (when || 0);
     const o = c.createOscillator(), g = c.createGain();
     o.type = type; o.frequency.setValueAtTime(f0, t);
     o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
     o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
   }
   function noise(dur, vol, type, f, q) {
     const c = actx(); if (!c) return;
     const t = c.currentTime;
-    const b = c.createBuffer(1, Math.max(1, (dur * c.sampleRate) | 0), c.sampleRate), d = b.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.8);
+    const b = c.createBuffer(1, Math.max(1, (dur * c.sampleRate) | 0),
+      c.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++)
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.8);
     const s = c.createBufferSource(); s.buffer = b;
-    const fl = c.createBiquadFilter(); fl.type = type; fl.frequency.value = f; if (q) fl.Q.value = q;
+    const fl = c.createBiquadFilter();
+    fl.type = type; fl.frequency.value = f; if (q) fl.Q.value = q;
     const g = c.createGain(); g.gain.value = vol;
-    s.connect(fl).connect(g).connect(c.destination); s.start(t); s.stop(t + dur + 0.02);
+    s.connect(fl).connect(g).connect(c.destination);
+    s.start(t); s.stop(t + dur + 0.02);
   }
   return {
     actx,
     swing() { noise(0.2, 0.32, "bandpass", 2600, 3); },
-    hit()   { noise(0.16, 0.46, "lowpass", 780); tone("sine", 175, 48, 0.14, 0.4); },
-    crit()  { noise(0.18, 0.5, "lowpass", 950); tone("sine", 240, 55, 0.18, 0.46); tone("square", 600, 300, 0.1, 0.16); },
-    smash() { noise(0.4, 0.55, "lowpass", 420); tone("sine", 130, 32, 0.5, 0.55); },
+    hit()   { noise(0.16, 0.46, "lowpass", 780); tone("sine",175,48,0.14,0.4); },
+    crit()  { noise(0.18, 0.5, "lowpass", 950); tone("sine",240,55,0.18,0.46);
+              tone("square", 600, 300, 0.1, 0.16); },
+    smash() { noise(0.4, 0.55, "lowpass", 420); tone("sine",130,32,0.5,0.55); },
     dash()  { noise(0.22, 0.28, "highpass", 900); },
     hurt()  { tone("sawtooth", 200, 70, 0.3, 0.38); },
-    groan() { tone("sawtooth", 56 + Math.random() * 18, 33, 0.7, 0.06); },
-    die()   { noise(0.3, 0.28, "lowpass", 500); tone("sawtooth", 90, 30, 0.4, 0.14); },
+    groan() { tone("sawtooth", 56 + Math.random()*18, 33, 0.7, 0.06); },
+    die()   { noise(0.3, 0.28, "lowpass", 500); tone("sawtooth",90,30,0.4,0.14); },
     pickup(){ tone("triangle", 520, 880, 0.12, 0.18); },
-    levelup(){ [0,0.1,0.2,0.33].forEach((o,i)=>tone("triangle",330*Math.pow(1.26,i),330*Math.pow(1.26,i),0.22,0.18,o)); },
+    levelup(){ [0,0.1,0.2,0.33].forEach((o,i) =>
+      tone("triangle",330*Math.pow(1.26,i),330*Math.pow(1.26,i),0.22,0.18,o)); },
     choose(){ tone("triangle", 440, 660, 0.14, 0.22); },
     wave()  { tone("sawtooth", 84, 36, 1.2, 0.2); },
-    open()  { tone("sawtooth", 70, 150, 1.4, 0.24); noise(0.8, 0.2, "lowpass", 300); },
     step()  { noise(0.05, 0.12, "lowpass", 300); },
-    heart() { tone("sine", 60, 32, 0.16, 0.32); tone("sine", 58, 30, 0.14, 0.28, 0.17); },
+    heart() { tone("sine",60,32,0.16,0.32); tone("sine",58,30,0.14,0.28,0.17); },
   };
 })();
 const Ambience = (() => {
@@ -152,11 +301,13 @@ const Ambience = (() => {
     on = true;
     master = c.createGain();
     master.gain.setValueAtTime(0.0001, c.currentTime);
-    master.gain.linearRampToValueAtTime(0.44, c.currentTime + 5);
-    const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 230;
+    master.gain.linearRampToValueAtTime(0.42, c.currentTime + 5);
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass"; lp.frequency.value = 230;
     lp.connect(master); master.connect(c.destination);
     [[39,0.15,"sawtooth"],[39.5,0.15,"sawtooth"],[58,0.09,"sine"]].forEach(v => {
-      const o = c.createOscillator(); o.type = v[2]; o.frequency.value = v[0];
+      const o = c.createOscillator();
+      o.type = v[2]; o.frequency.value = v[0];
       const g = c.createGain(); g.gain.value = v[1];
       o.connect(g).connect(lp); o.start(); nodes.push(o);
     });
@@ -173,7 +324,8 @@ const Ambience = (() => {
       const c = Sound.actx(); if (!c) return;
       const base = 230 + Math.random() * 460, t = c.currentTime;
       [base, base * 1.414].forEach(f => {
-        const o = c.createOscillator(); o.type = "triangle"; o.frequency.value = f;
+        const o = c.createOscillator();
+        o.type = "triangle"; o.frequency.value = f;
         const g = c.createGain();
         g.gain.setValueAtTime(0.0001, t);
         g.gain.linearRampToValueAtTime(0.038, t + 0.9);
@@ -185,543 +337,524 @@ const Ambience = (() => {
   function stop() {
     if (!on) return; on = false;
     const c = Sound.actx();
-    if (c && master) master.gain.linearRampToValueAtTime(0.0001, c.currentTime + 1.3);
+    if (c && master)
+      master.gain.linearRampToValueAtTime(0.0001, c.currentTime + 1.3);
     const dy = nodes; nodes = [];
     setTimeout(() => dy.forEach(o => { try { o.stop(); } catch (e) {} }), 1500);
   }
   return { start, update, stop };
 })();
 
-/* ─── world ──────────────────────────────────────────────────────────────────
-   The whole town is baked once onto an offscreen canvas, themed in rings
-   (graveyard heart → streets → market). Props are placed by ring and y-sorted
-   with the actors each frame. Only the area currently unlocked is reachable.  */
-const worldCanvas = document.createElement("canvas");
-worldCanvas.width = WORLD.w; worldCanvas.height = WORLD.h;
-const wctx = worldCanvas.getContext("2d");
-let props = [], braziers = [];
-
-function ringOf(x, y) {                        // 0 graveyard · 1 streets · 2 market
-  const d = Math.max(Math.abs(x - WORLD.w / 2) / 760, Math.abs(y - WORLD.h / 2) / 620);
-  return d < 1 ? 0 : d < 1.9 ? 1 : 2;
+/* ─── terrain ─────────────────────────────────────────────────────────────────
+   The ground is a real 3D heightmapped mesh — rolling, hilled and uneven.
+   Everything (player, horde, props) is seated onto its surface.            */
+function groundHeight(x, z) {
+  return (Math.sin(x * 0.045) * 1.6 + Math.cos(z * 0.05) * 1.5
+        + Math.sin((x + z) * 0.028) * 1.8
+        + Math.sin(x * 0.013 - z * 0.017) * 2.3) * 0.62;
 }
-function buildWorld() {
-  const g = wctx;
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.fillStyle = "#161417"; g.fillRect(0, 0, WORLD.w, WORLD.h);
-  const tones = ["#100f12", "#1c1a17", "#13151a", "#1a1410"];
-  for (let i = 0; i < 260; i++) {
-    g.save(); g.translate(rand(0, WORLD.w), rand(0, WORLD.h)); g.rotate(rand(0, TAU));
-    g.globalAlpha = rand(0.22, 0.6); g.fillStyle = pick(tones);
-    g.beginPath(); g.ellipse(0, 0, rand(46, 180), rand(30, 110), 0, 0, TAU); g.fill();
-    g.restore();
+const GROUND = 230, GSEG = 200;
+(function buildGround() {
+  const geo = new THREE.PlaneGeometry(GROUND, GROUND, GSEG, GSEG);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  const cLow = new THREE.Color(0x141118), cMid = new THREE.Color(0x232017);
+  const cHi  = new THREE.Color(0x2c2a1c), cGrass = new THREE.Color(0x1d2415);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const y = groundHeight(x, z);
+    pos.setY(i, y);
+    const t = clamp((y + 4) / 8, 0, 1);
+    tmp.copy(t < 0.5 ? cLow : cMid).lerp(t < 0.5 ? cMid : cHi, (t % 0.5) * 2);
+    if (Math.random() < 0.16) tmp.lerp(cGrass, rand(0.3, 0.8));
+    tmp.multiplyScalar(rand(0.82, 1.12));
+    col[i*3] = tmp.r; col[i*3+1] = tmp.g; col[i*3+2] = tmp.b;
   }
-  g.globalAlpha = 1;
-  // cobble flecks, cracks, grass, old blood
-  for (let i = 0; i < 1100; i++) {
-    g.save(); g.translate(rand(0, WORLD.w), rand(0, WORLD.h)); g.rotate(rand(0, TAU));
-    g.globalAlpha = rand(0.1, 0.3); g.strokeStyle = "#000"; g.lineWidth = 1.4;
-    g.strokeRect(-rand(7, 16), -rand(6, 12), rand(14, 30), rand(12, 22));
-    g.restore();
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 1, metalness: 0 }));
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+})();
+
+/* interactive grass — instanced tufts that bend away as you walk through */
+const GRASS_N = 720;
+const grassBlade = [];
+let grass = null;
+(function buildGrass() {
+  const geo = new THREE.ConeGeometry(0.17, 1.7, 4);
+  geo.translate(0, 0.85, 0);
+  const m = new THREE.MeshStandardMaterial({ color: 0x26301a,
+    roughness: 1, metalness: 0, flatShading: true });
+  grass = new THREE.InstancedMesh(geo, m, GRASS_N);
+  grass.receiveShadow = true;
+  const d = new THREE.Object3D();
+  for (let i = 0; i < GRASS_N; i++) {
+    const a = rand(0, TAU), rr = Math.sqrt(Math.random()) * (ARENA - 3);
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+    grassBlade.push({ x, z, y: groundHeight(x, z),
+      phase: rand(0, TAU), h: rand(0.7, 1.5) });
+    d.position.set(x, grassBlade[i].y, z);
+    d.scale.set(1, grassBlade[i].h, 1);
+    d.rotation.set(0, rand(0, TAU), 0);
+    d.updateMatrix(); grass.setMatrixAt(i, d.matrix);
   }
-  g.globalAlpha = 1; g.strokeStyle = "#070708"; g.lineWidth = 2;
-  for (let i = 0; i < 170; i++) {
-    g.save(); g.translate(rand(0, WORLD.w), rand(0, WORLD.h)); g.rotate(rand(0, TAU));
-    g.beginPath(); g.moveTo(0, 0);
-    let cx = 0, cy = 0;
-    for (let s = 0, n = randi(3, 6); s < n; s++) { cx += rand(12, 34); cy += rand(-18, 18); g.lineTo(cx, cy); }
-    g.stroke(); g.restore();
-  }
-  for (let i = 0; i < 560; i++) {
-    g.save(); g.translate(rand(0, WORLD.w), rand(0, WORLD.h));
-    g.strokeStyle = pick(["#23281a", "#2c2a17", "#1d2415"]); g.lineWidth = 1.5;
-    for (let b = 0; b < 4; b++) { g.beginPath(); g.moveTo(0, 0); g.lineTo(rand(-4, 4), -rand(4, 9)); g.stroke(); }
-    g.restore();
-  }
-  for (let i = 0; i < 34; i++) {
-    g.save(); g.translate(rand(0, WORLD.w), rand(0, WORLD.h)); g.rotate(rand(0, TAU));
-    g.globalAlpha = rand(0.4, 0.7); g.fillStyle = "#240d09";
-    g.beginPath(); g.ellipse(0, 0, rand(18, 48), rand(12, 30), 0, 0, TAU); g.fill();
-    g.restore();
-  }
-  g.globalAlpha = 1;
-
-  // props, themed by ring
-  props = []; braziers = [];
-  const byRing = [
-    ["grave","grave","grave","cross","tree","statue","crypt","bones","urn"],
-    ["lamp","lamp","cart","barrel","crate","rubble","fountain","bones","tree"],
-    ["stall","stall","crate","crate","barrel","cart","lamp","rubble","statue"],
-  ];
-  for (let i = 0; i < 240; i++) {
-    const x = rand(120, WORLD.w - 120), y = rand(120, WORLD.h - 120);
-    const t = pick(byRing[ringOf(x, y)]);
-    props.push({ t, x, y, s: rand(0.85, 1.25), f: Math.random() < 0.5 ? -1 : 1, seed: Math.random() });
-  }
-  for (let i = 0; i < 16; i++) {
-    const b = { t: "brazier", x: rand(280, WORLD.w - 280), y: rand(280, WORLD.h - 280),
-                s: rand(0.9, 1.2), flick: Math.random() * TAU };
-    braziers.push(b); props.push(b);
-  }
-}
-function drawWorld() { ctx.drawImage(worldCanvas, 0, 0); }
-function stainGround(x, y, r, col) {
-  const g = wctx;
-  g.save(); g.translate(x, y); g.rotate(rand(0, TAU));
-  g.globalAlpha = rand(0.5, 0.8); g.fillStyle = col || "#3a0908";
-  g.beginPath(); g.ellipse(0, 0, r, r * 0.7, 0, 0, TAU); g.fill();
-  g.restore(); g.globalAlpha = 1;
-}
-
-/* ─── area ───────────────────────────────────────────────────────────────────
-   The reachable ground starts narrow and opens outward as the run advances.  */
-const AREA_STAGES = [
-  { hx: 470, hy: 380 }, { hx: 720, hy: 560 }, { hx: 1020, hy: 800 },
-  { hx: 1320, hy: 1040 }, { hx: 1560, hy: 1260 },
-];
-let areaStage = 0, area = null, areaTgt = null;
-function stageRect(i) {
-  const cx = WORLD.w / 2, cy = WORLD.h / 2, s = AREA_STAGES[i];
-  return { x0: cx - s.hx, y0: cy - s.hy, x1: cx + s.hx, y1: cy + s.hy };
-}
-function expandArea() {
-  if (areaStage >= AREA_STAGES.length - 1) return;
-  areaStage++;
-  areaTgt = stageRect(areaStage);
-  banner = { big: "THE WAY OPENS", sub: DISTRICTS[areaStage], t: 3.2 };
-  Sound.open();
-}
-function updateArea(dt) {
-  area.x0 = lerp(area.x0, areaTgt.x0, 0.05);
-  area.y0 = lerp(area.y0, areaTgt.y0, 0.05);
-  area.x1 = lerp(area.x1, areaTgt.x1, 0.05);
-  area.y1 = lerp(area.y1, areaTgt.y1, 0.05);
-}
-function drawAreaWall() {
-  // a heavy ruined wall hemming in the unlocked ground
-  ctx.save();
-  ctx.fillStyle = "#0a0a0c";
-  const t = 60;
-  ctx.fillRect(area.x0 - t, area.y0 - t, area.x1 - area.x0 + t * 2, t);
-  ctx.fillRect(area.x0 - t, area.y1, area.x1 - area.x0 + t * 2, t);
-  ctx.fillRect(area.x0 - t, area.y0, t, area.y1 - area.y0);
-  ctx.fillRect(area.x1, area.y0, t, area.y1 - area.y0);
-  // rubble crown along the inner edge
-  ctx.fillStyle = "#1a1a1e";
-  for (let x = area.x0; x < area.x1; x += 46) {
-    const h1 = 10 + (Math.sin(x * 0.7) + 1) * 7;
-    ctx.fillRect(x, area.y0 - h1, 40, h1);
-    const h2 = 10 + (Math.cos(x * 0.6) + 1) * 7;
-    ctx.fillRect(x, area.y1, 40, h2);
-  }
-  for (let y = area.y0; y < area.y1; y += 46) {
-    const h1 = 10 + (Math.sin(y * 0.6) + 1) * 7;
-    ctx.fillRect(area.x0 - h1, y, h1, 40);
-    const h2 = 10 + (Math.cos(y * 0.7) + 1) * 7;
-    ctx.fillRect(area.x1, y, h2, 40);
-  }
-  ctx.restore();
-}
-
-/* ─── figures ────────────────────────────────────────────────────────────── */
-function softShadow(rx, ry, a) {
-  ctx.fillStyle = "rgba(0,0,0," + (a || 0.5) + ")";
-  ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, TAU); ctx.fill();
-}
-function rr(x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-function drawLimb(px, py, a, len, wid, col, dark, boot) {
-  ctx.save();
-  ctx.translate(px, py); ctx.rotate(a);
-  ctx.fillStyle = col;
-  rr(-wid / 2, 0, wid, len, wid / 2.5); ctx.fill();
-  if (boot) { ctx.fillStyle = dark; rr(-wid / 2 - 1, len - 5, wid + 3, 8, 3); ctx.fill(); }
-  else { ctx.fillStyle = "#b58d63"; ctx.beginPath(); ctx.arc(0, len, wid / 2.4, 0, TAU); ctx.fill(); }
-  ctx.restore();
-}
-
-function drawSurvivor(e) {
-  ctx.save();
-  ctx.translate(e.x, e.y);
-  softShadow(20, 9, 0.5);
-  ctx.scale(e.facing, 1);
-
-  const moving = e.moving ? 1 : 0;
-  const run = e.running ? 1 : 0;
-  const wp = e.walkP;
-  const bob = -Math.abs(Math.sin(wp)) * (3 + run * 1.8) * moving;
-  const breath = Math.sin(e.t * 2) * 0.8 * (1 - moving);
-  // a forward lean when running
-  ctx.rotate(moving * (0.06 + run * 0.06) * e.facing * Math.sign(Math.cos(e.aim) * e.facing || 1) * 0);
-  let arm = -0.5;
-  if (e.atk) {
-    const a = e.atkT, w = e.atkW, s = e.atkS, r = e.atkR;
-    if (a < w) arm = lerp(-0.5, -2.5, easeOut(a / w));
-    else if (a < w + s) arm = lerp(-2.5, 1.2, easeIn((a - w) / s));
-    else arm = lerp(1.2, -0.5, (a - w - s) / r);
-  }
-  const amp = 0.5 + run * 0.42;
-  const legA = Math.sin(wp) * amp * moving;
-  const legB = Math.sin(wp + Math.PI) * amp * moving;
-
-  // cloak
-  ctx.fillStyle = "#1a0e10";
-  ctx.beginPath();
-  ctx.moveTo(-4, -47);
-  ctx.quadraticCurveTo(-15 - moving * 8, -26, -9 + Math.sin(e.t * 3) * 2, -2);
-  ctx.quadraticCurveTo(2, -8, 6, -47);
-  ctx.closePath(); ctx.fill();
-
-  ctx.translate(0, bob + breath);
-  drawLimb(-2, -28, legB, 13, 11, "#241f24", "#0c0a0c", true);
-  drawLimb(2, -28, legA, 14, 12, "#2a242a", "#0c0a0c", true);
-  drawLimb(-3, -45, -0.4 + legA * 0.7, 11, 10, "#241a1c", "#171012", false);
-
-  ctx.fillStyle = "#2c2630"; rr(-9, -45, 18, 20, 5); ctx.fill();
-  ctx.fillStyle = "#3a3340"; rr(-7, -44, 14, 12, 4); ctx.fill();
-  ctx.fillStyle = "#1c1820"; ctx.fillRect(-9, -29, 18, 4);
-  ctx.fillStyle = "#6b5a2e"; ctx.fillRect(-3, -29, 6, 4);
-  ctx.fillStyle = "#454050"; ctx.beginPath(); ctx.ellipse(6, -45, 6, 5, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#5a5466"; ctx.beginPath(); ctx.ellipse(6, -46, 4, 3, 0, 0, TAU); ctx.fill();
-
-  ctx.fillStyle = "#241a1c"; ctx.beginPath(); ctx.arc(1, -53, 8.5, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#0e0a0c"; ctx.beginPath(); ctx.ellipse(4, -52, 5.2, 6, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#b58d63"; ctx.beginPath(); ctx.ellipse(5, -52, 3, 4, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#caa86f"; ctx.fillRect(5.5, -53.5, 2, 1.4);
-  ctx.fillStyle = "#241a1c"; ctx.beginPath();
-  ctx.moveTo(-6, -54); ctx.lineTo(-2, -62); ctx.lineTo(3, -56); ctx.closePath(); ctx.fill();
-
-  ctx.save();
-  ctx.translate(4, -45); ctx.rotate(arm);
-  ctx.fillStyle = "#322a2e"; rr(-3, -2, 15, 7, 3); ctx.fill();
-  ctx.translate(13, 1);
-  ctx.fillStyle = "#b58d63"; ctx.beginPath(); ctx.arc(0, 0, 4, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#140f0a"; ctx.fillRect(-3, -2.4, 13, 4.8);
-  ctx.fillStyle = "#2a2d33"; ctx.fillRect(10, -3.4, 4, 6.8);
-  ctx.fillStyle = "#9298a1"; ctx.beginPath();
-  ctx.moveTo(13, -6); ctx.lineTo(44, -12); ctx.lineTo(50, 9); ctx.lineTo(13, 6); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#d6dbe0"; ctx.beginPath();
-  ctx.moveTo(13, -6); ctx.lineTo(44, -12); ctx.lineTo(44, -9); ctx.lineTo(13, -3); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "rgba(120,18,12,0.55)"; ctx.fillRect(20, -3, 18, 5);
-  ctx.restore();
-
-  ctx.restore();
-
-  if (e.dashT > 0) {
-    ctx.save();
-    ctx.globalAlpha = e.dashT / P.dashTime * 0.4;
-    ctx.fillStyle = "#9fd0ff";
-    ctx.beginPath();
-    ctx.ellipse(e.x - Math.cos(e.moveAng) * 22, e.y - Math.sin(e.moveAng) * 22, 18, 10, e.moveAng, 0, TAU);
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-function drawZombie(z) {
-  const d = ETYPES[z.type];
-  ctx.save();
-  if (z.state === "die") ctx.globalAlpha = clamp(1 - z.dieT, 0, 1);
-  ctx.translate(z.x, z.y);
-  softShadow(d.r * 0.95, d.r * 0.42, 0.46);
-  ctx.scale(z.facing, 1);
-  ctx.scale(z.scale, z.scale);
-
-  const wp = z.walkP, chasing = z.state === "chase" ? 1 : 0;
-  const fast = clamp((z.speed - 50) / 90, 0, 1);            // runners lean & pump harder
-  const bob = -Math.abs(Math.sin(wp)) * (2 + fast * 2) * chasing;
-  const lung = z.state === "attack" ? Math.max(0, Math.sin(z.t * 13)) * 6 : 0;
-  ctx.translate(lung, bob);
-
-  const pal = z.pal, hgt = d.h;
-  const hip = -hgt * 0.42, sh = -hgt * 0.78, hd = -hgt * 0.92;
-  const amp = 0.5 + fast * 0.5;
-  const legSw = Math.sin(wp) * amp * (chasing || z.state === "attack" ? 1 : 0.3);
-  const legSw2 = Math.sin(wp + Math.PI) * amp * (chasing || z.state === "attack" ? 1 : 0.3);
-
-  drawZLimb(-3, hip, legSw2, hgt * 0.42, 7, pal.cloth2);
-  drawZLimb(3, hip, legSw, hgt * 0.42, 8, pal.cloth);
-
-  ctx.save();
-  ctx.translate(0, hip);
-  ctx.rotate(0.3 + fast * 0.18 + chasing * 0.06);          // hunch — deeper when sprinting
-  ctx.fillStyle = pal.cloth;
-  rr(-d.r * 0.62, -(hip - sh), d.r * 1.24, (hip - sh), 5); ctx.fill();
-  ctx.fillStyle = pal.bone;
-  for (let i = 0; i < 3; i++) ctx.fillRect(-d.r * 0.3, -(hip - sh) + 6 + i * 7, d.r * 0.5, 2.4);
-  ctx.fillStyle = "#1a0a08"; ctx.fillRect(-d.r * 0.18, -(hip - sh) + 9, d.r * 0.3, 13);
-  ctx.fillStyle = "rgba(90,12,8,0.6)";
-  ctx.beginPath(); ctx.ellipse(d.r * 0.2, -(hip - sh) * 0.5, d.r * 0.3, d.r * 0.4, 0, 0, TAU); ctx.fill();
-  ctx.restore();
-
-  const reach = z.state === "attack" ? 0.15 : 0.7 + Math.sin(wp) * (0.3 + fast * 0.35);
-  drawZLimb(-2, sh + 2, reach + 0.5, hgt * 0.4, 6, pal.skin, true);
-  drawZLimb(4, sh + 1, reach, hgt * 0.42, 6.5, pal.skin, true);
-
-  ctx.save();
-  ctx.translate(5 + Math.sin(z.t * 2) * 1.5, hd);
-  ctx.rotate(0.3 + fast * 0.2 + Math.sin(z.t * 1.5) * 0.12);
-  ctx.fillStyle = pal.skin;
-  ctx.beginPath(); ctx.arc(0, 0, d.r * 0.52, 0, TAU); ctx.fill();
-  ctx.fillStyle = pal.skinD;
-  ctx.beginPath(); ctx.ellipse(d.r * 0.16, d.r * 0.32, d.r * 0.3, d.r * 0.22, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#1b0a07"; ctx.beginPath(); ctx.arc(d.r * 0.18, -d.r * 0.1, d.r * 0.14, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#9c3a2a"; ctx.beginPath(); ctx.arc(d.r * 0.2, -d.r * 0.1, d.r * 0.06, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#160808"; ctx.beginPath(); ctx.ellipse(d.r * 0.22, d.r * 0.26, d.r * 0.13, d.r * 0.16, 0, 0, TAU); ctx.fill();
-  ctx.restore();
-
-  if (z.flash > 0) {
-    ctx.globalAlpha = clamp(z.flash * 6, 0, 0.85);
-    ctx.fillStyle = "#ffffff";
-    rr(-d.r, hd - d.r * 0.5, d.r * 2, -hd + d.r * 0.5, 6); ctx.fill();
-    ctx.globalAlpha = z.state === "die" ? clamp(1 - z.dieT, 0, 1) : 1;
-  }
-  ctx.restore();
-
-  if (z.hp < z.maxHp && z.state !== "die") {
-    const bw = d.r * 2.2;
-    ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillRect(z.x - bw / 2, z.y - d.h * z.scale - 10, bw, 4);
-    ctx.fillStyle = z.type === "giant" ? "#c8881f" : "#9c241a";
-    ctx.fillRect(z.x - bw / 2, z.y - d.h * z.scale - 10, bw * (z.hp / z.maxHp), 4);
-  }
-}
-function drawZLimb(px, py, a, len, wid, col, claw) {
-  ctx.save();
-  ctx.translate(px, py); ctx.rotate(a);
-  ctx.fillStyle = col;
-  rr(-wid / 2, 0, wid, len, wid / 2.6); ctx.fill();
-  if (claw) {
-    ctx.strokeStyle = "#cdbfa0"; ctx.lineWidth = 1.6;
-    for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 2, len); ctx.lineTo(i * 2.5, len + 5); ctx.stroke(); }
-  }
-  ctx.restore();
-}
-
-function drawProp(p) {
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  const s = p.s;
-  if (p.t === "brazier") {
-    softShadow(15 * s, 7 * s, 0.5); ctx.scale(s, s);
-    ctx.strokeStyle = "#0d0d0f"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(-3, -18); ctx.moveTo(7, 0); ctx.lineTo(3, -18); ctx.stroke();
-    ctx.fillStyle = "#1a1a1e"; rr(-11, -26, 22, 10, 3); ctx.fill();
-    p.flick += 0.3;
-    const fl = 1 + Math.sin(p.flick) * 0.18 + Math.sin(p.flick * 2.3) * 0.1;
-    for (let i = 0; i < 3; i++) {
-      ctx.globalAlpha = 0.6 - i * 0.16;
-      ctx.fillStyle = ["#ffcf5e", "#ff8a2a", "#e8470f"][i];
-      ctx.beginPath();
-      ctx.ellipse(Math.sin(p.flick + i) * 2, -30 - i * 5 * fl, (8 - i * 2.4) * fl, (13 - i * 3) * fl, 0, 0, TAU);
-      ctx.fill();
+  scene.add(grass);
+})();
+let grassFlatten = null;       // {x, z, r, t} — smash stomps the grass flat
+const _gd = new THREE.Object3D();
+function updateGrass(dt, t) {
+  const px = player.x, pz = player.z;
+  if (grassFlatten) { grassFlatten.t += dt;
+    if (grassFlatten.t > 1.4) grassFlatten = null; }
+  for (let i = 0; i < GRASS_N; i++) {
+    const b = grassBlade[i];
+    let bx = Math.sin(t * 1.3 + b.phase) * 0.12, bz = Math.cos(t + b.phase)*0.1;
+    const dx = b.x - px, dz = b.z - pz, dd = Math.hypot(dx, dz);
+    if (dd < 6.5) {
+      const k = (1 - dd / 6.5) * 1.3;
+      bx += dx / (dd || 1) * k; bz += dz / (dd || 1) * k;
     }
-    ctx.globalAlpha = 1;
-  } else if (p.t === "grave") {
-    softShadow(15 * s, 7 * s, 0.45); ctx.scale(s, s); ctx.scale(p.f, 1);
-    ctx.fillStyle = "#3a3a40"; rr(-13, -40, 26, 42, 6); ctx.fill();
-    ctx.fillStyle = "#2b2b30"; rr(-13, -40, 26, 8, 6); ctx.fill();
-    ctx.fillStyle = "#202024"; ctx.fillRect(-15, -2, 30, 6);
-    ctx.strokeStyle = "#1a1a1e"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(-6, -28); ctx.lineTo(6, -28); ctx.moveTo(-6, -22); ctx.lineTo(6, -22); ctx.stroke();
-  } else if (p.t === "cross") {
-    softShadow(11 * s, 6 * s, 0.45); ctx.scale(s, s); ctx.rotate((p.seed - 0.5) * 0.3);
-    ctx.fillStyle = "#33333a"; ctx.fillRect(-4, -52, 8, 54); ctx.fillRect(-16, -40, 32, 8);
-  } else if (p.t === "tree") {
-    softShadow(20 * s, 9 * s, 0.4); ctx.scale(s, s); ctx.scale(p.f, 1);
-    ctx.strokeStyle = "#100c0d"; ctx.lineCap = "round"; ctx.lineWidth = 9;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-4, -54); ctx.stroke();
-    ctx.lineWidth = 4;
-    for (let i = 0; i < 6; i++) {
-      const by = -20 - i * 6;
-      ctx.beginPath(); ctx.moveTo(0, by); ctx.lineTo((i % 2 ? 1 : -1) * (16 + i * 3), by - 12 - i * 3); ctx.stroke();
+    if (grassFlatten) {
+      const fx = b.x - grassFlatten.x, fz = b.z - grassFlatten.z;
+      const fd = Math.hypot(fx, fz);
+      if (fd < grassFlatten.r) {
+        const k = (1 - fd / grassFlatten.r) * (1 - grassFlatten.t / 1.4) * 1.7;
+        bx += fx / (fd || 1) * k; bz += fz / (fd || 1) * k;
+      }
     }
-  } else if (p.t === "statue") {
-    softShadow(15 * s, 7 * s, 0.5); ctx.scale(s, s); ctx.scale(p.f, 1);
-    ctx.fillStyle = "#2f2f36"; ctx.fillRect(-13, -10, 26, 12);
-    ctx.fillStyle = "#3c3c44"; rr(-9, -46, 18, 38, 5); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, -50, 7, 0, TAU); ctx.fill();
-    ctx.fillStyle = "#33333b"; ctx.beginPath();
-    ctx.moveTo(-7, -40); ctx.quadraticCurveTo(-26, -50, -22, -22); ctx.quadraticCurveTo(-14, -32, -7, -30);
-    ctx.closePath(); ctx.fill();
-  } else if (p.t === "crypt") {
-    softShadow(34 * s, 15 * s, 0.55); ctx.scale(s, s);
-    ctx.fillStyle = "#26262c"; rr(-34, -52, 68, 54, 4); ctx.fill();
-    ctx.fillStyle = "#1c1c21"; ctx.beginPath();
-    ctx.moveTo(-38, -50); ctx.lineTo(0, -68); ctx.lineTo(38, -50); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#070708"; rr(-12, -34, 24, 36, 3); ctx.fill();
-    ctx.strokeStyle = "#3a3a42"; ctx.lineWidth = 3; rr(-12, -34, 24, 36, 3); ctx.stroke();
-  } else if (p.t === "bones") {
-    softShadow(16 * s, 8 * s, 0.4); ctx.scale(s, s); ctx.rotate(p.seed * TAU);
-    ctx.strokeStyle = "#b3ac95"; ctx.lineWidth = 3; ctx.lineCap = "round";
-    for (let i = 0; i < 5; i++) { ctx.save(); ctx.rotate(i * 1.3);
-      ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(15, rand(-3, 3)); ctx.stroke(); ctx.restore(); }
-    ctx.fillStyle = "#bdb69e"; ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fill();
-    ctx.fillStyle = "#1a1410"; ctx.beginPath(); ctx.arc(-2, -1, 1.7, 0, TAU); ctx.arc(2, -1, 1.7, 0, TAU); ctx.fill();
-  } else if (p.t === "barrel") {
-    softShadow(12 * s, 6 * s, 0.45); ctx.scale(s, s);
-    ctx.fillStyle = "#241c12"; rr(-10, -26, 20, 28, 5); ctx.fill();
-    ctx.strokeStyle = "#0e0a06"; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.moveTo(-10, -19); ctx.lineTo(10, -19); ctx.moveTo(-10, -8); ctx.lineTo(10, -8); ctx.stroke();
-  } else if (p.t === "crate") {
-    softShadow(14 * s, 7 * s, 0.45); ctx.scale(s, s); ctx.scale(p.f, 1);
-    ctx.fillStyle = "#2a2014"; rr(-15, -30, 30, 32, 2); ctx.fill();
-    ctx.strokeStyle = "#140e07"; ctx.lineWidth = 3; rr(-15, -30, 30, 32, 2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-15, -30); ctx.lineTo(15, 2); ctx.moveTo(15, -30); ctx.lineTo(-15, 2); ctx.stroke();
-  } else if (p.t === "lamp") {
-    softShadow(8 * s, 4 * s, 0.45); ctx.scale(s, s);
-    ctx.strokeStyle = "#16161a"; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -58); ctx.stroke();
-    ctx.fillStyle = "#1a1a1e"; rr(-7, -72, 14, 16, 3); ctx.fill();
-    ctx.fillStyle = "rgba(120,96,40,0.55)"; rr(-4, -69, 8, 10, 2); ctx.fill();
-  } else if (p.t === "cart") {
-    softShadow(22 * s, 9 * s, 0.5); ctx.scale(s, s); ctx.scale(p.f, 1);
-    ctx.fillStyle = "#241a10"; rr(-22, -22, 44, 18, 3); ctx.fill();
-    ctx.strokeStyle = "#0e0a06"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(-13, -2, 8, 0, TAU); ctx.arc(13, -2, 8, 0, TAU); ctx.stroke();
-    ctx.fillStyle = "#161009"; ctx.fillRect(20, -16, 14, 4);
-  } else if (p.t === "fountain") {
-    softShadow(30 * s, 14 * s, 0.5); ctx.scale(s, s);
-    ctx.fillStyle = "#2c2c33"; ctx.beginPath(); ctx.ellipse(0, 0, 30, 15, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = "#10161c"; ctx.beginPath(); ctx.ellipse(0, -2, 23, 11, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = "#3a3a42"; rr(-5, -34, 10, 30, 3); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, -36, 7, 0, TAU); ctx.fill();
-  } else if (p.t === "stall") {
-    softShadow(30 * s, 12 * s, 0.5); ctx.scale(s, s); ctx.scale(p.f, 1);
-    ctx.fillStyle = "#241a10"; ctx.fillRect(-28, -8, 56, 8);            // counter
-    ctx.strokeStyle = "#161009"; ctx.lineWidth = 5;                      // posts
-    ctx.beginPath(); ctx.moveTo(-26, -8); ctx.lineTo(-26, -54); ctx.moveTo(26, -8); ctx.lineTo(26, -54); ctx.stroke();
-    ctx.fillStyle = "#43221f"; ctx.beginPath();                          // tattered awning
-    ctx.moveTo(-32, -54); ctx.lineTo(32, -54); ctx.lineTo(36, -44);
-    ctx.lineTo(-10, -40); ctx.lineTo(-36, -44); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#2c2014"; ctx.fillRect(-18, -16, 10, 8); ctx.fillRect(4, -16, 10, 8);
-  } else if (p.t === "urn") {
-    softShadow(10 * s, 5 * s, 0.4); ctx.scale(s, s);
-    ctx.fillStyle = "#2e2a2e"; ctx.beginPath(); ctx.ellipse(0, -14, 9, 14, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = "#201d20"; ctx.beginPath(); ctx.ellipse(0, -27, 7, 4, 0, 0, TAU); ctx.fill();
-  } else {
-    softShadow(16 * s, 8 * s, 0.4); ctx.scale(s, s);
-    ctx.fillStyle = "#222227";
-    for (let i = 0; i < 7; i++) { ctx.save(); ctx.rotate(i * 0.9 + p.seed);
-      ctx.fillRect(rand(2, 12), -rand(3, 12), rand(9, 20), rand(8, 16)); ctx.restore(); }
+    _gd.position.set(b.x, b.y, b.z);
+    _gd.rotation.set(bz, b.phase, -bx);
+    _gd.scale.set(1, b.h, 1);
+    _gd.updateMatrix(); grass.setMatrixAt(i, _gd.matrix);
   }
-  ctx.restore();
+  grass.instanceMatrix.needsUpdate = true;
 }
 
-/* ─── entities ───────────────────────────────────────────────────────────── */
+/* drifting mist — slow translucent sheets that keep the ground alive */
+const mists = [];
+(function buildMist() {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const gr = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+  gr.addColorStop(0, "rgba(150,155,175,0.5)");
+  gr.addColorStop(1, "rgba(150,155,175,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  const geo = new THREE.PlaneGeometry(58, 58);
+  geo.rotateX(-Math.PI / 2);
+  for (let i = 0; i < 5; i++) {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex,
+      transparent: true, opacity: 0.13, depthWrite: false }));
+    m.position.set(rand(-ARENA, ARENA), rand(2.5, 5), rand(-ARENA, ARENA));
+    m.userData = { vx: rand(-1.4, 1.4), vz: rand(-1.4, 1.4),
+      spin: rand(-0.1, 0.1) };
+    scene.add(m); mists.push(m);
+  }
+})();
+
+/* ─── props, walls, braziers ──────────────────────────────────────────────── */
+const braziers = [];
+function mat(color, rough) {
+  return new THREE.MeshStandardMaterial({ color,
+    roughness: rough == null ? 0.9 : rough, metalness: 0 });
+}
+function addProp(kind, x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.rotation.y = rand(0, TAU);
+  const stone = () => mat(0x35353c, 1);
+  if (kind === "grave") {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(2.1, 3.0, 0.55), stone());
+    m.position.y = 1.5; m.rotation.z = rand(-0.16, 0.16);
+    m.castShadow = m.receiveShadow = true; g.add(m);
+  } else if (kind === "cross") {
+    const v = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.6, 0.4), stone());
+    v.position.y = 1.8;
+    const h = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.42, 0.4), stone());
+    h.position.y = 2.6;
+    v.castShadow = h.castShadow = true; g.add(v, h);
+    g.rotation.z = rand(-0.12, 0.12);
+  } else if (kind === "tree") {
+    const bark = mat(0x140f0c, 1);
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.34, 0.6, 6.4, 6), bark);
+    trunk.position.y = 3.2; trunk.castShadow = true; g.add(trunk);
+    for (let i = 0; i < 5; i++) {
+      const br = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.22, rand(1.8, 3.2), 5), bark);
+      br.position.y = rand(3.4, 5.6);
+      br.rotation.z = rand(-1.1, 1.1); br.rotation.y = rand(0, TAU);
+      br.castShadow = true; g.add(br);
+    }
+  } else if (kind === "statue") {
+    const base = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.8, 2.2), stone());
+    base.position.y = 0.4;
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.8, 3.6, 7), stone());
+    body.position.y = 2.6;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 8), stone());
+    head.position.y = 4.7;
+    base.castShadow = body.castShadow = head.castShadow = true;
+    g.add(base, body, head);
+  } else if (kind === "rubble") {
+    for (let i = 0; i < 5; i++) {
+      const r = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(rand(0.5, 1.3), 0), stone());
+      r.position.set(rand(-1.4, 1.4), rand(0.2, 0.8), rand(-1.4, 1.4));
+      r.rotation.set(rand(0, TAU), rand(0, TAU), rand(0, TAU));
+      r.castShadow = r.receiveShadow = true; g.add(r);
+    }
+  } else if (kind === "crate") {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, 1.8),
+      mat(0x241a10, 1));
+    m.position.y = 0.9; m.castShadow = m.receiveShadow = true; g.add(m);
+  } else if (kind === "brazier") {
+    const iron = mat(0x1a1a1e, 1);
+    const post = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.22, 3.2, 6), iron);
+    post.position.y = 1.6; post.castShadow = true;
+    const bowl = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.95, 0.55, 0.7, 10), iron);
+    bowl.position.y = 3.4;
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff9a3a }));
+    flame.position.y = 4.4;
+    g.add(post, bowl, flame);
+    const light = new THREE.PointLight(0xff7a2e, 2.4, 34, 1.8);
+    light.position.y = 4.6; g.add(light);
+    braziers.push({ light, flame, base: 2.4, phase: rand(0, TAU) });
+  }
+  scene.add(g);
+}
+(function scatterProps() {
+  const kinds = ["grave","grave","cross","tree","tree","statue",
+                 "rubble","rubble","crate"];
+  for (let i = 0; i < 76; i++) {
+    const a = rand(0, TAU), rr = rand(7, ARENA - 5);
+    addProp(pick(kinds), Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  for (let i = 0; i < 6; i++) {
+    const a = rand(0, TAU), rr = rand(14, ARENA - 14);
+    addProp("brazier", Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+})();
+// a broken ring wall hemming in the ground
+(function buildWall() {
+  const wm = mat(0x1c1c22, 1);
+  const n = 64;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU;
+    const x = Math.cos(a) * ARENA, z = Math.sin(a) * ARENA;
+    const h = rand(4.5, 9.5);
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(ARENA * TAU / n + 1, h, 3), wm);
+    m.position.set(x, groundHeight(x, z) + h / 2 - 0.5, z);
+    m.rotation.y = -a + Math.PI / 2;
+    m.castShadow = m.receiveShadow = true;
+    scene.add(m);
+  }
+})();
+
+/* ─── figure builders ─────────────────────────────────────────────────────── */
+function buildSurvivor() {
+  const g = new THREE.Group();
+  const cloak = new THREE.Mesh(new THREE.ConeGeometry(1.25, 3.3, 8),
+    mat(0x1f1418));
+  cloak.position.y = 1.65; cloak.castShadow = true; g.add(cloak);
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.78,1.5,8),
+    mat(0x2c2630));
+  torso.position.y = 2.9; torso.castShadow = true; g.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 10),
+    mat(0xb58d63, 0.7));
+  head.position.y = 3.95; head.castShadow = true; g.add(head);
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.66, 1.0, 8),
+    mat(0x241a1c));
+  hood.position.y = 4.2; hood.castShadow = true; g.add(hood);
+  const legs = [];
+  for (const sx of [-0.34, 0.34]) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.5, 0.46),
+      mat(0x241f24));
+    l.position.set(sx, 0.75, 0); l.castShadow = true; g.add(l); legs.push(l);
+  }
+  const arm = new THREE.Group();
+  arm.position.set(0.6, 2.95, 0.25);
+  const upper = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 1.0),
+    mat(0x322a2e));
+  upper.position.z = 0.5; arm.add(upper);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 3.4),
+    new THREE.MeshStandardMaterial({ color: 0xc6ccd4, roughness: 0.35,
+      metalness: 0.6 }));
+  blade.position.z = 2.5; blade.castShadow = true; arm.add(blade);
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.16, 0.2),
+    mat(0x2a2d33, 0.5));
+  guard.position.z = 0.95; arm.add(guard);
+  g.add(arm);
+  const torch = new THREE.PointLight(0xffb878, 2.0, 40, 1.6);
+  torch.position.set(0, 3.4, 0);
+  g.add(torch);
+  g.userData = { cloak, arm, legs, head };
+  return g;
+}
+function buildZombie(type) {
+  const d = ETYPES[type], g = new THREE.Group();
+  const skinHex = pick([0x5f6a52, 0x6b6256, 0x586355, 0x6d6450]);
+  const clothHex = pick([0x221f1a, 0x26221d, 0x1d2024]);
+  const skin = mat(skinHex, 0.95), cloth = mat(clothHex, 1);
+  const mats = [skin, cloth];
+  const hgt = d.h;
+  const torso = new THREE.Mesh(
+    new THREE.CylinderGeometry(d.r*0.55, d.r*0.7, hgt*0.46, 7), cloth);
+  torso.position.y = hgt * 0.56; torso.rotation.x = 0.34;
+  torso.castShadow = true; g.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(d.r*0.42, 10, 8), skin);
+  head.position.set(0, hgt*0.82, d.r*0.3); head.castShadow = true; g.add(head);
+  const legs = [];
+  for (const sx of [-d.r*0.32, d.r*0.32]) {
+    const l = new THREE.Mesh(
+      new THREE.BoxGeometry(d.r*0.34, hgt*0.42, d.r*0.4), cloth);
+    l.position.set(sx, hgt*0.21, 0); l.castShadow = true; g.add(l);
+    legs.push(l);
+  }
+  const arms = [];
+  for (const sx of [-d.r*0.58, d.r*0.58]) {
+    const a = new THREE.Group();
+    a.position.set(sx, hgt*0.7, 0);
+    const lm = new THREE.Mesh(
+      new THREE.BoxGeometry(d.r*0.26, d.r*0.26, hgt*0.42), skin);
+    lm.position.z = hgt*0.21; lm.castShadow = true; a.add(lm);
+    a.rotation.x = -1.0; g.add(a); arms.push(a);
+  }
+  const hp = new THREE.Group();
+  const bg = new THREE.Mesh(new THREE.PlaneGeometry(d.r*2.4, 0.34),
+    new THREE.MeshBasicMaterial({ color: 0x120606 }));
+  const fill = new THREE.Mesh(new THREE.PlaneGeometry(d.r*2.4, 0.34),
+    new THREE.MeshBasicMaterial({
+      color: type === "giant" ? 0xc8881f : 0x9c241a }));
+  fill.position.z = 0.02;
+  hp.add(bg, fill);
+  hp.position.y = hgt + 0.7; hp.visible = false;
+  g.add(hp);
+  g.userData = { mats, legs, arms, torso, head, hp, hpFill: fill,
+    hpW: d.r*2.4 };
+  return g;
+}
+
+/* ─── particles ───────────────────────────────────────────────────────────── */
+const PCOUNT = 900;
+const pState = [];
+let pCursor = 0;
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(PCOUNT * 3);
+const pCol = new Float32Array(PCOUNT * 3);
+for (let i = 0; i < PCOUNT; i++) {
+  pPos[i*3+1] = -999;
+  pState.push({ vx: 0, vy: 0, vz: 0, age: 0, life: 0, grav: 1 });
+}
+pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
+pGeo.setAttribute("color", new THREE.BufferAttribute(pCol, 3));
+const pPoints = new THREE.Points(pGeo, new THREE.PointsMaterial({
+  size: 0.42, vertexColors: true, transparent: true, opacity: 0.95,
+  depthWrite: false, sizeAttenuation: true }));
+pPoints.frustumCulled = false;
+scene.add(pPoints);
+const _pc = new THREE.Color();
+function spawnParts(x, y, z, n, opt) {
+  opt = opt || {};
+  const sp = opt.speed || 9, life = opt.life || 0.55, up = opt.up || 0;
+  _pc.set(opt.color || 0x7c1109);
+  for (let i = 0; i < n; i++) {
+    const idx = pCursor; pCursor = (pCursor + 1) % PCOUNT;
+    const a = rand(0, TAU), el = rand(-0.6, 1.0);
+    const s = pState[idx];
+    s.vx = Math.cos(a) * Math.cos(el) * sp * rand(0.3, 1);
+    s.vz = Math.sin(a) * Math.cos(el) * sp * rand(0.3, 1);
+    s.vy = Math.sin(el) * sp * rand(0.3, 1) + up;
+    s.age = 0; s.life = life * rand(0.7, 1.2);
+    s.grav = opt.grav == null ? 1 : opt.grav;
+    pPos[idx*3] = x; pPos[idx*3+1] = y; pPos[idx*3+2] = z;
+    pCol[idx*3] = _pc.r; pCol[idx*3+1] = _pc.g; pCol[idx*3+2] = _pc.b;
+  }
+}
+function updateParts(dt) {
+  for (let i = 0; i < PCOUNT; i++) {
+    const s = pState[i];
+    if (s.age >= s.life) continue;
+    s.age += dt;
+    if (s.age >= s.life) { pPos[i*3+1] = -999; continue; }
+    s.vx *= 0.92; s.vz *= 0.92;
+    s.vy = s.vy * 0.96 - 22 * s.grav * dt;
+    pPos[i*3]   += s.vx * dt;
+    pPos[i*3+1] += s.vy * dt;
+    pPos[i*3+2] += s.vz * dt;
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.color.needsUpdate = true;
+}
+
+/* floating damage numbers — projected DOM */
+const dmgPool = [];
+(function () {
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:9";
+  document.body.appendChild(wrap);
+  for (let i = 0; i < 26; i++) {
+    const el = document.createElement("div");
+    el.style.cssText = "position:absolute;font-weight:800;display:none;" +
+      "text-shadow:0 2px 4px #000";
+    wrap.appendChild(el);
+    dmgPool.push({ el, x: 0, y: 0, z: 0, age: 0, life: 0 });
+  }
+})();
+function damageNum(x, y, z, n, crit) {
+  for (const d of dmgPool) {
+    if (d.age < d.life) continue;
+    d.x = x; d.y = y; d.z = z; d.age = 0; d.life = crit ? 0.95 : 0.62;
+    d.el.textContent = crit ? n + "!" : "" + n;
+    d.el.style.color = crit ? "#ffd23a" : "#f0e7d6";
+    d.el.style.fontSize = (crit ? 28 : 19) + "px";
+    d.el.style.display = "block";
+    return;
+  }
+}
+const _proj = new THREE.Vector3();
+function updateDmgNums(dt) {
+  for (const d of dmgPool) {
+    if (d.age >= d.life) continue;
+    d.age += dt; d.y += 7 * dt;
+    if (d.age >= d.life) { d.el.style.display = "none"; continue; }
+    _proj.set(d.x, d.y, d.z).project(camera);
+    if (_proj.z > 1) { d.el.style.display = "none"; continue; }
+    d.el.style.display = "block";
+    d.el.style.left = (_proj.x * 0.5 + 0.5) * innerWidth + "px";
+    d.el.style.top = (-_proj.y * 0.5 + 0.5) * innerHeight + "px";
+    d.el.style.opacity = clamp(1 - d.age / d.life, 0, 1);
+  }
+}
+
+/* ─── player + horde state ────────────────────────────────────────────────── */
 let player = null, zombies = [];
 function makePlayer() {
+  const obj = buildSurvivor();
+  scene.add(obj);
   return {
-    kind: "p", x: WORLD.w / 2, y: WORLD.h / 2, facing: 1, t: 0,
+    obj, x: 0, z: 0, y: 0, aim: 0, t: 0,
     hp: P.baseHp, maxHp: P.baseHp,
     dmgMul: 1, atkSpeed: 1, moveMul: 1,
-    critChance: P.baseCrit, critMul: P.baseCritMul, cdMul: 1, dmgTakenMul: 1,
-    smashMul: 1, rangeMul: 1, lifesteal: 0, regen: 0, xpMul: 1,
-    level: 1, xp: 0, xpNext: 26,
-    stats: { str: 0, hp: 0, spd: 0 },
-    walkP: 0, moving: false, running: false, stepT: 0, dustT: 0,
+    critChance: P.baseCrit, critMul: P.baseCritMul,
+    cdMul: 1, dmgTakenMul: 1, smashMul: 1, smashRangeMul: 1, rangeMul: 1,
+    lifesteal: 0, regen: 0, xpMul: 1, dashCdMul: 1, dashIfBonus: 0,
+    level: 1, xp: 0, xpNext: 26, stats: { str: 0, vit: 0, swi: 0 },
+    walkP: 0, moving: false, stepT: 0,
     atk: false, atkT: 0, atkW: 0, atkS: 0, atkR: 0, atkHits: null,
-    aim: 0, moveAng: 0,
-    smashCd: 0, dashCd: 0, dashT: 0, iframes: 0, hurt: 0, alive: true,
+    atkSlowT: 0,
+    smashCd: 0, dashCd: 0, dashT: 0, moveAng: 0, iframes: 0, hurt: 0,
+    alive: true,
   };
 }
 function spawnZombie(type) {
   const d = ETYPES[type];
-  let x, y, tries = 0;
+  let x, z, tries = 0;
   do {
-    if (Math.random() < 0.5) { x = Math.random() < 0.5 ? area.x0 + 30 : area.x1 - 30; y = rand(area.y0 + 30, area.y1 - 30); }
-    else { y = Math.random() < 0.5 ? area.y0 + 30 : area.y1 - 30; x = rand(area.x0 + 30, area.x1 - 30); }
+    const a = rand(0, TAU), dist = rand(34, 52);
+    x = clamp(player.x + Math.cos(a) * dist, -ARENA + 4, ARENA - 4);
+    z = clamp(player.z + Math.sin(a) * dist, -ARENA + 4, ARENA - 4);
     tries++;
-  } while (Math.hypot(x - player.x, y - player.y) < 260 && tries < 12);
-  const skins = ["#5f6a52", "#6b6256", "#586355", "#6d6450"];
-  const sk = pick(skins);
+  } while (Math.hypot(x - player.x, z - player.z) < 20 && tries < 14);
+  const obj = buildZombie(type);
+  obj.position.set(x, groundHeight(x, z), z);
+  scene.add(obj);
   zombies.push({
-    kind: "z", type, x, y, facing: 1, scale: rand(0.92, 1.12),
-    hp: d.hp, maxHp: d.hp, speed: d.speed * (1 + wave * 0.015), r: d.r,
-    state: "chase", walkP: rand(0, TAU), t: rand(0, 9), flash: 0,
-    atkCd: rand(0.2, 1), stagger: 0, kx: 0, ky: 0, groanT: rand(2, 9), dustT: 0,
-    pal: { skin: sk, skinD: shade(sk, 0.7), cloth: pick(["#221f1a","#26221d","#1d2024"]),
-           cloth2: "#17140f", bone: "#b3ab93" },
+    obj, type, x, z, hp: d.hp, maxHp: d.hp,
+    speed: d.speed * (1 + wave * 0.012), r: d.r,
+    state: "chase", walkP: rand(0, TAU), t: rand(0, 9),
+    flash: 0, atkCd: rand(0.2, 1), stagger: 0, kx: 0, kz: 0,
+    groanT: rand(2, 9), dieT: 0,
   });
   zombiesAlive++;
 }
-function shade(hex, m) {
-  const n = parseInt(hex.slice(1), 16);
-  return "rgb(" + (((n>>16)&255)*m|0) + "," + (((n>>8)&255)*m|0) + "," + ((n&255)*m|0) + ")";
-}
 
-/* ─── combat ─────────────────────────────────────────────────────────────── */
+/* ─── combat ──────────────────────────────────────────────────────────────── */
 function tryAttack() {
-  if (player.atk || player.dashT > 0) return;
+  if (player.atk || player.dashT > 0 || !player.alive) return;
   player.atk = true; player.atkT = 0;
   player.atkW = P.atkWindup / player.atkSpeed;
   player.atkS = P.atkStrike / player.atkSpeed;
   player.atkR = P.atkRecover / player.atkSpeed;
   player.atkHits = new Set();
+  player.atkSlowT = ATK_SLOW_DUR;        // a swing costs you a step of speed
   Sound.swing();
 }
 function trySmash() {
-  if (player.smashCd > 0 || !player.alive) return;
+  if (player.smashCd > 0 || !player.alive || player.atk) return;
   player.smashCd = P.smashCd * player.cdMul;
-  Sound.smash(); shake(13); flashLight(player.x, player.y, 240, 0.5);
-  const rng = P.smashRange * (1 + (player.smashMul - 1) * 0.5);
+  Sound.smash(); shake(0.5);
+  const rng = P.smashRange * player.smashRangeMul *
+    (1 + (player.smashMul - 1) * 0.5);
   for (const z of zombies) {
     if (z.state === "die") continue;
-    const dx = z.x - player.x, dy = z.y - player.y;
-    if (Math.hypot(dx, dy) < rng + z.r)
-      hitZombie(z, (P.smashDmg + player.level * 2) * player.dmgMul * player.smashMul, true, Math.atan2(dy, dx), 2.4);
+    const dx = z.x - player.x, dz = z.z - player.z;
+    if (Math.hypot(dx, dz) < rng + z.r)
+      hitZombie(z, (P.smashDmg + player.level * 2) * player.dmgMul *
+        player.smashMul, true, Math.atan2(dx, dz), 3.2);
   }
-  for (let i = 0; i < 42; i++) {
-    const a = rand(0, TAU);
-    parts.push({ x: player.x, y: player.y, vx: Math.cos(a) * rand(120, 480), vy: Math.sin(a) * rand(120, 480),
-                 life: rand(0.3, 0.6), age: 0, r: rand(2, 5), col: "#caa24a" });
-  }
-  smashRing = { t: 0, r: rng };
+  spawnParts(player.x, player.y + 0.5, player.z, 46,
+    { color: 0xcaa24a, speed: 17, up: 5, life: 0.6 });
+  smashRing.show(player.x, player.y + 0.15, player.z, rng);
+  grassFlatten = { x: player.x, z: player.z, r: rng + 3, t: 0 };
+  flashLight(player.x, player.y + 1, player.z, 0.5);
 }
 function tryDash() {
   if (player.dashCd > 0 || player.dashT > 0 || !player.alive) return;
-  let mx = 0, my = 0;
-  if (keys["KeyW"]) my -= 1; if (keys["KeyS"]) my += 1;
-  if (keys["KeyA"]) mx -= 1; if (keys["KeyD"]) mx += 1;
-  if (mx === 0 && my === 0) { mx = Math.cos(player.aim); my = Math.sin(player.aim); }
-  player.moveAng = Math.atan2(my, mx);
-  player.dashT = P.dashTime; player.dashCd = P.dashCd * player.cdMul;
-  player.iframes = P.dashIframes;
+  let mx = 0, mz = 0;
+  if (keys["KeyW"] || keys["ArrowUp"]) mz -= 1;
+  if (keys["KeyS"] || keys["ArrowDown"]) mz += 1;
+  if (keys["KeyA"] || keys["ArrowLeft"]) mx -= 1;
+  if (keys["KeyD"] || keys["ArrowRight"]) mx += 1;
+  if (mx === 0 && mz === 0) {
+    mx = Math.sin(player.aim); mz = Math.cos(player.aim);
+  }
+  player.moveAng = Math.atan2(mx, mz);
+  player.dashT = P.dashTime;
+  player.dashCd = P.dashCd * player.cdMul * player.dashCdMul;
+  player.iframes = P.dashIframes + player.dashIfBonus;
   Sound.dash();
 }
 function meleeStrike() {
   let hits = 0;
-  const range = P.atkRange * player.rangeMul, arc = P.atkArc * player.rangeMul;
+  const range = P.atkRange * player.rangeMul;
+  const arc = P.atkArc * Math.min(1.5, player.rangeMul);
   for (const z of zombies) {
     if (z.state === "die" || player.atkHits.has(z)) continue;
-    const dx = z.x - player.x, dy = z.y - player.y, dist = Math.hypot(dx, dy);
+    const dx = z.x - player.x, dz = z.z - player.z;
+    const dist = Math.hypot(dx, dz);
     if (dist > range + z.r) continue;
-    if (Math.abs(angDiff(player.aim, Math.atan2(dy, dx))) > arc) continue;
+    if (Math.abs(angDiff(player.aim, Math.atan2(dx, dz))) > arc) continue;
     player.atkHits.add(z);
     const crit = Math.random() < player.critChance;
-    hitZombie(z, P.baseDmg * player.dmgMul * (crit ? player.critMul : 1), crit, Math.atan2(dy, dx), 1);
+    hitZombie(z, P.baseDmg * player.dmgMul * (crit ? player.critMul : 1),
+      crit, Math.atan2(dx, dz), 1);
     hits++;
   }
   if (hits) {
-    hitStop = 0.05; shake(4 + hits);
-    if (player.lifesteal) { player.hp = Math.min(player.maxHp, player.hp + player.lifesteal); }
+    hitStop = 0.045; shake(0.14 + hits * 0.04);
+    if (player.lifesteal)
+      player.hp = Math.min(player.maxHp, player.hp + player.lifesteal);
   }
 }
 function hitZombie(z, dmg, crit, ang, knockMul) {
   dmg = Math.max(1, Math.round(dmg));
   z.hp -= dmg; z.flash = 0.13;
-  const kb = ETYPES[z.type].knock * 240 * (knockMul || 1);
-  z.kx += Math.cos(ang) * kb; z.ky += Math.sin(ang) * kb;
-  z.stagger = Math.max(z.stagger, 0.16);
-  spawnBlood(z.x, z.y - ETYPES[z.type].h * z.scale * 0.5, ang, crit ? 22 : 13);
-  damageNum(z.x, z.y - ETYPES[z.type].h * z.scale, dmg, crit);
+  const kb = 9 * (knockMul || 1) / Math.max(0.4, z.r * 0.5);
+  z.kx += Math.sin(ang) * kb; z.kz += Math.cos(ang) * kb;
+  z.stagger = Math.max(z.stagger, 0.15);
+  const d = ETYPES[z.type];
+  spawnParts(z.x, z.y + d.h * 0.5, z.z, crit ? 22 : 13,
+    { color: 0x7c1109, speed: crit ? 13 : 9 });
+  damageNum(z.x, z.y + d.h, z.z, dmg, crit);
   crit ? Sound.crit() : Sound.hit();
   if (z.hp <= 0 && z.state !== "die") killZombie(z);
 }
@@ -730,74 +863,87 @@ function killZombie(z) {
   zombiesAlive--;
   kills++; score += ETYPES[z.type].xp;
   gainXp(ETYPES[z.type].xp);
-  stainGround(z.x, z.y, ETYPES[z.type].r * z.scale * 1.1);
-  spawnBlood(z.x, z.y - 16, rand(0, TAU), 26);
+  spawnParts(z.x, z.y + 1, z.z, 26, { color: 0x7c1109, speed: 10 });
   Sound.die();
-  if (Math.random() < (z.type === "giant" ? 1 : z.type === "brute" ? 0.5 : 0.14))
-    orbs.push({ x: z.x, y: z.y, t: 0 });
+  if (Math.random() < (z.type === "giant" ? 1 :
+      z.type === "brute" ? 0.5 : 0.14))
+    spawnOrb(z.x, z.z);
 }
 
-/* ─── upgrades ───────────────────────────────────────────────────────────────
-   Picked one per wave. Perks are the bigger choices earned every 5 levels.   */
-const UPGRADES = [
-  { n: "Honed Edge",   d: "+16% damage",            a: () => player.dmgMul += 0.16 },
-  { n: "Swift Arm",    d: "+14% attack speed",      a: () => player.atkSpeed += 0.14 },
-  { n: "Fleet Foot",   d: "+12% movement speed",    a: () => player.moveMul += 0.12 },
-  { n: "Iron Hide",    d: "+30 max health",         a: () => { player.maxHp += 30; player.hp += 30; } },
-  { n: "Keen Eye",     d: "+7% critical chance",    a: () => player.critChance += 0.07 },
-  { n: "Brutality",    d: "+35% critical damage",   a: () => player.critMul += 0.35 },
-  { n: "Long Reach",   d: "+15% attack range",      a: () => player.rangeMul += 0.15 },
-  { n: "Bloodletter",  d: "Heal 2 HP per hit",      a: () => player.lifesteal += 2 },
-  { n: "Regeneration", d: "Regenerate 1.4 HP/sec",  a: () => player.regen += 1.4 },
-  { n: "Battle Trance",d: "-16% ability cooldowns", a: () => player.cdMul = Math.max(0.3, player.cdMul - 0.16) },
-  { n: "Bulwark",      d: "-12% damage taken",      a: () => player.dmgTakenMul = Math.max(0.2, player.dmgTakenMul - 0.12) },
-  { n: "Grave Harvest",d: "+25% experience gained", a: () => player.xpMul += 0.25 },
+/* ─── upgrades — stats on level-up, skills after each wave ────────────────────
+   Per the run design: every character LEVEL lets you allocate a core STAT;
+   every WAVE cleared lets you choose a SKILL or ability.                    */
+const STATS = [
+  { n: "STRENGTH",  d: "+12% damage dealt", emblem: "#e0584a",
+    a: () => { player.dmgMul += 0.12; player.stats.str++; } },
+  { n: "VITALITY",  d: "+26 maximum health", emblem: "#4ad07a",
+    a: () => { player.maxHp += 26; player.hp += 26; player.stats.vit++; } },
+  { n: "SWIFTNESS", d: "+8% move speed and +8% attack speed", emblem: "#9fd0ff",
+    a: () => { player.moveMul += 0.08; player.atkSpeed += 0.08;
+               player.stats.swi++; } },
 ];
-const PERKS = [
-  { n: "Juggernaut",   d: "+160 max health",                       a: () => { player.maxHp += 160; player.hp += 160; } },
-  { n: "Berserker",    d: "+45% damage",                           a: () => player.dmgMul += 0.45 },
-  { n: "Frenzy",       d: "+40% attack speed",                     a: () => player.atkSpeed += 0.40 },
-  { n: "Bloodfeast",   d: "Heal 6 HP per hit",                     a: () => player.lifesteal += 6 },
-  { n: "Stoneskin",    d: "-25% damage taken",                     a: () => player.dmgTakenMul = Math.max(0.2, player.dmgTakenMul - 0.25) },
-  { n: "Stormbringer", d: "Smash +70% power, -20% cooldowns",      a: () => { player.smashMul += 0.7; player.cdMul = Math.max(0.3, player.cdMul - 0.2); } },
-  { n: "Crit Lord",    d: "+20% crit chance, +50% crit damage",    a: () => { player.critChance += 0.2; player.critMul += 0.5; } },
-];
-const STAT_OPTS = [
-  { n: "STRENGTH", d: "+13% damage dealt",  s: "str", a: () => { player.dmgMul += 0.13; player.stats.str++; } },
-  { n: "HEALTH",   d: "+28 max health",     s: "hp",  a: () => { player.maxHp += 28; player.hp += 28; player.stats.hp++; } },
-  { n: "SPEED",    d: "+11% attack speed",  s: "spd", a: () => { player.atkSpeed += 0.11; player.stats.spd++; } },
+const SKILLS = [
+  { n: "Honed Edge",   d: "+18% damage",
+    a: () => player.dmgMul += 0.18 },
+  { n: "Frenzy",       d: "+16% attack speed",
+    a: () => player.atkSpeed += 0.16 },
+  { n: "Whirlwind",    d: "Smash power +60% and radius +20%",
+    a: () => { player.smashMul += 0.6; player.smashRangeMul += 0.2; } },
+  { n: "Bloodthirst",  d: "Heal 3 health on every hit",
+    a: () => player.lifesteal += 3 },
+  { n: "Ironheart",    d: "+60 maximum health",
+    a: () => { player.maxHp += 60; player.hp += 60; } },
+  { n: "Battle Trance",d: "-18% ability cooldowns",
+    a: () => player.cdMul = Math.max(0.3, player.cdMul - 0.18) },
+  { n: "Stoneskin",    d: "-14% damage taken",
+    a: () => player.dmgTakenMul = Math.max(0.2, player.dmgTakenMul - 0.14) },
+  { n: "Hawk Eye",     d: "+9% critical strike chance",
+    a: () => player.critChance += 0.09 },
+  { n: "Executioner",  d: "+45% critical damage",
+    a: () => player.critMul += 0.45 },
+  { n: "Long Reach",   d: "+18% attack range",
+    a: () => player.rangeMul += 0.18 },
+  { n: "Second Wind",  d: "Regenerate 2 health per second",
+    a: () => player.regen += 2 },
+  { n: "Soul Harvest", d: "+30% experience gained",
+    a: () => player.xpMul += 0.3 },
+  { n: "Quickstep",    d: "-35% dash cooldown, longer invulnerability",
+    a: () => { player.dashCdMul = Math.max(0.3, player.dashCdMul - 0.35);
+               player.dashIfBonus += 0.12; } },
+  { n: "Bulwark",      d: "+34 health and -8% damage taken",
+    a: () => { player.maxHp += 34; player.hp += 34;
+      player.dmgTakenMul = Math.max(0.2, player.dmgTakenMul - 0.08); } },
 ];
 
-/* ─── progression ────────────────────────────────────────────────────────── */
+/* ─── progression & waves ─────────────────────────────────────────────────── */
 let wave = 0, kills = 0, score = 0, zombiesAlive = 0;
-let waveState = "fight", waveTimer = 0, toSpawn = [], spawnT = 0;
-let banner = null, levelFx = 0;
+let waveState = "fight", toSpawn = [], spawnT = 0, waveCountPrev = 0;
+let levelFx = 0;
 
 function gainXp(n) {
   player.xp += Math.round(n * player.xpMul);
   while (player.xp >= player.xpNext) {
     player.xp -= player.xpNext;
     player.level++;
-    // faster early, steeper later
-    player.xpNext = Math.round(26 * Math.pow(player.level, 1.8));
+    player.xpNext = Math.round(26 * Math.pow(player.level, 1.7));
     player.hp = Math.min(player.maxHp, player.hp + 14);
     levelFx = 1; Sound.levelup();
-    for (let i = 0; i < 46; i++) {
-      const a = rand(0, TAU);
-      parts.push({ x: player.x, y: player.y - 24, vx: Math.cos(a) * rand(60, 300), vy: Math.sin(a) * rand(60, 300) - 80,
-                   life: rand(0.5, 1), age: 0, r: rand(2, 5), col: "#ffe27a" });
-    }
-    if (player.level % 5 === 0)
-      queueChoice({ kind: "perk", title: "MILESTONE — CHOOSE A PERK", opts: pick3(PERKS) });
-    else
-      queueChoice({ kind: "stat", title: "LEVEL " + player.level + " — ALLOCATE", opts: STAT_OPTS });
+    spawnParts(player.x, player.y + 1.5, player.z, 40,
+      { color: 0xffe27a, speed: 11, up: 6, life: 0.9, grav: 0.4 });
+    // every level → allocate a core stat
+    queueChoice({ kind: "stat",
+      title: "LEVEL " + player.level + " — ALLOCATE A STAT", opts: STATS });
   }
 }
 function startWave(n) {
   wave = n;
   toSpawn = [];
-  const total = 6 + n * 3;
-  for (let i = 0; i < total; i++) {
+  // 10% more of the horde than the wave before — compounding pressure
+  let count;
+  if (n === 1) count = 12;
+  else count = Math.max(waveCountPrev + 1, Math.round(waveCountPrev * 1.10));
+  waveCountPrev = count;
+  for (let i = 0; i < count; i++) {
     const r = Math.random();
     let t = "shambler";
     if (n >= 3 && r < 0.32) t = "runner";
@@ -807,596 +953,568 @@ function startWave(n) {
   if (n % 5 === 0) { toSpawn.push("giant"); if (n >= 15) toSpawn.push("giant"); }
   spawnT = 0.6;
   waveState = "fight";
-  banner = { big: "WAVE " + n, sub: n % 5 === 0 ? "Something vast stirs" : "The horde presses in", t: 2.6 };
+  banner(n % 5 === 0 ? "Something vast stirs" : "The horde presses in",
+    "WAVE " + n);
   Sound.wave();
-  if (n === 3 || n === 5 || n === 7 || n === 9) expandArea();   // banner becomes "THE WAY OPENS"
 }
 function updateWaves(dt) {
-  if (banner) { banner.t -= dt; if (banner.t <= 0) banner = null; }
   if (levelFx > 0) levelFx -= dt * 1.4;
-  if (waveState === "fight") {
-    if (toSpawn.length) {
-      spawnT -= dt;
-      if (spawnT <= 0 && zombiesAlive < 38) {
-        spawnZombie(toSpawn.pop());
-        spawnT = Math.max(0.2, 0.85 - wave * 0.035);
-      }
-    } else if (zombiesAlive <= 0) {
-      waveState = "intermission";
-      queueChoice({ kind: "wave", title: "WAVE " + wave + " CLEARED — CHOOSE A BOON", opts: pick3(UPGRADES) });
+  if (waveState !== "fight") return;
+  if (toSpawn.length) {
+    spawnT -= dt;
+    if (spawnT <= 0 && zombiesAlive < 40) {
+      spawnZombie(toSpawn.pop());
+      spawnT = Math.max(0.18, 0.8 - wave * 0.03);
     }
+  } else if (zombiesAlive <= 0) {
+    waveState = "intermission";
+    // the wave ends — game pauses — choose a skill (NOT a stat)
+    queueChoice({ kind: "skill",
+      title: "WAVE " + wave + " CLEARED — CHOOSE A SKILL",
+      opts: pick3(SKILLS) });
   }
 }
 
-/* ─── loot ───────────────────────────────────────────────────────────────── */
+/* ─── loot orbs ───────────────────────────────────────────────────────────── */
 let orbs = [];
+const orbGeo = new THREE.IcosahedronGeometry(0.55, 0);
+const orbMat = new THREE.MeshBasicMaterial({ color: 0xff5a4a });
+function spawnOrb(x, z) {
+  const m = new THREE.Mesh(orbGeo, orbMat);
+  m.position.set(x, groundHeight(x, z) + 1, z);
+  scene.add(m);
+  orbs.push({ obj: m, x, z, t: 0 });
+}
 function updateOrbs(dt) {
   for (let i = orbs.length - 1; i >= 0; i--) {
     const o = orbs[i]; o.t += dt;
-    const dx = player.x - o.x, dy = player.y - o.y, dist = Math.hypot(dx, dy);
-    if (dist < 160) { o.x += dx / dist * 340 * dt; o.y += dy / dist * 340 * dt; }
-    if (dist < 26) {
-      player.hp = Math.min(player.maxHp, player.hp + Math.round(player.maxHp * 0.22));
+    const dx = player.x - o.x, dz = player.z - o.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 16) {
+      o.x += dx / (dist || 1) * 22 * dt;
+      o.z += dz / (dist || 1) * 22 * dt;
+    }
+    o.obj.position.set(o.x, groundHeight(o.x, o.z) + 1
+      + Math.sin(o.t * 4) * 0.3, o.z);
+    o.obj.rotation.y += dt * 2.4;
+    if (dist < 2.6) {
+      player.hp = Math.min(player.maxHp,
+        player.hp + Math.round(player.maxHp * 0.22));
       Sound.pickup();
-      for (let k = 0; k < 12; k++) { const a = rand(0, TAU);
-        parts.push({ x: o.x, y: o.y, vx: Math.cos(a)*rand(40,170), vy: Math.sin(a)*rand(40,170),
-                     life: rand(0.3,0.6), age: 0, r: rand(2,4), col: "#ff5a4a" }); }
-      orbs.splice(i, 1);
+      spawnParts(o.x, o.obj.position.y, o.z, 12,
+        { color: 0xff5a4a, speed: 8 });
+      scene.remove(o.obj); orbs.splice(i, 1);
     }
   }
 }
-function drawOrb(o) {
-  ctx.save();
-  ctx.translate(o.x, o.y - 8 - Math.sin(o.t * 4) * 4);
-  const pr = 7 + Math.sin(o.t * 6) * 1.4;
-  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, pr * 2.4);
-  g.addColorStop(0, "rgba(255,90,74,0.9)"); g.addColorStop(1, "rgba(255,90,74,0)");
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, pr * 2.4, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#ff5a4a"; ctx.beginPath(); ctx.arc(0, 0, pr, 0, TAU); ctx.fill();
-  ctx.fillStyle = "#ffd0c8"; ctx.beginPath(); ctx.arc(-pr*0.3, -pr*0.3, pr*0.4, 0, TAU); ctx.fill();
-  ctx.restore();
-}
 
-/* ─── fx ─────────────────────────────────────────────────────────────────── */
-let parts = [], spatter = [], dmgNums = [], smashRing = null;
-function spawnBlood(x, y, dir, amt) {
-  for (let i = 0; i < amt; i++) {
-    const a = dir + rand(-1, 1), sp = rand(60, 360);
-    spatter.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 40, age: 0, life: rand(0.25,0.6), r: rand(1.8,4.6) });
+/* ─── camera shake + light flashes ────────────────────────────────────────── */
+let camShake = 0;
+function shake(a) { camShake = Math.min(1.4, camShake + a); }
+// pooled flash lights — kept in the scene at intensity 0 so the light
+// count never changes (a changing count forces shader recompiles).
+const flashPool = [];
+for (let i = 0; i < 3; i++) {
+  const l = new THREE.PointLight(0xffd27a, 0, 26, 2);
+  scene.add(l);
+  flashPool.push({ l, age: 0, life: 0, on: false });
+}
+function flashLight(x, y, z, life) {
+  for (const f of flashPool) {
+    if (f.on) continue;
+    f.on = true; f.age = 0; f.life = life || 0.4;
+    f.l.position.set(x, y, z); f.l.intensity = 6;
+    return;
   }
 }
-function spawnDust(x, y) {
-  for (let i = 0; i < 3; i++) {
-    const a = rand(0, TAU);
-    parts.push({ x, y, vx: Math.cos(a)*rand(10,50), vy: Math.sin(a)*rand(10,50) - 16,
-                 life: rand(0.3,0.55), age: 0, r: rand(2.5,5), col: "#3a382f" });
-  }
-}
-function damageNum(x, y, n, crit) { dmgNums.push({ x: x + rand(-10,10), y, n, crit, age: 0, life: crit ? 0.9 : 0.62 }); }
-function updateFx(dt) {
-  for (let i = spatter.length - 1; i >= 0; i--) {
-    const s = spatter[i]; s.age += dt;
-    if (s.age >= s.life) { if (Math.random() < 0.4) stainGround(s.x, s.y, rand(3,7)); spatter.splice(i,1); continue; }
-    s.vx *= 0.9; s.vy = s.vy*0.9 + 240*dt; s.x += s.vx*dt; s.y += s.vy*dt;
-  }
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const p = parts[i]; p.age += dt;
-    if (p.age >= p.life) { parts.splice(i,1); continue; }
-    p.vx *= 0.92; p.vy *= 0.92; p.x += p.vx*dt; p.y += p.vy*dt;
-  }
-  for (let i = dmgNums.length - 1; i >= 0; i--) {
-    const d = dmgNums[i]; d.age += dt; d.y -= 42*dt;
-    if (d.age >= d.life) dmgNums.splice(i,1);
-  }
-  if (smashRing) { smashRing.t += dt; if (smashRing.t > 0.45) smashRing = null; }
-}
-function drawSpatter() {
-  ctx.fillStyle = "#7c1109";
-  for (const s of spatter) { ctx.globalAlpha = clamp(1 - s.age/s.life + 0.2, 0, 1);
-    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill(); }
-  ctx.globalAlpha = 1;
-}
-function drawParts() {
-  for (const p of parts) {
-    const k = clamp(1 - p.age/p.life, 0, 1);
-    ctx.globalAlpha = k; ctx.fillStyle = p.col;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.col === "#3a382f" ? p.r * (2 - k) : p.r, 0, TAU); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-}
-
-/* ─── camera ─────────────────────────────────────────────────────────────── */
-const cam = { x: 0, y: 0, shake: 0 };
-function shake(a) { cam.shake = Math.min(30, cam.shake + a); }
-
-/* ─── lighting ───────────────────────────────────────────────────────────── */
-let lightFlashes = [];
-function flashLight(x, y, r, life) { lightFlashes.push({ x, y, r, life, age: 0 }); }
-function renderLighting(camX, camY) {
-  lctx.globalCompositeOperation = "source-over";
-  lctx.clearRect(0, 0, W, H);
-  lctx.fillStyle = "rgba(10,9,14,0.6)";
-  lctx.fillRect(0, 0, W, H);
-  lctx.globalCompositeOperation = "destination-out";
-  function punch(wx, wy, r, str) {
-    const sx = wx - camX, sy = wy - camY;
-    if (sx < -r || sx > W + r || sy < -r || sy > H + r) return;
-    const gr = lctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-    gr.addColorStop(0, "rgba(255,255,255," + str + ")");
-    gr.addColorStop(1, "rgba(255,255,255,0)");
-    lctx.fillStyle = gr; lctx.fillRect(sx - r, sy - r, r*2, r*2);
-  }
-  punch(player.x, player.y - 20, 300, 0.95);
-  for (const b of braziers) punch(b.x, b.y - 24, 190 * b.s, 0.96);
-  for (const f of lightFlashes) punch(f.x, f.y, f.r * (1 - f.age/f.life), 0.9);
-  lctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(lightCanvas, 0, 0);
-  ctx.save();
-  ctx.globalCompositeOperation = "lighter";
-  function bloom(wx, wy, r, col) {
-    const sx = wx - camX, sy = wy - camY;
-    const gr = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-    gr.addColorStop(0, col); gr.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = gr; ctx.fillRect(sx - r, sy - r, r*2, r*2);
-  }
-  for (const b of braziers) bloom(b.x, b.y - 30, 130 * b.s, "rgba(255,150,40,0.22)");
-  bloom(player.x, player.y - 20, 150, "rgba(120,150,210,0.1)");
-  for (const f of lightFlashes) bloom(f.x, f.y, f.r * 0.7, "rgba(255,200,90,0.3)");
-  ctx.restore();
-}
-function updateLightFlashes(dt) {
-  for (let i = lightFlashes.length - 1; i >= 0; i--) {
-    lightFlashes[i].age += dt;
-    if (lightFlashes[i].age >= lightFlashes[i].life) lightFlashes.splice(i, 1);
+function updateFlashes(dt) {
+  for (const f of flashPool) {
+    if (!f.on) continue;
+    f.age += dt;
+    f.l.intensity = 6 * Math.max(0, 1 - f.age / f.life);
+    if (f.age >= f.life) { f.on = false; f.l.intensity = 0; }
   }
 }
 
-/* ─── grain + vignette ───────────────────────────────────────────────────── */
-const noiseTile = document.createElement("canvas");
-noiseTile.width = noiseTile.height = 128;
-(function () {
-  const nc = noiseTile.getContext("2d"), im = nc.createImageData(128, 128);
-  for (let i = 0; i < im.data.length; i += 4) {
-    const v = (Math.random()*255)|0;
-    im.data[i] = im.data[i+1] = im.data[i+2] = v; im.data[i+3] = (Math.random()*70)|0;
-  }
-  nc.putImageData(im, 0, 0);
+/* ─── smash ring effect ───────────────────────────────────────────────────── */
+const smashRing = (() => {
+  const geo = new THREE.RingGeometry(0.9, 1.0, 40);
+  geo.rotateX(-Math.PI / 2);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    color: 0xffd680, transparent: true, opacity: 0, side: THREE.DoubleSide }));
+  scene.add(m);
+  let t = 0, max = 0, on = false;
+  return {
+    show(x, y, z, r) { m.position.set(x, y, z); t = 0; max = r; on = true; },
+    update(dt) {
+      if (!on) return;
+      t += dt;
+      const k = t / 0.42;
+      if (k >= 1) { on = false; m.material.opacity = 0; return; }
+      const s = k * max;
+      m.scale.set(s, 1, s);
+      m.material.opacity = (1 - k) * 0.75;
+    },
+  };
 })();
-const noisePat = ctx.createPattern(noiseTile, "repeat");
-function drawGrain() {
-  ctx.save();
-  ctx.globalAlpha = 0.045; ctx.fillStyle = noisePat;
-  ctx.translate(-(Math.random()*128)|0, -(Math.random()*128)|0);
-  ctx.fillRect(0, 0, W + 128, H + 128);
-  ctx.restore();
-}
-function drawVignette() {
-  const g = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.35, W/2, H/2, Math.max(W,H)*0.72);
-  g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.62)");
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-}
 
-/* ─── hud ────────────────────────────────────────────────────────────────── */
-function txt(s, x, y, size, col, align, weight) {
-  ctx.font = (weight || 700) + " " + size + "px 'Arial Narrow', Arial, sans-serif";
-  ctx.textAlign = align || "left";
-  ctx.fillStyle = col;
-  ctx.fillText(s, x, y);
-}
-function drawHUD() {
-  // health orb
-  const ox = 78, oy = H - 78, orr = 56;
-  ctx.save();
-  ctx.beginPath(); ctx.arc(ox, oy, orr, 0, TAU); ctx.clip();
-  ctx.fillStyle = "#1a0605"; ctx.fillRect(ox-orr, oy-orr, orr*2, orr*2);
-  const hpf = clamp(player.hp / player.maxHp, 0, 1), lvl = oy + orr - hpf*orr*2;
-  const gg = ctx.createLinearGradient(0, lvl, 0, oy+orr);
-  gg.addColorStop(0, "#e8362a"); gg.addColorStop(1, "#6e0d09");
-  ctx.fillStyle = gg; ctx.fillRect(ox-orr, lvl, orr*2, orr*2);
-  ctx.fillStyle = "rgba(255,255,255,0.12)";
-  ctx.beginPath(); ctx.ellipse(ox-16, oy-18, 20, 12, -0.5, 0, TAU); ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = "#3a2018"; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.arc(ox, oy, orr, 0, TAU); ctx.stroke();
-  txt(Math.ceil(player.hp) + " / " + player.maxHp, ox, oy + 5, 15, "#f0e6da", "center");
+/* swing arc visual */
+const swingArc = (() => {
+  const geo = new THREE.RingGeometry(P.atkRange * 0.32, P.atkRange, 22, 1,
+    -P.atkArc, P.atkArc * 2);
+  geo.rotateX(-Math.PI / 2);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    color: 0xfff2dc, transparent: true, opacity: 0, side: THREE.DoubleSide }));
+  m.visible = false;
+  scene.add(m);
+  return m;
+})();
 
-  // XP bar
-  const xf = clamp(player.xp / player.xpNext, 0, 1);
-  ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0, H-8, W, 8);
-  const xg = ctx.createLinearGradient(0, 0, W, 0);
-  xg.addColorStop(0, "#caa23a"); xg.addColorStop(1, "#f4e08a");
-  ctx.fillStyle = xg; ctx.fillRect(0, H-8, W*xf, 8);
+/* ─── input ───────────────────────────────────────────────────────────────── */
+const keys = Object.create(null);
+const ndc = new THREE.Vector2(0, 0);
+const raycaster = new THREE.Raycaster();
+const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const _hit = new THREE.Vector3();
+let mouseDown = false;
+const crosshairEl = document.getElementById("crosshair");
 
-  // ability icons
-  const icons = [
-    { key: "LMB", cd: 0, cdMax: 1, col: "#9298a1" },
-    { key: "Q/RMB", cd: player.smashCd, cdMax: P.smashCd*player.cdMul, col: "#caa24a" },
-    { key: "SPACE", cd: player.dashCd, cdMax: P.dashCd*player.cdMul, col: "#9fd0ff" },
-  ];
-  const iw = 50, gap = 12, tot = icons.length*iw + (icons.length-1)*gap;
-  let ix = W/2 - tot/2;
-  for (const ic of icons) {
-    ctx.fillStyle = "rgba(8,8,10,0.85)"; rr(ix, H-68, iw, iw, 6); ctx.fill();
-    ctx.strokeStyle = "#2c2c33"; ctx.lineWidth = 2; rr(ix, H-68, iw, iw, 6); ctx.stroke();
-    ctx.fillStyle = ic.col; ctx.beginPath(); ctx.arc(ix+iw/2, H-68+iw/2-3, 11, 0, TAU); ctx.fill();
-    if (ic.cd > 0) {
-      ctx.fillStyle = "rgba(0,0,0,0.72)";
-      ctx.beginPath(); ctx.moveTo(ix+iw/2, H-68+iw/2);
-      ctx.arc(ix+iw/2, H-68+iw/2, iw, -Math.PI/2, -Math.PI/2 + TAU*(ic.cd/ic.cdMax));
-      ctx.closePath(); ctx.fill();
-    }
-    txt(ic.key, ix+iw/2, H-68+iw-5, 9, "#8b8478", "center");
-    ix += iw + gap;
+addEventListener("keydown", (e) => {
+  keys[e.code] = true;
+  if (state === ST.PLAYING) {
+    if (e.code === "Space") { e.preventDefault(); tryDash(); }
+    if (e.code === "KeyQ" || e.code === "KeyE") trySmash();
   }
-
-  // stat readout
-  txt("STR " + player.stats.str + "   VIT " + player.stats.hp + "   SPD " + player.stats.spd,
-      ox + orr + 14, oy + 5, 13, "#8b8478");
-
-  txt("WAVE " + wave, W/2, 34, 26, "#c4bdae", "center");
-  txt("LEVEL " + player.level, 24, 34, 20, "#d8b75a");
-  txt(DISTRICTS[areaStage], 24, 54, 12, "#7a756a");
-  txt("KILLS " + kills + "    SCORE " + score, W-24, 34, 17, "#8b8478", "right");
-
-  if (banner) {
-    const a = clamp(banner.t, 0, 1) * clamp(banner.t > 2 ? (banner.t > 2.6 ? 0 : (banner.t-2)*-2.5+1.5) : 1, 0, 1);
-    ctx.save(); ctx.globalAlpha = clamp(a, 0, 1);
-    txt(banner.sub.toUpperCase(), W/2, H*0.24 - 34, 13, "#7d4f38", "center");
-    ctx.shadowColor = "rgba(150,25,15,0.7)"; ctx.shadowBlur = 26;
-    txt(banner.big, W/2, H*0.24, 56, "#c8c0b0", "center", 800);
-    ctx.restore();
+});
+addEventListener("keyup", (e) => { keys[e.code] = false; });
+addEventListener("mousemove", (e) => {
+  ndc.x = (e.clientX / innerWidth) * 2 - 1;
+  ndc.y = -((e.clientY / innerHeight) * 2 - 1);
+  crosshairEl.style.left = e.clientX + "px";
+  crosshairEl.style.top = e.clientY + "px";
+});
+addEventListener("mousedown", (e) => {
+  if (state === ST.PLAYING) {
+    if (e.button === 0) { mouseDown = true; tryAttack(); }
+    else if (e.button === 2) trySmash();
   }
+});
+addEventListener("mouseup", (e) => { if (e.button === 0) mouseDown = false; });
+addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* ─── UI / overlays ───────────────────────────────────────────────────────── */
+const UI = {
+  lvl: document.getElementById("lvl"),
+  district: document.getElementById("district"),
+  wave: document.getElementById("wave"),
+  score: document.getElementById("score"),
+  hpfill: document.getElementById("hpfill"),
+  hptext: document.getElementById("hptext"),
+  stats: document.getElementById("stats"),
+  xpfill: document.getElementById("xpfill"),
+  cdSmash: document.getElementById("cd-smash"),
+  cdDash: document.getElementById("cd-dash"),
+  banner: document.getElementById("banner"),
+  title: document.getElementById("title"),
+  choice: document.getElementById("choice"),
+  over: document.getElementById("over"),
+  overStats: document.getElementById("over-stats"),
+  overAgain: document.getElementById("over-again"),
+};
+let bannerT = 0;
+function banner(sub, big) {
+  UI.banner.querySelector(".big").textContent = big;
+  UI.banner.querySelector(".sub").textContent = sub.toUpperCase();
+  UI.banner.style.opacity = "1";
+  bannerT = 2.6;
 }
-function drawCrosshair() {
-  ctx.save();
-  ctx.translate(mouse.x, mouse.y);
-  ctx.strokeStyle = "rgba(200,80,62,0.85)"; ctx.lineWidth = 1.6;
-  ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU);
-  ctx.moveTo(-13,0); ctx.lineTo(-4,0); ctx.moveTo(13,0); ctx.lineTo(4,0);
-  ctx.moveTo(0,-13); ctx.lineTo(0,-4); ctx.moveTo(0,13); ctx.lineTo(0,4);
-  ctx.stroke();
-  ctx.restore();
+function updateHUD() {
+  UI.lvl.textContent = "LEVEL " + player.level;
+  UI.district.textContent =
+    DISTRICTS[Math.min(DISTRICTS.length - 1, ((wave - 1) / 3) | 0)];
+  UI.wave.textContent = "WAVE " + wave;
+  UI.score.textContent = "KILLS " + kills + "  ·  SCORE " + score;
+  const hpf = clamp(player.hp / player.maxHp, 0, 1);
+  UI.hpfill.style.width = (hpf * 100) + "%";
+  UI.hptext.textContent = Math.ceil(player.hp) + " / " + player.maxHp;
+  UI.stats.textContent = "STR " + player.stats.str + "  ·  VIT " +
+    player.stats.vit + "  ·  SWI " + player.stats.swi;
+  UI.xpfill.style.width = clamp(player.xp / player.xpNext, 0, 1) * 100 + "%";
+  setCd(UI.cdSmash, player.smashCd, P.smashCd * player.cdMul);
+  setCd(UI.cdDash, player.dashCd, P.dashCd * player.cdMul * player.dashCdMul);
+}
+function setCd(el, cd, max) {
+  el.style.top = (cd > 0 ? (1 - cd / max) * 100 : 100) + "%";
 }
 
-/* ─── choice ─────────────────────────────────────────────────────────────────
-   Pause-and-pick screens: a boon after every wave, a stat at every level, a
-   perk every fifth level. Queued so several can resolve in sequence.         */
-let choiceQ = [], curChoice = null;
+/* choice screen — pauses the game; cards are disabled briefly so a click
+   carried over from killing the last enemy can't auto-pick an upgrade. */
+let choiceQ = [], curChoice = null, choiceArmTimer = null;
 function queueChoice(c) {
   choiceQ.push(c);
   if (state === ST.PLAYING) nextChoice();
 }
 function nextChoice() {
   curChoice = choiceQ.shift();
-  if (curChoice) state = ST.CHOICE;
+  if (curChoice) { state = ST.CHOICE; showChoice(curChoice); }
   else {
-    if (waveState === "intermission") { startWave(wave + 1); }
+    if (waveState === "intermission") startWave(wave + 1);
     state = ST.PLAYING;
   }
 }
-function cardRects() {
-  const cw = 270, ch = 320, gap = 34;
-  const tot = 3 * cw + 2 * gap;
-  const x0 = W / 2 - tot / 2, y0 = H / 2 - ch / 2 + 20;
-  return [0, 1, 2].map((i) => ({ x: x0 + i * (cw + gap), y: y0, w: cw, h: ch }));
-}
-function clickChoice() {
-  if (!curChoice) return;
-  const rects = cardRects();
-  for (let i = 0; i < rects.length && i < curChoice.opts.length; i++) {
-    const r = rects[i];
-    if (mouse.x >= r.x && mouse.x <= r.x + r.w && mouse.y >= r.y && mouse.y <= r.y + r.h) {
-      curChoice.opts[i].a();
-      Sound.choose();
+function showChoice(c) {
+  UI.choice.querySelector(".ctitle").textContent = c.title;
+  const ready = UI.choice.querySelector(".ready");
+  const cards = UI.choice.querySelector(".cards");
+  cards.innerHTML = "";
+  const emblems = { stat: "#9fd0ff", skill: "#caa24a" };
+  c.opts.forEach((o) => {
+    const card = document.createElement("div");
+    card.className = "card locked";
+    const col = o.emblem || emblems[c.kind];
+    card.innerHTML =
+      '<div class="emblem" style="background:' + col + ';color:' + col +
+        '"></div>' +
+      '<div class="cn">' + o.n + '</div>' +
+      '<div class="cd2">' + o.d + '</div>' +
+      '<div class="take">CLICK TO TAKE</div>';
+    card.addEventListener("click", () => {
+      if (card.classList.contains("locked")) return;
+      o.a(); Sound.choose();
+      UI.choice.classList.add("hidden");
       nextChoice();
-      return;
-    }
-  }
-}
-function drawChoice() {
-  ctx.save();
-  ctx.fillStyle = "rgba(6,5,8,0.82)"; ctx.fillRect(0, 0, W, H);
-  txt(curChoice.title, W / 2, H / 2 - 200, 30, "#d8b75a", "center", 800);
-  const rects = cardRects();
-  for (let i = 0; i < rects.length && i < curChoice.opts.length; i++) {
-    const r = rects[i], o = curChoice.opts[i];
-    const hov = mouse.x >= r.x && mouse.x <= r.x+r.w && mouse.y >= r.y && mouse.y <= r.y+r.h;
-    ctx.fillStyle = hov ? "#1c1822" : "#121016";
-    rr(r.x, r.y, r.w, r.h, 8); ctx.fill();
-    ctx.strokeStyle = hov ? "#d8b75a" : "#3a3640"; ctx.lineWidth = hov ? 3 : 2;
-    rr(r.x, r.y, r.w, r.h, 8); ctx.stroke();
-    // emblem
-    ctx.save();
-    ctx.translate(r.x + r.w/2, r.y + 96);
-    const ec = curChoice.kind === "perk" ? "#caa24a" : curChoice.kind === "stat" ? "#9fd0ff" : "#b06a4a";
-    const gr = ctx.createRadialGradient(0,0,0,0,0,48);
-    gr.addColorStop(0, ec); gr.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.globalAlpha = 0.5; ctx.fillStyle = gr;
-    ctx.beginPath(); ctx.arc(0,0,48,0,TAU); ctx.fill();
-    ctx.globalAlpha = 1; ctx.fillStyle = ec;
-    ctx.beginPath(); ctx.arc(0,0,26,0,TAU); ctx.fill();
-    ctx.fillStyle = "#0c0a10";
-    ctx.beginPath(); ctx.arc(0,0,15,0,TAU); ctx.fill();
-    ctx.restore();
-    txt(o.n, r.x + r.w/2, r.y + 196, 24, hov ? "#f0e6d0" : "#c8c0b0", "center", 800);
-    // wrap the description
-    const words = o.d.split(" ");
-    let line = "", ly = r.y + 230;
-    ctx.font = "400 15px 'Arial Narrow', Arial, sans-serif";
-    ctx.textAlign = "center"; ctx.fillStyle = "#9a9488";
-    for (const w of words) {
-      if (ctx.measureText(line + w).width > r.w - 44 && line) {
-        ctx.fillText(line.trim(), r.x + r.w/2, ly); line = ""; ly += 20;
-      }
-      line += w + " ";
-    }
-    if (line) ctx.fillText(line.trim(), r.x + r.w/2, ly);
-    txt(hov ? "CLICK TO TAKE" : "", r.x + r.w/2, r.y + r.h - 22, 12, "#d8b75a", "center");
-  }
-  ctx.restore();
-  drawCrosshair();
+    });
+    cards.appendChild(card);
+  });
+  UI.choice.classList.remove("hidden");
+  // arm the cards only after a short grace period (mis-click guard)
+  ready.textContent = "STEADY…";
+  if (choiceArmTimer) clearTimeout(choiceArmTimer);
+  choiceArmTimer = setTimeout(() => {
+    cards.querySelectorAll(".card").forEach(
+      (el) => el.classList.remove("locked"));
+    ready.textContent = "";
+  }, 600);
 }
 
-/* ─── screens ────────────────────────────────────────────────────────────── */
-function drawTitle() {
-  ctx.fillStyle = "#070608"; ctx.fillRect(0, 0, W, H);
-  drawVignette(); drawGrain();
-  ctx.save();
-  ctx.shadowColor = "rgba(150,22,12,0.8)"; ctx.shadowBlur = 34;
-  txt("MORTIMER'S HORDE", W/2, H/2 - 52, 70, "#b3aa9b", "center", 800);
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = "#7a1a12"; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(W/2-240, H/2-24); ctx.lineTo(W/2+240, H/2-24); ctx.stroke();
-  txt("A GOTHIC ARPG — CARVE THROUGH THE DEAD, GROW IN POWER", W/2, H/2+8, 13, "#6f6a60", "center", 400);
-  txt("WASD MOVE  ·  MOUSE AIM  ·  CLICK CLEAVE  ·  Q / RMB SMASH  ·  SPACE DASH",
-      W/2, H/2+42, 12, "#857f72", "center", 400);
-  ctx.globalAlpha = 0.55 + Math.sin(performance.now()*0.004)*0.4;
-  txt("CLICK TO BEGIN", W/2, H/2+98, 17, "#c9bfae", "center", 800);
-  ctx.restore();
-  drawCrosshair();
-}
-function drawGameOver() {
-  drawVignette();
-  ctx.save();
-  ctx.globalAlpha = clamp(gameOverT, 0, 0.84);
-  ctx.fillStyle = "#0a0507"; ctx.fillRect(0, 0, W, H);
-  ctx.restore();
-  drawGrain();
-  ctx.save();
-  ctx.globalAlpha = clamp(gameOverT*1.4, 0, 1);
-  ctx.shadowColor = "rgba(0,0,0,0.9)"; ctx.shadowBlur = 22;
-  txt("YOU FELL", W/2, H/2-26, 84, "#7c1b12", "center", 800);
-  ctx.shadowBlur = 0;
-  txt("WAVE " + wave + "   ·   LEVEL " + player.level + "   ·   " + kills + " KILLS   ·   SCORE " + score,
-      W/2, H/2+22, 16, "#9a948a", "center", 400);
-  if (gameOverT > 1.1) {
-    ctx.globalAlpha = 0.5 + Math.sin(performance.now()*0.004)*0.45;
-    txt("CLICK TO RISE AGAIN", W/2, H/2+76, 15, "#c7bdae", "center", 800);
-  }
-  ctx.restore();
-  drawCrosshair();
-}
-
-/* ─── state ──────────────────────────────────────────────────────────────── */
+/* ─── state machine ───────────────────────────────────────────────────────── */
 const ST = { TITLE: 0, PLAYING: 1, CHOICE: 2, GAMEOVER: 3 };
 let state = ST.TITLE;
 let hitStop = 0, gameOverT = 0, heartT = 0;
-function startGame() {
+
+function resetGame() {
+  for (const z of zombies) scene.remove(z.obj);
+  zombies = [];
+  for (const o of orbs) scene.remove(o.obj);
+  orbs = [];
+  for (let i = 0; i < PCOUNT; i++) { pState[i].life = 0; pPos[i*3+1] = -999; }
+  pGeo.attributes.position.needsUpdate = true;
+  if (player) scene.remove(player.obj);
   player = makePlayer();
-  zombies = []; parts = []; spatter = []; dmgNums = []; orbs = []; lightFlashes = [];
-  choiceQ = []; curChoice = null;
-  kills = 0; score = 0; zombiesAlive = 0; smashRing = null; hitStop = 0; heartT = 0;
-  areaStage = 0; area = stageRect(0); areaTgt = stageRect(0);
-  cam.x = player.x - W/2; cam.y = player.y - H/2; cam.shake = 0;
-  buildWorld();
+  player.y = groundHeight(0, 0);
+  player.obj.position.set(0, player.y, 0);
+  camera.position.set(CAM_OFF.x, player.y + CAM_OFF.y, CAM_OFF.z);
+  kills = 0; score = 0; zombiesAlive = 0; wave = 0; waveCountPrev = 0;
+  waveState = "fight"; toSpawn = [];
+  choiceQ = []; curChoice = null; hitStop = 0; heartT = 0; camShake = 0;
+  grassFlatten = null; levelFx = 0;
+}
+function startGame() {
+  resetGame();
+  UI.title.classList.add("hidden");
+  UI.over.classList.add("hidden");
+  crosshairEl.style.display = "block";
+  document.body.style.cursor = "none";
   startWave(1);
   state = ST.PLAYING;
   Sound.actx(); Ambience.start();
 }
-function gameOver() { state = ST.GAMEOVER; gameOverT = 0; shake(22); Ambience.stop(); }
+function gameOver() {
+  state = ST.GAMEOVER; gameOverT = 0; shake(1.0); Ambience.stop();
+  UI.overStats.textContent = "WAVE " + wave + "  ·  LEVEL " +
+    player.level + "  ·  " + kills + " KILLS  ·  SCORE " + score;
+  UI.overAgain.style.visibility = "hidden";
+  UI.over.classList.remove("hidden");
+  crosshairEl.style.display = "none";
+  document.body.style.cursor = "default";
+}
+UI.title.addEventListener("click", () => {
+  if (state === ST.TITLE) startGame();
+});
+UI.over.addEventListener("click", () => {
+  if (state === ST.GAMEOVER && gameOverT > 1.1) startGame();
+});
 
-/* ─── update ─────────────────────────────────────────────────────────────── */
+/* ─── update ──────────────────────────────────────────────────────────────── */
+function hurtPlayer(amt) {
+  if (!player.alive || player.iframes > 0) return;
+  amt = Math.round(amt * player.dmgTakenMul);
+  player.hp -= amt; player.hurt = 0.4;
+  Sound.hurt(); shake(0.5);
+  if (player.hp <= 0) { player.hp = 0; player.alive = false; gameOver(); }
+}
 function updatePlayer(dt) {
   const e = player; e.t += dt;
-  const psx = e.x - cam.x, psy = e.y - cam.y;
-  e.aim = Math.atan2(mouse.y - (psy - 22), mouse.x - psx);
-  e.facing = Math.cos(e.aim) >= 0 ? 1 : -1;
+  // aim — raycast the cursor onto the ground plane
+  aimPlane.constant = -e.y;
+  raycaster.setFromCamera(ndc, camera);
+  if (raycaster.ray.intersectPlane(aimPlane, _hit)) {
+    e.aim = Math.atan2(_hit.x - e.x, _hit.z - e.z);
+  }
+  if (e.atkSlowT > 0) e.atkSlowT -= dt;
 
   if (e.dashT > 0) {
     e.dashT -= dt;
-    e.x = clamp(e.x + Math.cos(e.moveAng)*P.dashSpeed*dt, area.x0 + P.r, area.x1 - P.r);
-    e.y = clamp(e.y + Math.sin(e.moveAng)*P.dashSpeed*dt, area.y0 + P.r, area.y1 - P.r);
-    e.moving = true; e.running = true;
+    e.x = clamp(e.x + Math.sin(e.moveAng) * P.dashSpeed * dt,
+      -ARENA + P.r, ARENA - P.r);
+    e.z = clamp(e.z + Math.cos(e.moveAng) * P.dashSpeed * dt,
+      -ARENA + P.r, ARENA - P.r);
+    e.moving = true;
   } else {
-    let mx = 0, my = 0;
-    if (keys["KeyW"] || keys["ArrowUp"]) my -= 1;
-    if (keys["KeyS"] || keys["ArrowDown"]) my += 1;
+    let mx = 0, mz = 0;
+    if (keys["KeyW"] || keys["ArrowUp"]) mz -= 1;
+    if (keys["KeyS"] || keys["ArrowDown"]) mz += 1;
     if (keys["KeyA"] || keys["ArrowLeft"]) mx -= 1;
     if (keys["KeyD"] || keys["ArrowRight"]) mx += 1;
-    e.moving = mx !== 0 || my !== 0;
-    e.running = e.moving;
+    e.moving = mx !== 0 || mz !== 0;
     if (e.moving) {
-      const inv = 1 / Math.hypot(mx, my), sp = P.speed * e.moveMul;
-      e.x = clamp(e.x + mx*inv*sp*dt, area.x0 + P.r, area.x1 - P.r);
-      e.y = clamp(e.y + my*inv*sp*dt, area.y0 + P.r, area.y1 - P.r);
-      e.moveAng = Math.atan2(my, mx);
-      e.walkP += dt * 14;
+      const inv = 1 / Math.hypot(mx, mz);
+      // hitting slows you: a fading penalty on your stride
+      const slow = 1 - ATK_SLOW_AMT * clamp(e.atkSlowT / ATK_SLOW_DUR, 0, 1);
+      const sp = P.speed * e.moveMul * slow;
+      e.x = clamp(e.x + mx * inv * sp * dt, -ARENA + P.r, ARENA - P.r);
+      e.z = clamp(e.z + mz * inv * sp * dt, -ARENA + P.r, ARENA - P.r);
+      e.moveAng = Math.atan2(mx, mz);
+      e.walkP += dt * 13;
       e.stepT -= dt;
-      if (e.stepT <= 0) { Sound.step(); e.stepT = 0.3; }
-      e.dustT -= dt;
-      if (e.dustT <= 0) { spawnDust(e.x + rand(-6,6), e.y + 4); e.dustT = 0.1; }
-    } else { e.walkP += dt * 4; }
+      if (e.stepT <= 0) { Sound.step(); e.stepT = 0.32; }
+    } else e.walkP += dt * 4;
   }
+  e.y = groundHeight(e.x, e.z);
 
   if (e.smashCd > 0) e.smashCd -= dt;
   if (e.dashCd > 0) e.dashCd -= dt;
   if (e.iframes > 0) e.iframes -= dt;
   if (e.hurt > 0) e.hurt -= dt;
-  if (e.regen > 0 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.regen*dt);
+  if (e.regen > 0 && e.hp < e.maxHp)
+    e.hp = Math.min(e.maxHp, e.hp + e.regen * dt);
 
-  if (mouse.down && !e.atk && e.dashT <= 0) tryAttack();
+  if (mouseDown && !e.atk && e.dashT <= 0) tryAttack();
   if (e.atk) {
     e.atkT += dt;
     if (e.atkT >= e.atkW && e.atkT < e.atkW + e.atkS) meleeStrike();
     if (e.atkT >= e.atkW + e.atkS + e.atkR) e.atk = false;
   }
-  if (e.hp < e.maxHp*0.28 && e.alive) {
+  if (e.hp < e.maxHp * 0.28 && e.alive) {
     heartT -= dt;
     if (heartT <= 0) { Sound.heart(); heartT = 0.95; }
   }
+  poseSurvivor();
 }
-function hurtPlayer(amt) {
-  if (!player.alive || player.iframes > 0) return;
-  amt = Math.round(amt * player.dmgTakenMul);
-  player.hp -= amt; player.hurt = 0.4;
-  Sound.hurt(); shake(12);
-  if (player.hp <= 0) { player.hp = 0; player.alive = false; gameOver(); }
+function poseSurvivor() {
+  const e = player, o = e.obj, u = o.userData;
+  o.rotation.y = e.aim;
+  const bob = e.moving ? Math.abs(Math.sin(e.walkP)) * 0.22 : 0;
+  o.position.set(e.x, e.y + bob, e.z);
+  const sw = e.moving ? 0.7 : 0.06;
+  u.legs[0].rotation.x = Math.sin(e.walkP) * sw;
+  u.legs[1].rotation.x = Math.sin(e.walkP + Math.PI) * sw;
+  let arm = -0.4;
+  if (e.atk) {
+    const a = e.atkT, w = e.atkW, s = e.atkS, r = e.atkR;
+    if (a < w) arm = lerp(-0.4, -2.4, easeOut(a / w));
+    else if (a < w + s) arm = lerp(-2.4, 1.5, easeIn((a - w) / s));
+    else arm = lerp(1.5, -0.4, clamp((a - w - s) / r, 0, 1));
+  }
+  u.arm.rotation.y = arm;
+  u.arm.rotation.x = -0.2 + (e.atk ? -0.3 : 0);
+  if (e.atk && e.atkT >= e.atkW && e.atkT < e.atkW + e.atkS + 0.05) {
+    const k = clamp((e.atkT - e.atkW) / e.atkS, 0, 1);
+    swingArc.visible = true;
+    swingArc.position.set(e.x, e.y + 0.2, e.z);
+    swingArc.rotation.y = e.aim - Math.PI / 2;
+    swingArc.scale.setScalar(player.rangeMul);
+    swingArc.material.opacity = (1 - k) * 0.7;
+  } else swingArc.visible = false;
 }
 function updateZombies(dt) {
   for (let i = zombies.length - 1; i >= 0; i--) {
-    const z = zombies[i];
-    if (z.flash > 0) z.flash -= dt;
+    const z = zombies[i], d = ETYPES[z.type];
     z.t += dt;
-    if (z.state === "die") { z.dieT += dt; if (z.dieT > 1) zombies.splice(i, 1); continue; }
-    z.x += z.kx*dt; z.y += z.ky*dt;
-    z.kx *= 0.86; z.ky *= 0.86;
-    if (z.stagger > 0) { z.stagger -= dt; continue; }
-    const dx = player.x - z.x, dy = player.y - z.y, dist = Math.hypot(dx, dy) || 1;
-    z.facing = dx >= 0 ? 1 : -1;
-    const reach = z.r + P.r + 6;
-    if (dist > reach) {
-      z.state = "chase";
-      z.x += dx/dist*z.speed*dt; z.y += dy/dist*z.speed*dt;
-      z.walkP += dt * (4 + z.speed*0.05);
-      if (z.speed > 95) {
-        z.dustT -= dt;
-        if (z.dustT <= 0) { spawnDust(z.x + rand(-5,5), z.y + 3); z.dustT = 0.16; }
-      }
-    } else {
-      z.state = "attack";
-      z.atkCd -= dt;
-      if (z.atkCd <= 0) {
-        z.atkCd = z.type === "runner" ? 0.8 : 1.15;
-        hurtPlayer(ETYPES[z.type].dmg * (1 + wave*0.06));
-      }
+    if (z.flash > 0) z.flash -= dt;
+    if (z.state === "die") {
+      z.dieT += dt;
+      const k = clamp(z.dieT / 0.8, 0, 1);
+      z.obj.rotation.x = k * 1.5;
+      z.obj.position.y = groundHeight(z.x, z.z) - k * 1.6;
+      z.obj.scale.setScalar(1 - k * 0.4);
+      if (z.dieT > 0.85) { scene.remove(z.obj); zombies.splice(i, 1); }
+      continue;
     }
-    for (let j = i - 1; j >= 0; j--) {
-      const o = zombies[j];
-      if (o.state === "die") continue;
-      const ox = z.x - o.x, oy = z.y - o.y, od = Math.hypot(ox, oy), mn = z.r + o.r;
-      if (od > 0 && od < mn) {
-        const pu = (mn - od) / od * 0.5;
-        z.x += ox*pu; z.y += oy*pu; o.x -= ox*pu; o.y -= oy*pu;
+    z.x += z.kx * dt; z.z += z.kz * dt;
+    z.kx *= 0.84; z.kz *= 0.84;
+    z.x = clamp(z.x, -ARENA + 2, ARENA - 2);
+    z.z = clamp(z.z, -ARENA + 2, ARENA - 2);
+    if (z.stagger > 0) z.stagger -= dt;
+    else {
+      const dx = player.x - z.x, dz = player.z - z.z;
+      const dist = Math.hypot(dx, dz) || 1;
+      const reach = z.r + P.r + 0.6;
+      if (dist > reach) {
+        z.state = "chase";
+        z.x += dx / dist * z.speed * dt;
+        z.z += dz / dist * z.speed * dt;
+        z.walkP += dt * (4 + z.speed * 0.4);
+      } else {
+        z.state = "attack";
+        z.atkCd -= dt;
+        if (z.atkCd <= 0) {
+          z.atkCd = z.type === "runner" ? 0.8 : 1.15;
+          // the dead hit harder, and harder still each wave
+          hurtPlayer(d.dmg * (1 + (wave - 1) * 0.13));
+        }
+      }
+      for (let j = i - 1; j >= 0; j--) {
+        const o = zombies[j];
+        if (o.state === "die") continue;
+        const ox = z.x - o.x, oz = z.z - o.z;
+        const od = Math.hypot(ox, oz), mn = z.r + o.r;
+        if (od > 0 && od < mn) {
+          const pu = (mn - od) / od * 0.5;
+          z.x += ox * pu; z.z += oz * pu;
+          o.x -= ox * pu; o.z -= oz * pu;
+        }
       }
     }
     z.groanT -= dt;
-    if (z.groanT <= 0) { if (dist < 720) Sound.groan(); z.groanT = rand(5, 13); }
+    if (z.groanT <= 0) {
+      if (Math.hypot(player.x - z.x, player.z - z.z) < 60) Sound.groan();
+      z.groanT = rand(5, 13);
+    }
+    poseZombie(z, d);
   }
 }
-function updateCamera(dt) {
-  cam.x = lerp(cam.x, player.x - W/2, 0.12);
-  cam.y = lerp(cam.y, player.y - H/2, 0.12);
-  cam.shake = Math.max(0, cam.shake - dt*48);
+const _camQ = new THREE.Quaternion();
+function poseZombie(z, d) {
+  const o = z.obj, u = o.userData;
+  const gy = groundHeight(z.x, z.z);
+  o.rotation.y = Math.atan2(player.x - z.x, player.z - z.z);
+  const moving = z.state === "chase";
+  const amp = moving ? 0.8 : 0.12;
+  u.legs[0].rotation.x = Math.sin(z.walkP) * amp;
+  u.legs[1].rotation.x = Math.sin(z.walkP + Math.PI) * amp;
+  o.position.set(z.x, gy + (moving ? Math.abs(Math.sin(z.walkP)) * 0.18 : 0),
+    z.z);
+  const lunge = z.state === "attack" ? Math.max(0, Math.sin(z.t * 13)) : 0;
+  u.arms[0].rotation.x = -1.0 - lunge * 0.7 + Math.sin(z.walkP) * 0.2;
+  u.arms[1].rotation.x = -1.0 - lunge * 0.7 - Math.sin(z.walkP) * 0.2;
+  const em = z.flash > 0 ? clamp(z.flash * 7, 0, 1) : 0;
+  for (const m of u.mats) m.emissive.setRGB(em, em, em);
+  if (z.hp < z.maxHp) {
+    u.hp.visible = true;
+    u.hp.quaternion.copy(_camQ);
+    const f = clamp(z.hp / z.maxHp, 0, 1);
+    u.hpFill.scale.x = f;
+    u.hpFill.position.x = -(1 - f) * u.hpW * 0.5;
+  } else u.hp.visible = false;
 }
+function updateCamera(dt) {
+  const tx = player.x + CAM_OFF.x;
+  const ty = player.y + CAM_OFF.y;
+  const tz = player.z + CAM_OFF.z;
+  camera.position.x = lerp(camera.position.x, tx, 0.12);
+  camera.position.y = lerp(camera.position.y, ty, 0.12);
+  camera.position.z = lerp(camera.position.z, tz, 0.12);
+  camShake = Math.max(0, camShake - dt * 3.2);
+  if (camShake > 0) {
+    camera.position.x += rand(-1, 1) * camShake;
+    camera.position.y += rand(-1, 1) * camShake;
+  }
+  camera.lookAt(player.x, player.y + 2, player.z);
+  _camQ.copy(camera.quaternion);
+}
+function updateAmbient(dt, t) {
+  for (const b of braziers) {
+    const fl = 1 + Math.sin(t * 9 + b.phase) * 0.22
+      + Math.sin(t * 23 + b.phase) * 0.12;
+    b.light.intensity = b.base * fl;
+    b.flame.scale.set(0.9 + fl * 0.2, fl, 0.9 + fl * 0.2);
+  }
+  for (const m of mists) {
+    m.position.x += m.userData.vx * dt;
+    m.position.z += m.userData.vz * dt;
+    m.rotation.z += m.userData.spin * dt;
+    if (m.position.x > ARENA) m.position.x = -ARENA;
+    if (m.position.x < -ARENA) m.position.x = ARENA;
+    if (m.position.z > ARENA) m.position.z = -ARENA;
+    if (m.position.z < -ARENA) m.position.z = ARENA;
+  }
+  if (player) moon.target.position.set(player.x, 0, player.z);
+}
+
+let clock = 0;
 function update(dt) {
+  clock += dt;
   updatePlayer(dt);
   updateZombies(dt);
   updateWaves(dt);
   updateOrbs(dt);
-  updateArea(dt);
-  updateFx(dt);
-  updateLightFlashes(dt);
+  updateParts(dt);
+  updateFlashes(dt);
+  smashRing.update(dt);
   updateCamera(dt);
+  updateGrass(dt, clock);
+  updateAmbient(dt, clock);
+  updateDmgNums(dt);
   Ambience.update(dt);
+  if (bannerT > 0) {
+    bannerT -= dt;
+    if (bannerT <= 0) UI.banner.style.opacity = "0";
+  }
 }
 
-/* ─── render ─────────────────────────────────────────────────────────────── */
-function renderWorld() {
-  ctx.fillStyle = "#070708"; ctx.fillRect(0, 0, W, H);
-  const sx = (Math.random()*2-1)*cam.shake, sy = (Math.random()*2-1)*cam.shake;
-  const camX = cam.x + sx, camY = cam.y + sy;
-  ctx.save();
-  ctx.translate(-camX, -camY);
-  drawWorld();
-  drawAreaWall();
-  drawSpatter();
-  for (const o of orbs) drawOrb(o);
-  if (smashRing) {
-    ctx.save();
-    ctx.globalAlpha = (1 - smashRing.t/0.45)*0.7;
-    ctx.strokeStyle = "#ffd680"; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.arc(player.x, player.y, smashRing.t/0.45*smashRing.r, 0, TAU); ctx.stroke();
-    ctx.restore();
-  }
-  if (player.atk) {
-    const a = player.atkT;
-    if (a >= player.atkW && a < player.atkW + player.atkS + 0.05) {
-      const k = clamp((a - player.atkW)/player.atkS, 0, 1);
-      const arc = P.atkArc * player.rangeMul;
-      ctx.save();
-      ctx.globalAlpha = (1-k)*0.8;
-      ctx.strokeStyle = "#fff2dc"; ctx.lineWidth = 8; ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.arc(player.x, player.y - 18, P.atkRange*player.rangeMul*0.88,
-              player.aim - arc + k*arc*2 - arc, player.aim + arc - k*0.2);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-  const draws = [];
-  for (const p of props) draws.push(p);
-  for (const z of zombies) draws.push(z);
-  draws.push(player);
-  draws.sort((a, b) => a.y - b.y);
-  for (const d of draws) {
-    if (d !== player && (d.x < camX - 170 || d.x > camX + W + 170 ||
-                         d.y < camY - 300 || d.y > camY + H + 170)) continue;   // cull off-screen
-    if (d === player) { if (player.alive || gameOverT < 1) drawSurvivor(player); }
-    else if (d.kind === "z") drawZombie(d);
-    else drawProp(d);
-  }
-  drawParts();
-  for (const dn of dmgNums) {
-    ctx.globalAlpha = clamp(1 - dn.age/dn.life, 0, 1);
-    txt(dn.crit ? dn.n + "!" : "" + dn.n, dn.x, dn.y, dn.crit ? 26 : 17,
-        dn.crit ? "#ffd23a" : "#f0e7d6", "center", 800);
-    ctx.globalAlpha = 1;
-  }
-  ctx.restore();
-  renderLighting(camX, camY);
-  drawVignette();
-  if (levelFx > 0) { ctx.save(); ctx.globalAlpha = levelFx*0.4; ctx.fillStyle = "#ffe27a"; ctx.fillRect(0,0,W,H); ctx.restore(); }
-  if (player.hurt > 0) { ctx.save(); ctx.globalAlpha = clamp(player.hurt*1.5,0,0.55); ctx.fillStyle = "#8c0f0a"; ctx.fillRect(0,0,W,H); ctx.restore(); }
-  if (player.alive && player.hp < player.maxHp*0.28) {
-    ctx.save(); ctx.globalAlpha = 0.12 + Math.sin(performance.now()*0.006)*0.1;
-    ctx.fillStyle = "#9c0f0c"; ctx.fillRect(0,0,W,H); ctx.restore();
-  }
-  drawGrain();
-}
-function render() {
-  if (state === ST.TITLE) { drawTitle(); return; }
-  renderWorld();
-  drawHUD();
-  if (state === ST.CHOICE && curChoice) drawChoice();
-  else drawCrosshair();
-  if (state === ST.GAMEOVER) drawGameOver();
-}
-
-/* ─── loop ───────────────────────────────────────────────────────────────── */
+/* ─── loop ────────────────────────────────────────────────────────────────── */
 let last = 0;
 function loop(ts) {
   requestAnimationFrame(loop);
-  let dt = (ts - last)/1000; last = ts;
+  let dt = (ts - last) / 1000; last = ts;
   if (!dt || dt > 0.05) dt = Math.min(dt || 0.016, 0.05);
+
   if (state === ST.PLAYING) {
     if (hitStop > 0) hitStop -= dt; else update(dt);
+    updateHUD();
+  } else if (state === ST.CHOICE) {
+    // game is paused; keep effects/camera gently alive
+    clock += dt;
+    updateParts(dt);
+    smashRing.update(dt);
+    updateGrass(dt, clock);
+    updateAmbient(dt, clock);
+    updateCamera(dt);
+    updateDmgNums(dt);
   } else if (state === ST.GAMEOVER) {
     gameOverT += dt;
-    cam.shake = Math.max(0, cam.shake - dt*48);
-    updateFx(dt); updateLightFlashes(dt);
+    clock += dt;
+    updateParts(dt);
+    updateFlashes(dt);
+    updateAmbient(dt, clock);
+    camShake = Math.max(0, camShake - dt * 3.2);
+    if (gameOverT > 1.1 && UI.overAgain.style.visibility === "hidden")
+      UI.overAgain.style.visibility = "visible";
+  } else if (state === ST.TITLE) {
+    clock += dt;
+    camera.position.set(
+      Math.sin(clock * 0.1) * 34, 24, Math.cos(clock * 0.1) * 34);
+    camera.lookAt(0, 3, 0);
+    updateAmbient(dt, clock);
   }
-  render();
+  renderer.render(scene, camera);
 }
+
+// seat the title camera, then run
+camera.position.set(0, 24, 34);
+camera.lookAt(0, 3, 0);
+moon.target.position.set(0, 0, 0);
 requestAnimationFrame(loop);
 
 })();
