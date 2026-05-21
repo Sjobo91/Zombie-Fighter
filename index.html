@@ -5,90 +5,93 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Mortimer's Horde — Survival</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #0f0a1c; overscroll-behavior: none; }
-  body { font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", sans-serif;
-         color: #f3edff; overflow: hidden; user-select: none; }
+  html, body { margin: 0; height: 100%; background: #050506; overscroll-behavior: none; }
+  body { font: 13px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif;
+         color: #c4bfb4; overflow: hidden; user-select: none; }
   #stage { position: fixed; inset: 0; }
   #stage canvas { display: block; touch-action: none; cursor: crosshair; }
 
+  /* permanent vignette — darkens the screen edges for dread */
+  #vignette { position: fixed; inset: 0; z-index: 2; pointer-events: none;
+              box-shadow: inset 0 0 260px 80px rgba(0,0,0,.92); }
+
   /* HUD */
   .hud { position: fixed; pointer-events: none; z-index: 5;
-         text-shadow: 0 1px 2px rgba(0,0,0,.65); }
-  .hud .label { font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
-                opacity: .6; margin-bottom: 2px; }
-  .hud .value { font-family: "Times New Roman", Georgia, serif; font-style: italic;
-                font-size: 28px; letter-spacing: -.005em; }
+         text-shadow: 0 1px 3px rgba(0,0,0,.95); }
+  .hud .label { font-size: 9px; letter-spacing: .26em; text-transform: uppercase;
+                color: #6a665d; margin-bottom: 3px; }
+  .hud .value { font: 700 23px/1 "Arial Narrow", "Segoe UI", sans-serif;
+                letter-spacing: .07em; text-transform: uppercase; color: #b3aea1; }
 
-  #healthHud   { left: 16px; top: 14px; }
-  #waveHud     { right: 16px; top: 14px; text-align: right; }
-  #ammoHud     { right: 16px; bottom: 16px; text-align: right; }
-  #scoreHud    { left: 16px; bottom: 16px; }
+  #healthHud   { left: 18px; top: 16px; }
+  #waveHud     { right: 18px; top: 16px; text-align: right; }
+  #ammoHud     { right: 18px; bottom: 18px; text-align: right; }
+  #scoreHud    { left: 18px; bottom: 18px; }
 
   /* Health bar */
-  .bar { width: 220px; height: 8px; background: rgba(255,255,255,.12);
-         border: 1.5px solid rgba(255,255,255,.4); border-radius: 2px; overflow: hidden;
-         box-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  .bar { width: 232px; height: 9px; background: rgba(0,0,0,.65);
+         border: 1px solid rgba(150,42,32,.55); border-radius: 1px; overflow: hidden; }
   .bar > i { display: block; height: 100%;
-             background: linear-gradient(90deg, #ff6b4a, #ffd166);
+             background: linear-gradient(90deg, #3a0c08, #a32619);
              transition: width .18s ease; }
 
   /* Crosshair */
-  #crosshair { position: fixed; left: 50%; top: 50%; width: 26px; height: 26px;
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px;
                transform: translate(-50%,-50%); z-index: 4; pointer-events: none;
-               opacity: .85; }
+               opacity: .5; }
   #crosshair::before, #crosshair::after {
-    content: ""; position: absolute; background: #fff7d6;
-    box-shadow: 0 0 4px rgba(0,0,0,.7);
+    content: ""; position: absolute; background: #9a948a;
   }
-  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
-  #crosshair::after  { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+  #crosshair::before { left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-50%); }
+  #crosshair::after  { top: 50%; left: 0; height: 1px; width: 100%; transform: translateY(-50%); }
   #crosshair.hit { animation: hitPulse .18s ease; }
-  @keyframes hitPulse { 0%{transform:translate(-50%,-50%) scale(1.6); opacity:1}
-                        100%{transform:translate(-50%,-50%) scale(1); opacity:.85} }
+  @keyframes hitPulse { 0%{transform:translate(-50%,-50%) scale(1.7); opacity:.95}
+                        100%{transform:translate(-50%,-50%) scale(1); opacity:.5} }
 
   /* Center messages */
   .center { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
             z-index: 7; text-align: center; pointer-events: auto; }
-  .center .big { font-family: "Times New Roman", Georgia, serif; font-style: italic;
-                 font-size: 48px; letter-spacing: -.01em; margin-bottom: 8px;
-                 text-shadow: 0 2px 8px rgba(0,0,0,.8); }
-  .center .sub { font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
-                 opacity: .75; max-width: 380px; margin: 0 auto 14px; line-height: 1.6; }
-  .btn { display: inline-block; padding: 10px 22px; border: 2px solid #fff7d6;
-         background: rgba(255,247,214,.05); color: #fff7d6; cursor: pointer;
-         font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
-         border-radius: 2px; transition: all .15s; }
-  .btn:hover { background: #fff7d6; color: #1a0f08; }
+  .center .big { font: 800 46px/1.05 "Arial Narrow", "Segoe UI", sans-serif;
+                 letter-spacing: .06em; text-transform: uppercase; color: #b6b0a3;
+                 margin-bottom: 12px; text-shadow: 0 2px 20px rgba(150,24,14,.55); }
+  .center .sub { font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+                 color: #706b61; max-width: 420px; margin: 0 auto 18px; line-height: 1.9; }
+  .btn { display: inline-block; padding: 12px 30px; border: 1px solid #6a3028;
+         background: rgba(120,30,22,.12); color: #c2b8a8; cursor: pointer;
+         font: 700 11px/1 "Arial Narrow", sans-serif; letter-spacing: .3em;
+         text-transform: uppercase; transition: all .15s; }
+  .btn:hover { background: #a32619; border-color: #a32619; color: #0a0a0a; }
 
   #overlay { position: fixed; inset: 0; z-index: 6;
-             background: radial-gradient(ellipse at center, rgba(15,10,28,.4), rgba(15,10,28,.92));
+             background: radial-gradient(ellipse at center, rgba(4,4,5,.62), rgba(2,2,3,.97));
              pointer-events: auto; }
   #overlay.hidden { display: none; }
 
   /* Wave announcement banner */
-  #waveBanner { position: fixed; left: 50%; top: 28%; transform: translate(-50%,-50%);
+  #waveBanner { position: fixed; left: 50%; top: 26%; transform: translate(-50%,-50%);
                 z-index: 8; text-align: center; pointer-events: none;
-                opacity: 0; transition: opacity .35s; }
+                opacity: 0; transition: opacity .4s; }
   #waveBanner.on { opacity: 1; }
-  #waveBanner .b1 { font-size: 11px; letter-spacing: .3em; text-transform: uppercase; opacity: .7; }
-  #waveBanner .b2 { font-family: "Times New Roman", Georgia, serif; font-style: italic;
-                    font-size: 56px; line-height: 1; margin-top: 4px;
-                    text-shadow: 0 2px 12px rgba(255,107,74,.5); }
+  #waveBanner .b1 { font-size: 10px; letter-spacing: .4em; text-transform: uppercase; color: #7d4038; }
+  #waveBanner .b2 { font: 800 52px/1 "Arial Narrow", "Segoe UI", sans-serif;
+                    letter-spacing: .06em; text-transform: uppercase; color: #b6b0a3;
+                    margin-top: 6px; text-shadow: 0 2px 22px rgba(150,25,15,.6); }
 
   /* Damage vignette */
   #damageVignette { position: fixed; inset: 0; z-index: 3; pointer-events: none;
-                    box-shadow: inset 0 0 120px 30px rgba(255,40,40,0);
+                    box-shadow: inset 0 0 120px 30px rgba(150,12,12,0);
                     transition: box-shadow .25s ease; }
-  #damageVignette.on { box-shadow: inset 0 0 200px 60px rgba(255,40,40,.55); }
+  #damageVignette.on { box-shadow: inset 0 0 220px 80px rgba(150,12,12,.62); }
 
   /* Hit marker text */
   .floater { position: fixed; z-index: 7; pointer-events: none;
-             font-family: "Courier New", monospace; font-weight: 700;
-             font-size: 22px; color: #fff1a6; text-shadow: 1px 1px 0 #1a0f08, 0 0 8px rgba(255,200,80,.6); }
+             font: 700 20px/1 "Arial Narrow", monospace; color: #9a948a;
+             text-shadow: 1px 1px 0 #000, 0 0 6px rgba(0,0,0,.9); }
 </style>
 </head>
 <body>
   <div id="stage"></div>
+  <div id="vignette"></div>
 
   <div id="crosshair"></div>
   <div id="damageVignette"></div>
@@ -105,7 +108,7 @@
 
   <div class="hud" id="ammoHud">
     <div class="label">Weapon</div>
-    <div class="value" id="weaponText">Gnarled Stick</div>
+    <div class="value" id="weaponText">Splintered Club</div>
   </div>
 
   <div class="hud" id="scoreHud">
@@ -122,7 +125,8 @@
     <div class="center" id="centerCard">
       <div class="big">Mortimer's Horde</div>
       <div class="sub">
-        Survive the graveyard. WASD to move · Mouse to look · Click to swing · Shift+W to sprint.
+        The town is overrun. Hold the dark as long as you can.<br><br>
+        WASD move · Mouse look · Click swing · Shift+W sprint
       </div>
       <button class="btn" id="startBtn">Begin</button>
     </div>
@@ -141,7 +145,7 @@
     if (i >= urls.length) {
       document.body.innerHTML =
         '<div style="color:#f3edff;font-family:sans-serif;padding:40px;max-width:520px;margin:60px auto;">'
-      + '<h2 style="font-style:italic;font-family:Georgia,serif">Could not load Three.js</h2>'
+      + '<h2 style="font-family:Georgia,serif">Could not load Three.js</h2>'
       + '<p>None of the CDN URLs were reachable. Check your internet connection or try opening this file from a local web server (e.g. <code>python -m http.server</code>) rather than via <code>file://</code>.</p>'
       + '</div>';
       return;
@@ -159,21 +163,22 @@
 /* =========================================================================
    MORTIMER'S HORDE — third-person zombie survival
    Single self-contained file. Three.js (r149) via a 3-CDN fallback chain;
-   vanilla JavaScript otherwise. Reuses the Mortimer cartoon aesthetic
-   (toon shading, primitive meshes, green skin / glowing eyes).
+   vanilla JavaScript otherwise.
 
-   Layout — each system is fenced with a /* --- name --- *​/ separator:
-     helpers · asset builders · audio · world · player · zombies ·
-     waves · upgrades · hud · state machine · main loop
+   Layout — each system is fenced with a labelled separator comment:
+     helpers, asset builders, audio, world, player, zombies,
+     waves, upgrades, hud, state machine, main loop
 
    Game flow is an explicit finite state machine:
-     TITLE -> PLAYING <-> UPGRADE_PICK ;  PLAYING -> GAME_OVER -> TITLE
+     TITLE - PLAYING - UPGRADE_PICK ;  PLAYING - GAME_OVER - TITLE
    Gameplay systems only update while phase === PLAYING.
 
-   --- MILESTONE 1 ---
-   Refactor of the v1 prototype (zombie_shooter) into this section
-   architecture + FSM. Functional parity: every gameplay value is unchanged.
-   Deliberate, behaviour-safe changes noted inline with "M1 NOTE".
+   --- HORROR OVERHAUL ---
+   Art direction reworked from the cartoon prototype to grim realism:
+   realistic Lambert materials (no toon ramp, no cell outlines), dark moody
+   lighting, heavy fog, a warm survivor light pool against the dark, gaunt
+   menacing zombies and a clearly-human hooded player. Difficulty tuned so
+   wave-1 zombies die in one hit (+1 hit per wave) and melee reach is longer.
    ========================================================================= */
 
 window.startMortimersHorde = function () {
@@ -214,44 +219,14 @@ const _rgt   = new THREE.Vector3();
 const _qTmp  = new THREE.Quaternion();
 
 /* ─── asset builders ───────────────────────────────────────────────────────
-   Procedural meshes built once from Three.js primitives — toon-shaded with
-   the cell-outline trick. Zombies and the player live here.                 */
+   Procedural meshes built once from Three.js primitives. Realistically lit
+   (MeshLambertMaterial — no toon ramp, no cell outlines). Zombies are gaunt
+   and decayed; the player is a clearly-human hooded survivor.                */
 
-// 4-step toon ramp shared by every MeshToonMaterial
-function makeToonRamp() {
-  const data = new Uint8Array([
-    90,90,90,255, 170,170,170,255, 235,235,235,255, 255,255,255,255
-  ]);
-  const tex = new THREE.DataTexture(data, 4, 1, THREE.RGBAFormat);
-  tex.needsUpdate = true;
-  tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
-  return tex;
-}
-const TOON = makeToonRamp();
+// realistic matte material in one call
+function mat(color) { return new THREE.MeshLambertMaterial({ color: color }); }
 
-// outline trick — a BackSide-rendered clone, slightly scaled up
-function withOutline(mesh, scale = 1.05, color = 0x110a18) {
-  const g = mesh.geometry.clone();
-  const m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
-  const out = new THREE.Mesh(g, m); out.scale.setScalar(scale);
-  mesh.add(out); return mesh;
-}
-
-// soft radial sprite glow (zombie eyes, etc.)
-function makeGlowTexture() {
-  const c = document.createElement("canvas"); c.width = c.height = 128;
-  const ctx = c.getContext("2d");
-  const g = ctx.createRadialGradient(64,64,0, 64,64,64);
-  g.addColorStop(0, "rgba(255,255,255,1)");
-  g.addColorStop(0.3, "rgba(255,241,166,0.6)");
-  g.addColorStop(1, "rgba(255,241,166,0)");
-  ctx.fillStyle = g; ctx.fillRect(0,0,128,128);
-  const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true;
-  return tex;
-}
-const GLOW_TEX = makeGlowTexture();
-
-// vertical gradient — used for the sky background
+// vertical gradient — used for the dark night sky
 function makeGradientTexture(top, bot) {
   const c = document.createElement("canvas"); c.width = 4; c.height = 256;
   const ctx = c.getContext("2d");
@@ -262,278 +237,247 @@ function makeGradientTexture(top, bot) {
   return tex;
 }
 
-/* zombie — reuses Mortimer's design, simplified for many-at-once performance.
-   Returns a `parts` record: { root, head, torso, armL/R, legL/R, pupils,
-   materials }. variant selects one of four palettes.                        */
+/* zombie — gaunt, hunched, decayed. The `torso` group keeps rotation 0 so the
+   wave/knockback animation drives it cleanly; the hunch is baked into child
+   meshes. Returns parts { root, head, torso, armL/R, legL/R, materials }.    */
 function buildZombie(variant = 0) {
   const palettes = [
-    { skin:"#9bc77a", shirt:"#6c4ba0", pants:"#3a2f4a", eye:"#fff1a6" }, // classic Mortimer
-    { skin:"#7fb8d1", shirt:"#b04a3a", pants:"#2a2a2a", eye:"#a6ffd1" }, // bluish
-    { skin:"#c79b7a", shirt:"#3a4a6c", pants:"#2a3a2a", eye:"#ff6f4a" }, // ruddy
-    { skin:"#bfb55a", shirt:"#2b2630", pants:"#5a3a3a", eye:"#ff6fc8" }, // sickly yellow
+    { skin:"#76836b", cloth:"#262521", clothD:"#141309", blood:"#3a120c", bone:"#b8af99" },
+    { skin:"#8a8377", cloth:"#20242a", clothD:"#101216", blood:"#34100a", bone:"#c1b69f" },
+    { skin:"#697a6c", cloth:"#2a241b", clothD:"#15110a", blood:"#3e1410", bone:"#b2a991" },
+    { skin:"#928777", cloth:"#1d1b20", clothD:"#0e0d10", blood:"#421a10", bone:"#bcb29b" },
   ];
   const p = palettes[variant % palettes.length];
-
-  const matSkin   = new THREE.MeshToonMaterial({ color: p.skin,   gradientMap: TOON });
-  const matSkinD  = new THREE.MeshToonMaterial({ color: shade(p.skin, 0.8), gradientMap: TOON });
-  const matShirt  = new THREE.MeshToonMaterial({ color: p.shirt,  gradientMap: TOON });
-  const matPants  = new THREE.MeshToonMaterial({ color: p.pants,  gradientMap: TOON });
-  const matShoe   = new THREE.MeshToonMaterial({ color: "#1a1220", gradientMap: TOON });
-  const matTooth  = new THREE.MeshToonMaterial({ color: "#f3ead0", gradientMap: TOON });
-  const matMouth  = new THREE.MeshToonMaterial({ color: "#2a0d20", gradientMap: TOON });
-  const matStitch = new THREE.MeshToonMaterial({ color: "#1a0f08", gradientMap: TOON });
-  const matHair   = new THREE.MeshToonMaterial({ color: "#1a0f08", gradientMap: TOON });
-  const matBone   = new THREE.MeshToonMaterial({ color: "#f1e8cf", gradientMap: TOON });
-  const pupilMat  = new THREE.MeshBasicMaterial({ color: p.eye });
+  const matSkin  = mat(p.skin);
+  const matSkinD = mat(shade(p.skin, 0.66));
+  const matCloth = mat(p.cloth);
+  const matClothD= mat(p.clothD);
+  const matBlood = mat(p.blood);
+  const matBone  = mat(p.bone);
+  const matVoid  = mat("#0a0a0c");                                    // hollow shadow
+  const emberMat = new THREE.MeshBasicMaterial({ color: "#5e120c" });  // faint dead eye
 
   const root = new THREE.Group();
   const parts = {};
 
-  /* torso */
+  /* torso — group stays at rotation 0; the forward hunch is baked into meshes */
   const torso = new THREE.Group();
-  const shirt = new THREE.Mesh(new THREE.BoxGeometry(1.35, 1.4, 0.85), matShirt);
-  shirt.castShadow = true; withOutline(shirt, 1.05);
-  torso.add(shirt);
-  // ragged hem
-  for (let i = 0; i < 6; i++) {
-    const tri = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.22, 4), matShirt);
-    tri.rotation.x = Math.PI;
-    tri.position.set(-0.55 + i*0.22, -0.78, 0.40);
-    torso.add(tri);
-    const tri2 = tri.clone(); tri2.position.z = -0.40; torso.add(tri2);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.26, 0.5), matCloth);
+  chest.rotation.x = 0.34; chest.castShadow = true; torso.add(chest);
+  // exposed ribs through torn flesh
+  for (let i = 0; i < 3; i++) {
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(0.6 - i*0.07, 0.07, 0.1), matBone);
+    rib.position.set(0, 0.26 - i*0.2, 0.4 - i*0.06); rib.rotation.x = 0.34;
+    torso.add(rib);
   }
-  // chest patch
-  const patch = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, 0.04), matSkinD);
-  patch.position.set(0.18, 0.12, 0.44); torso.add(patch);
+  const cavity = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.46, 0.12), matVoid);
+  cavity.position.set(0, 0.04, 0.3); cavity.rotation.x = 0.34; torso.add(cavity);
+  // dried bloodstain
+  const stain = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.5, 0.04), matBlood);
+  stain.position.set(-0.2, -0.3, 0.31); stain.rotation.x = 0.34; torso.add(stain);
+  // tattered hem
+  for (let i = 0; i < 5; i++) {
+    const t = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.26, 3), matClothD);
+    t.rotation.x = Math.PI; t.position.set(-0.38 + i*0.19, -0.72, 0.14);
+    torso.add(t);
+  }
 
-  /* head */
+  /* head — gaunt, jutting forward and down */
   const head = new THREE.Group();
-  const skull = new THREE.Mesh(new THREE.BoxGeometry(1.10, 1.0, 0.95), matSkin);
-  skull.castShadow = true; withOutline(skull, 1.045); head.add(skull);
-  // tufts
+  const skull = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.84, 0.78), matSkin);
+  skull.castShadow = true; head.add(skull);
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.18, 0.1), matSkinD);
+  brow.position.set(0, 0.16, 0.35); head.add(brow);
+  // deep hollow eye sockets with a faint dead ember
+  const sockGeom = new THREE.BoxGeometry(0.22, 0.2, 0.18);
+  const sockL = new THREE.Mesh(sockGeom, matVoid); sockL.position.set(-0.18, 0.0, 0.33); head.add(sockL);
+  const sockR = sockL.clone(); sockR.position.x = 0.18; head.add(sockR);
+  const emberGeom = new THREE.SphereGeometry(0.045, 8, 6);
+  const emberL = new THREE.Mesh(emberGeom, emberMat); emberL.position.set(-0.18, 0.0, 0.4); head.add(emberL);
+  const emberR = emberL.clone(); emberR.position.x = 0.18; head.add(emberR);
+  // hollow cheeks
+  const cheekL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.26, 0.12), matSkinD);
+  cheekL.position.set(-0.27, -0.18, 0.29); head.add(cheekL);
+  const cheekR = cheekL.clone(); cheekR.position.x = 0.27; head.add(cheekR);
+  // agape jaw + jagged teeth
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.24, 0.4), matSkin);
+  jaw.position.set(0, -0.46, 0.1); jaw.rotation.x = 0.42; head.add(jaw);
+  const maw = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.2, 0.16), matVoid);
+  maw.position.set(0, -0.3, 0.29); head.add(maw);
   for (let i = 0; i < 4; i++) {
-    const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.24, 5), matHair);
-    tuft.position.set(-0.36 + i*0.24, 0.55, -0.08 + (i%2)*0.16);
-    tuft.rotation.z = (Math.random()-0.5)*0.4;
-    head.add(tuft);
+    const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.1, 4), matBone);
+    tooth.position.set(-0.14 + i*0.095, -0.24, 0.35); head.add(tooth);
   }
-  // ears
-  const earL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.16), matSkin);
-  earL.position.set(-0.62, 0.04, 0); head.add(earL);
-  const earR = earL.clone(); earR.position.x = 0.62; head.add(earR);
-  // sockets
-  const socketL = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.26, 0.08), matStitch);
-  socketL.position.set(-0.24, 0.08, 0.48); head.add(socketL);
-  const socketR = socketL.clone(); socketR.position.x = 0.24; head.add(socketR);
-  // pupils
-  const pupilGeom = new THREE.SphereGeometry(0.07, 10, 8);
-  const pupilL = new THREE.Mesh(pupilGeom, pupilMat); pupilL.position.set(-0.24, 0.08, 0.54); head.add(pupilL);
-  const pupilR = pupilL.clone(); pupilR.position.x = 0.24; head.add(pupilR);
-  // glow sprites
-  const glowMat = new THREE.SpriteMaterial({ map: GLOW_TEX, color: p.eye,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-  const glowL = new THREE.Sprite(glowMat); glowL.scale.set(0.5,0.5,1);
-  glowL.position.set(-0.24, 0.08, 0.52); head.add(glowL);
-  const glowR = new THREE.Sprite(glowMat); glowR.scale.set(0.5,0.5,1);
-  glowR.position.set(0.24, 0.08, 0.52); head.add(glowR);
-  // mouth + teeth
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.16, 0.05), matMouth);
-  mouth.position.set(0.0, -0.26, 0.49); head.add(mouth);
-  for (let i = 0; i < 4; i++) {
-    const t = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.11, 4), matTooth);
-    t.position.set(-0.21 + i*0.14, -0.32, 0.52);
-    head.add(t);
+  // sparse matted hair
+  for (let i = 0; i < 3; i++) {
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.2), matClothD);
+    hair.position.set(-0.2 + i*0.2, 0.42, -0.04 + (i%2)*0.1); head.add(hair);
   }
-  // neck bolt
-  const nub = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.18, 10), matBone);
-  nub.position.set(-0.55, -0.5, 0); nub.rotation.z = Math.PI/2;
-  head.add(nub);
-  head.position.set(0, 1.05, 0);
+  head.position.set(0, 1.12, 0.32);   // jut forward
+  head.rotation.x = 0.3;              // tilt down
 
-  /* arms (outstretched zombie pose) */
-  function buildArm(side) {
+  /* arms — long, gaunt, reaching. upper.rotation.x is overwritten by the AI
+     while the zombie is active, so the rest pose here is just a fallback.    */
+  function buildArm() {
     const arm = new THREE.Group();
-    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.5), matShirt);
-    withOutline(shoulder, 1.05); arm.add(shoulder);
-
+    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.32), matCloth);
+    arm.add(shoulder);
     const upper = new THREE.Group();
-    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.7, 0.36), matSkin);
-    upperArm.position.y = -0.38; withOutline(upperArm, 1.05); upper.add(upperArm);
+    const ua = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.74, 0.19), matSkin);
+    ua.position.y = -0.4; upper.add(ua);
     arm.add(upper);
-
-    const forearm = new THREE.Group();
-    forearm.position.y = -0.74;
-    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.7, 0.32), matSkin);
-    fore.position.y = -0.36; withOutline(fore, 1.05); forearm.add(fore);
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.26, 0.35), matSkin);
-    hand.position.y = -0.82; withOutline(hand, 1.05); forearm.add(hand);
+    const forearm = new THREE.Group(); forearm.position.y = -0.78;
+    const fa = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.74, 0.16), matSkin);
+    fa.position.y = -0.38; forearm.add(fa);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.18, 0.24), matSkinD);
+    hand.position.y = -0.82; forearm.add(hand);
+    for (let i = 0; i < 3; i++) {                          // clawed fingers
+      const fng = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.17, 4), matBone);
+      fng.rotation.x = -1.9; fng.position.set(-0.055 + i*0.055, -0.95, 0.12);
+      forearm.add(fng);
+    }
     upper.add(forearm);
-
-    // outstretched: rotate upper arm forward
-    upper.rotation.x = -1.3;
-    forearm.rotation.x = -0.3;
-
+    upper.rotation.x = -1.2;
+    forearm.rotation.x = -0.4;
     arm.userData = { upper, forearm };
     return arm;
   }
-  const armL = buildArm('L'); armL.position.set(-0.88, 0.5, 0); armL.userData.side = 'L';
-  const armR = buildArm('R'); armR.position.set( 0.88, 0.5, 0); armR.userData.side = 'R';
+  const armL = buildArm(); armL.position.set(-0.6, 0.6, 0.05);
+  const armR = buildArm(); armR.position.set( 0.6, 0.6, 0.05);
 
-  /* legs */
+  /* legs — thin and stiff */
   function buildLeg() {
     const leg = new THREE.Group();
     const thighPiv = new THREE.Group();
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.78, 0.45), matPants);
-    thigh.position.y = -0.39; withOutline(thigh, 1.05); thighPiv.add(thigh);
-
-    const shin = new THREE.Group();
-    shin.position.y = -0.78;
-    const shinMesh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.78, 0.42), matPants);
-    shinMesh.position.y = -0.39; withOutline(shinMesh, 1.05); shin.add(shinMesh);
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.2, 0.7), matShoe);
-    shoe.position.set(0, -0.86, 0.1); withOutline(shoe, 1.05); shin.add(shoe);
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.62, 0.27), matClothD);
+    thigh.position.y = -0.31; thighPiv.add(thigh);
+    const shin = new THREE.Group(); shin.position.y = -0.62;
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.6, 0.23), matSkinD);
+    sh.position.y = -0.3; shin.add(sh);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.15, 0.44), matClothD);
+    foot.position.set(0, -0.66, 0.1); shin.add(foot);
     thighPiv.add(shin);
     leg.add(thighPiv);
     leg.userData = { thighPiv, shin };
     return leg;
   }
-  const legL = buildLeg(); legL.position.set(-0.32, -0.7, 0);
-  const legR = buildLeg(); legR.position.set( 0.32, -0.7, 0);
+  const legL = buildLeg(); legL.position.set(-0.23, -0.44, 0);
+  const legR = buildLeg(); legR.position.set( 0.23, -0.44, 0);
 
   root.add(torso); root.add(head); root.add(armL); root.add(armR); root.add(legL); root.add(legR);
   root.position.y = 1.8;
 
   parts.root = root; parts.head = head; parts.torso = torso;
   parts.armL = armL; parts.armR = armR; parts.legL = legL; parts.legR = legR;
-  parts.pupilL = pupilL; parts.pupilR = pupilR;
-  parts.materials = { matSkin, matShirt, matPants };
+  parts.materials = { matSkin, matCloth };
   return parts;
 }
 
-/* player — a grown man with a gnarled stick, two-handed grip stance.
-   Returns { root, torso, head, armL/R, legL/R, stickPivot }.                */
+/* player — a clearly-human hooded survivor. Upright posture (contrast to the
+   hunched dead). Returns { root, torso, head, armL/R, legL/R, stickPivot }.  */
 function buildPlayer() {
-  const matSkin  = new THREE.MeshToonMaterial({ color: "#e0b894", gradientMap: TOON });
-  const matVest  = new THREE.MeshToonMaterial({ color: "#3a4a3a", gradientMap: TOON });
-  const matPants = new THREE.MeshToonMaterial({ color: "#2a2e26", gradientMap: TOON });
-  const matBoot  = new THREE.MeshToonMaterial({ color: "#1a1410", gradientMap: TOON });
-  const matHair  = new THREE.MeshToonMaterial({ color: "#3a2818", gradientMap: TOON });
-  const matEye   = new THREE.MeshBasicMaterial({ color: "#1a0f08" });
+  const matSkin   = mat("#b5876a");
+  const matJacket = mat("#262a2e");
+  const matJacketD= mat("#16181b");
+  const matHood   = mat("#1e2024");
+  const matPants  = mat("#191a1d");
+  const matBoot   = mat("#0d0d0e");
+  const matStubble= mat("#2a2620");
+  const matEye    = new THREE.MeshBasicMaterial({ color: "#0a0a0a" });
 
   const root = new THREE.Group();
   const parts = {};
 
-  /* torso */
+  /* torso — heavy jacket, upright */
   const torso = new THREE.Group();
-  const vest = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.35, 0.8), matVest);
-  vest.castShadow = true; withOutline(vest, 1.05); torso.add(vest);
-  // tactical strap
-  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.4, 0.86), matBoot);
-  strap.position.set(0.25, 0, 0); torso.add(strap);
-  // chest pouch
-  const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.08), matBoot);
-  pouch.position.set(-0.25, 0.0, 0.42); torso.add(pouch);
+  const jacket = new THREE.Mesh(new THREE.BoxGeometry(1.24, 1.34, 0.78), matJacket);
+  jacket.castShadow = true; torso.add(jacket);
+  // open jacket front panel (darker, slightly proud)
+  const front = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.2, 0.06), matJacketD);
+  front.position.set(0, 0, 0.41); torso.add(front);
+  // shoulder yoke
+  const yoke = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.3, 0.84), matJacketD);
+  yoke.position.y = 0.6; torso.add(yoke);
 
-  /* head */
+  /* head — human, hood up */
   const head = new THREE.Group();
-  const skull = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.95, 0.9), matSkin);
-  skull.castShadow = true; withOutline(skull, 1.045); head.add(skull);
-  // hair cap
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.32, 0.94), matHair);
-  cap.position.y = 0.45; head.add(cap);
-  // ears
-  const earL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.24, 0.14), matSkin);
-  earL.position.set(-0.56, 0.0, 0); head.add(earL);
-  const earR = earL.clone(); earR.position.x = 0.56; head.add(earR);
-  // eyes (small dots)
-  const eyeGeom = new THREE.SphereGeometry(0.06, 8, 6);
-  const eyeL = new THREE.Mesh(eyeGeom, matEye); eyeL.position.set(-0.2, 0.06, 0.46); head.add(eyeL);
-  const eyeR = eyeL.clone(); eyeR.position.x = 0.2; head.add(eyeR);
-  // eyebrows (thick dark — a "serious" adult look)
-  const browGeom = new THREE.BoxGeometry(0.22, 0.05, 0.06);
-  const browL = new THREE.Mesh(browGeom, matHair); browL.position.set(-0.2, 0.20, 0.46);
-  browL.rotation.z = 0.12; head.add(browL);
-  const browR = browL.clone(); browR.position.x = 0.2; browR.rotation.z = -0.12; head.add(browR);
-  // beard — boxy stubble around chin and lower jaw
-  const beardMain = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.32, 0.18), matHair);
-  beardMain.position.set(0, -0.30, 0.42); head.add(beardMain);
-  // mustache patch over upper lip
-  const mustache = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.07, 0.08), matHair);
-  mustache.position.set(0, -0.12, 0.46); head.add(mustache);
-  // mouth (small dark slit, visible within the beard)
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.05), new THREE.MeshBasicMaterial({color:"#3a1f1a"}));
-  mouth.position.set(0, -0.22, 0.50); head.add(mouth);
-  head.position.set(0, 1.0, 0);
+  const skull = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.9, 0.86), matSkin);
+  skull.castShadow = true; head.add(skull);
+  // hood — crown, back and side drapes leave the face open
+  const hoodTop = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.42, 1.0), matHood);
+  hoodTop.position.set(0, 0.42, -0.04); head.add(hoodTop);
+  const hoodBack = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.92, 0.36), matHood);
+  hoodBack.position.set(0, 0.05, -0.46); head.add(hoodBack);
+  const hoodL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.94, 1.0), matHood);
+  hoodL.position.set(-0.6, 0.0, -0.06); head.add(hoodL);
+  const hoodR = hoodL.clone(); hoodR.position.x = 0.6; head.add(hoodR);
+  // shadowed brow under the hood
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.2, 0.1), matJacketD);
+  brow.position.set(0, 0.26, 0.4); head.add(brow);
+  // eyes — set, human, watchful
+  const eyeGeom = new THREE.BoxGeometry(0.12, 0.07, 0.06);
+  const eyeL = new THREE.Mesh(eyeGeom, matEye); eyeL.position.set(-0.19, 0.06, 0.44); head.add(eyeL);
+  const eyeR = eyeL.clone(); eyeR.position.x = 0.19; head.add(eyeR);
+  // nose + stubbled jaw
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.12), matSkin);
+  nose.position.set(0, -0.08, 0.46); head.add(nose);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.34, 0.5), matStubble);
+  jaw.position.set(0, -0.34, 0.24); head.add(jaw);
+  head.position.set(0, 1.06, 0);
 
-  /* arms — natural two-handed grip stance */
+  /* arms — two-handed grip stance. The arm GROUP is twisted by the swing
+     animation; the grip pose lives in the upper / forearm groups.            */
   function buildArm(side) {
     const arm = new THREE.Group();
-    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.36, 0.46), matVest);
-    withOutline(shoulder, 1.05); arm.add(shoulder);
-
+    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.36, 0.44), matJacket);
+    arm.add(shoulder);
     const upper = new THREE.Group();
-    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.62, 0.32), matVest);
-    upperArm.position.y = -0.34; withOutline(upperArm, 1.05); upper.add(upperArm);
+    const ua = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.6, 0.3), matJacket);
+    ua.position.y = -0.33; upper.add(ua);
     arm.add(upper);
-
-    const forearm = new THREE.Group();
-    forearm.position.y = -0.66;
-    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.55, 0.3), matSkin);
-    fore.position.y = -0.30; withOutline(fore, 1.05); forearm.add(fore);
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.32), matSkin);
-    hand.position.y = -0.68; withOutline(hand, 1.05); forearm.add(hand);
+    const forearm = new THREE.Group(); forearm.position.y = -0.64;
+    const fa = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.52, 0.27), matJacketD);
+    fa.position.y = -0.28; forearm.add(fa);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.2, 0.3), matSkin);
+    hand.position.y = -0.62; forearm.add(hand);
     upper.add(forearm);
-
-    // hands meet in front of the body at chest height to grip the stick
     if (side === 'R') {
-      upper.rotation.x = -0.45;     // upper arm forward & down (back hand)
-      upper.rotation.z = -0.15;
-      forearm.rotation.x = -1.25;
-      forearm.rotation.y = -0.25;
+      upper.rotation.x = -0.45; upper.rotation.z = -0.15;
+      forearm.rotation.x = -1.25; forearm.rotation.y = -0.25;
     } else {
-      upper.rotation.x = -0.55;     // front hand reaches a touch further
-      upper.rotation.z = 0.15;
-      forearm.rotation.x = -1.35;
-      forearm.rotation.y = 0.35;
+      upper.rotation.x = -0.55; upper.rotation.z = 0.15;
+      forearm.rotation.x = -1.35; forearm.rotation.y = 0.35;
     }
-
     arm.userData = { upper, forearm, hand };
     return arm;
   }
-  const armL = buildArm('L'); armL.position.set(-0.78, 0.45, 0);
-  const armR = buildArm('R'); armR.position.set( 0.78, 0.45, 0);
+  const armL = buildArm('L'); armL.position.set(-0.76, 0.46, 0);
+  const armR = buildArm('R'); armR.position.set( 0.76, 0.46, 0);
 
-  /* stick — wooden club. Mesh extends along +X so rotating the pivot around
-     Y produces a true horizontal slash arc. Pivot sits where the hands meet. */
+  /* weapon — a splintered, nail-studded club. Mesh runs along +X so rotating
+     the pivot around Y sweeps a true horizontal arc.                         */
   const stickPivot = new THREE.Group();
   stickPivot.position.set(0.0, 0.55, 0.5);
-
   const stickMesh = new THREE.Group();
-  const matWood = new THREE.MeshToonMaterial({ color: "#6b4423", gradientMap: TOON });
-  const matBark = new THREE.MeshToonMaterial({ color: "#3d2814", gradientMap: TOON });
+  const matWood = mat("#3a2a1a");
+  const matWoodD= mat("#21160d");
+  const matNail = mat("#2a2c30");
 
-  // shaft — tapered, length along +X
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1.5, 7), matWood);
-  shaft.rotation.z = Math.PI/2;
-  shaft.position.x = 0.7;
-  withOutline(shaft, 1.06); stickMesh.add(shaft);
-  // gnarled knot partway up
-  const knot = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), matBark);
-  knot.position.set(1.05, 0.07, 0); stickMesh.add(knot);
-  // tip cap
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), matBark);
-  tip.position.x = 1.45; stickMesh.add(tip);
-  // grip wrap at the gripped end
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.32, 8), matBark);
-  grip.rotation.z = Math.PI/2;
-  grip.position.x = 0.15; stickMesh.add(grip);
-
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.5, 6), matWood);
+  shaft.rotation.z = Math.PI/2; shaft.position.x = 0.7; stickMesh.add(shaft);
+  const head1 = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.3), matWoodD);
+  head1.position.x = 1.2; stickMesh.add(head1);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.34, 8), matWoodD);
+  grip.rotation.z = Math.PI/2; grip.position.x = 0.14; stickMesh.add(grip);
+  // protruding nails near the head
+  for (let i = 0; i < 4; i++) {
+    const nail = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.22, 4), matNail);
+    const ang = i * (TAU/4) + 0.4;
+    nail.position.set(1.2, Math.sin(ang)*0.22, Math.cos(ang)*0.22);
+    nail.rotation.x = -ang; stickMesh.add(nail);
+  }
   stickPivot.add(stickMesh);
 
-  // Three key orientations as quaternions for a clean slerp:
-  //   REST   — tilted up over the right shoulder (ready)
-  //   WIND   — pulled further back behind the shoulder
-  //   STRIKE — swept across horizontal, extended to the left
   const E = THREE.Euler, Q = THREE.Quaternion;
   const qRest   = new Q().setFromEuler(new E(0.05,  0.10, 0.95));
   const qWind   = new Q().setFromEuler(new E(0.15,  1.10, 0.80));
@@ -545,22 +489,20 @@ function buildPlayer() {
   function buildLeg() {
     const leg = new THREE.Group();
     const thighPiv = new THREE.Group();
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.72, 0.42), matPants);
-    thigh.position.y = -0.36; withOutline(thigh, 1.05); thighPiv.add(thigh);
-
-    const shin = new THREE.Group();
-    shin.position.y = -0.72;
-    const shinMesh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.72, 0.4), matPants);
-    shinMesh.position.y = -0.36; withOutline(shinMesh, 1.05); shin.add(shinMesh);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.6), matBoot);
-    boot.position.set(0, -0.8, 0.08); withOutline(boot, 1.05); shin.add(boot);
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.66, 0.4), matPants);
+    thigh.position.y = -0.33; thighPiv.add(thigh);
+    const shin = new THREE.Group(); shin.position.y = -0.66;
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.62, 0.36), matPants);
+    sh.position.y = -0.31; shin.add(sh);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.56), matBoot);
+    boot.position.set(0, -0.66, 0.08); shin.add(boot);
     thighPiv.add(shin);
     leg.add(thighPiv);
     leg.userData = { thighPiv, shin };
     return leg;
   }
-  const legL = buildLeg(); legL.position.set(-0.28, -0.65, 0);
-  const legR = buildLeg(); legR.position.set( 0.28, -0.65, 0);
+  const legL = buildLeg(); legL.position.set(-0.27, -0.36, 0);
+  const legR = buildLeg(); legR.position.set( 0.27, -0.36, 0);
 
   root.add(torso); root.add(head); root.add(armL); root.add(armR);
   root.add(stickPivot); root.add(legL); root.add(legR);
@@ -574,9 +516,7 @@ function buildPlayer() {
 
 /* ─── audio ─────────────────────────────────────────────────────────────────
    Procedurally-generated WebAudio sound bank. No external files. The context
-   is created lazily on first use (after a user gesture).
-   M1 NOTE: v1's unused gun sounds (shot/reload/empty) are dropped — this is a
-   melee game. The brief's expanded sound bank arrives in Milestone 11.       */
+   is created lazily on first use (after a user gesture).                     */
 const Audio = (() => {
   let ctx = null;
   function ensure() {
@@ -587,33 +527,32 @@ const Audio = (() => {
     const c = ensure(); if (!c) return;
     const t = c.currentTime;
     const o = c.createOscillator(), g = c.createGain();
-    o.type = "triangle"; o.frequency.setValueAtTime(800, t);
-    o.frequency.exponentialRampToValueAtTime(200, t+0.08);
-    g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.09);
-    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.1);
+    o.type = "triangle"; o.frequency.setValueAtTime(420, t);
+    o.frequency.exponentialRampToValueAtTime(90, t+0.1);
+    g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.12);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.13);
   }
   function groan() {
     const c = ensure(); if (!c) return;
     const t = c.currentTime;
     const o = c.createOscillator(), g = c.createGain();
     o.type = "sawtooth";
-    o.frequency.setValueAtTime(80 + Math.random()*20, t);
-    o.frequency.linearRampToValueAtTime(50, t+0.5);
+    o.frequency.setValueAtTime(58 + Math.random()*16, t);
+    o.frequency.linearRampToValueAtTime(38, t+0.6);
     g.gain.setValueAtTime(0.0, t);
-    g.gain.linearRampToValueAtTime(0.06, t+0.1);
-    g.gain.linearRampToValueAtTime(0.001, t+0.55);
-    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.6);
+    g.gain.linearRampToValueAtTime(0.07, t+0.12);
+    g.gain.linearRampToValueAtTime(0.001, t+0.7);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.75);
   }
   function hurt() {
     const c = ensure(); if (!c) return;
     const t = c.currentTime;
     const o = c.createOscillator(), g = c.createGain();
-    o.type = "sawtooth"; o.frequency.value = 220;
-    g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.25);
-    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.26);
+    o.type = "sawtooth"; o.frequency.value = 180;
+    g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.3);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.31);
   }
   function swing() {
-    // a quick filtered-noise whoosh
     const c = ensure(); if (!c) return;
     const t = c.currentTime;
     const bs = c.createBufferSource();
@@ -625,8 +564,8 @@ const Audio = (() => {
     }
     bs.buffer = buf;
     const filter = c.createBiquadFilter();
-    filter.type = "bandpass"; filter.frequency.value = 1200; filter.Q.value = 1.4;
-    const g = c.createGain(); g.gain.value = 0.18;
+    filter.type = "bandpass"; filter.frequency.value = 900; filter.Q.value = 1.6;
+    const g = c.createGain(); g.gain.value = 0.16;
     bs.connect(filter).connect(g).connect(c.destination);
     bs.start(t); bs.stop(t + 0.2);
   }
@@ -634,91 +573,122 @@ const Audio = (() => {
 })();
 
 /* ─── world ─────────────────────────────────────────────────────────────────
-   The scene environment: sky, ground, the graveyard prop set. Built once into
-   the scene at boot. Collision is presently a simple arena radius (see
-   ARENA_RADIUS in the player section); the declarative zone system with
-   polygon bounds arrives in Milestone 5.                                     */
+   A dark, derelict town at night — building shells ring the play area,
+   debris and dead trees scatter the ground. Lit almost entirely by the
+   player's own light against heavy fog. Collision is a simple arena radius
+   for now (ARENA_RADIUS); the expanding-town zone system is the next step.   */
 function buildEnvironment(scene) {
-  const palette = { top:"#1a3146", bot:"#06090f", fog:"#0b1320", moon:"#cfe6ff", ground:"#0b1320" };
+  scene.background = makeGradientTexture("#0b0d14", "#020204");
 
-  scene.background = makeGradientTexture(palette.top, palette.bot);
-  scene.fog = new THREE.Fog(palette.fog, 18, 65);
-
-  // ground
-  const groundMat = new THREE.MeshToonMaterial({ color: palette.ground, gradientMap: TOON });
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(80, 64), groundMat);
+  // dark, cold earth / cracked street
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(95, 48), mat("#0c0d0b"));
   ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
   scene.add(ground);
 
-  // arena border ring — a subtle lighter disc marking the play area
-  const ringMat = new THREE.MeshToonMaterial({ color: shade(palette.ground, 1.4), gradientMap: TOON });
-  const arena = new THREE.Mesh(new THREE.RingGeometry(28, 30, 64), ringMat);
-  arena.rotation.x = -Math.PI/2; arena.position.y = 0.01;
-  scene.add(arena);
+  // a barely-there ring marking the ground you can hold
+  const ring = new THREE.Mesh(new THREE.RingGeometry(26.4, 27.4, 56), mat("#16150f"));
+  ring.rotation.x = -Math.PI/2; ring.position.y = 0.02; scene.add(ring);
 
-  // moon
-  const moon = new THREE.Mesh(new THREE.SphereGeometry(3, 32, 24),
-    new THREE.MeshBasicMaterial({ color: palette.moon }));
-  moon.position.set(-22, 18, -28); scene.add(moon);
+  // dim hazy moon, low and sickly
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(2.6, 20, 14),
+    new THREE.MeshBasicMaterial({ color: "#39414f" }));
+  moon.position.set(-30, 19, -40); scene.add(moon);
 
-  // stars
-  const N = 380;
-  const starGeo = new THREE.BufferGeometry();
-  const positions = new Float32Array(N*3);
-  for (let i = 0; i < N; i++) {
-    const r = 50 + Math.random()*15;
-    const th = Math.random()*TAU;
-    const ph = Math.random()*Math.PI*0.55 + 0.1;
-    positions[i*3+0] = Math.cos(th)*Math.sin(ph)*r;
-    positions[i*3+1] = Math.cos(ph)*r + 5;
-    positions[i*3+2] = Math.sin(th)*Math.sin(ph)*r - 6;
+  // derelict building shells ringing the arena
+  const buildMats = [mat("#15161a"), mat("#101015"), mat("#13110f")];
+  const roofMat = mat("#08080a");
+  const winDark = mat("#050507");
+  const winLit  = new THREE.MeshBasicMaterial({ color: "#241803" });   // a faint distant light
+  function makeBuilding() {
+    const g = new THREE.Group();
+    const w = rand(5, 9.5), h = rand(7, 15), d = rand(5, 9);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+      buildMats[Math.floor(Math.random()*buildMats.length)]);
+    body.position.y = h/2; body.castShadow = true; body.receiveShadow = true; g.add(body);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w+0.5, 0.5, d+0.5), roofMat);
+    roof.position.y = h + 0.2; g.add(roof);
+    const cols = Math.max(1, Math.round(w / 2.6));
+    const rows = Math.max(1, Math.round(h / 3.4));
+    for (let c = 0; c < cols; c++) {
+      const wx = cols === 1 ? 0 : -((w-2.4)/2) + c * ((w-2.4)/(cols-1));
+      for (let r = 0; r < rows; r++) {
+        if (Math.random() < 0.25) continue;
+        const lit = Math.random() < 0.1;
+        const win = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.3, 0.3), lit ? winLit : winDark);
+        win.position.set(wx, 1.9 + r*3.2, d/2 + 0.08);
+        g.add(win);
+      }
+    }
+    return g;
   }
-  starGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  scene.add(new THREE.Points(starGeo,
-    new THREE.PointsMaterial({ color: palette.moon, size: 0.18, sizeAttenuation: true,
-                                transparent: true, opacity: 0.85 })));
-
-  // tombstones — scattered, each with collision data (for the zone system later)
-  const tombstones = [];
-  const propMat = new THREE.MeshToonMaterial({ color: shade(palette.ground, 1.7), gradientMap: TOON });
-  const propMatDark = new THREE.MeshToonMaterial({ color: shade(palette.ground, 1.2), gradientMap: TOON });
-  for (let i = 0; i < 32; i++) {
-    const r = 6 + Math.random()*18;
-    const a = Math.random()*TAU;
-    const w = rand(0.7, 1.3), h = rand(1.0, 2.2);
-    const stone = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.28), propMat);
-    withOutline(stone, 1.04);
-    stone.position.set(Math.cos(a)*r, h/2, Math.sin(a)*r);
-    stone.rotation.y = a + (Math.random()-0.5)*0.6;
-    stone.castShadow = true; stone.receiveShadow = true;
-    scene.add(stone);
-    const base = new THREE.Mesh(new THREE.BoxGeometry(w*1.3, 0.22, 0.42), propMatDark);
-    base.position.copy(stone.position); base.position.y = 0.11;
-    base.rotation.y = stone.rotation.y;
-    scene.add(base);
-    tombstones.push({ pos: stone.position.clone(), radius: w*0.8 });
+  for (let i = 0; i < 9; i++) {
+    const a = (i/9)*TAU + rand(-0.16, 0.16);
+    const r = 34 + rand(0, 8);
+    const b = makeBuilding();
+    b.position.set(Math.cos(a)*r, 0, Math.sin(a)*r);
+    b.rotation.y = Math.atan2(-Math.cos(a), -Math.sin(a));   // window face toward centre
+    scene.add(b);
   }
 
-  // crooked dead trees in the distance
-  for (let i = 0; i < 14; i++) {
-    const r = 26 + Math.random()*8;
-    const a = Math.random()*TAU;
-    const treeMat = new THREE.MeshToonMaterial({ color: "#1a0f1a", gradientMap: TOON });
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.3, 4, 6), treeMat);
-    trunk.position.set(Math.cos(a)*r, 2, Math.sin(a)*r);
-    trunk.rotation.z = (Math.random()-0.5)*0.3;
-    trunk.castShadow = true;
+  // dead, gnarled trees
+  const treeMat = mat("#0d0a0c");
+  for (let i = 0; i < 6; i++) {
+    const r = 24 + Math.random()*7, a = Math.random()*TAU;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 4.4, 6), treeMat);
+    trunk.position.set(Math.cos(a)*r, 2.2, Math.sin(a)*r);
+    trunk.rotation.z = (Math.random()-0.5)*0.3; trunk.castShadow = true;
     scene.add(trunk);
     for (let j = 0; j < 3; j++) {
-      const br = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 1.4, 5), treeMat);
-      br.position.set(0, 1 + j*0.6, 0);
-      br.rotation.z = (Math.random()-0.5)*1.4 + (j%2 ? 0.6 : -0.6);
-      br.rotation.x = (Math.random()-0.5)*0.6;
+      const br = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.11, 1.5, 5), treeMat);
+      br.position.set(0, 1.1 + j*0.6, 0);
+      br.rotation.z = (Math.random()-0.5)*1.5 + (j%2 ? 0.7 : -0.7);
+      br.rotation.x = (Math.random()-0.5)*0.7;
       trunk.add(br);
     }
   }
 
-  return { ground, moon, tombstones };
+  // broken streetlamps — unlit, just dark silhouettes
+  const lampMat = mat("#101012"), lampHead = new THREE.MeshBasicMaterial({ color:"#1a1505" });
+  for (let i = 0; i < 3; i++) {
+    const a = i*(TAU/3) + 0.5, r = 19;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 6, 6), lampMat);
+    post.position.set(Math.cos(a)*r, 3, Math.sin(a)*r);
+    post.rotation.z = (Math.random()-0.5)*0.25; post.castShadow = true;
+    scene.add(post);
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.5), lampHead);
+    lamp.position.set(post.position.x, 6, post.position.z); scene.add(lamp);
+  }
+
+  // scattered debris — crates, rubble, planks, a wrecked car
+  const crateMat = mat("#231c12"), rubbleMat = mat("#141414"), plankMat = mat("#1d150c");
+  for (let i = 0; i < 16; i++) {
+    const r = 4 + Math.random()*21, a = Math.random()*TAU;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    const kind = Math.random();
+    if (kind < 0.4) {
+      const s = rand(0.5, 1.0);
+      const crate = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), crateMat);
+      crate.position.set(x, s/2, z); crate.rotation.y = Math.random()*TAU;
+      crate.castShadow = true; scene.add(crate);
+    } else if (kind < 0.75) {
+      const rb = new THREE.Mesh(new THREE.BoxGeometry(rand(0.5,1.4), rand(0.2,0.5), rand(0.5,1.4)), rubbleMat);
+      rb.position.set(x, 0.15, z); rb.rotation.y = Math.random()*TAU; scene.add(rb);
+    } else {
+      const pl = new THREE.Mesh(new THREE.BoxGeometry(rand(1.2,2.4), 0.12, 0.24), plankMat);
+      pl.position.set(x, 0.08, z); pl.rotation.y = Math.random()*TAU;
+      pl.rotation.z = (Math.random()-0.5)*0.3; scene.add(pl);
+    }
+  }
+  // a wrecked car hulk
+  const carMat = mat("#171715"), car = new THREE.Group();
+  const cBody = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.9, 4.4), carMat);
+  cBody.position.y = 0.7; cBody.castShadow = true; car.add(cBody);
+  const cCab = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.8, 2.0), carMat);
+  cCab.position.set(0, 1.45, -0.3); car.add(cCab);
+  car.position.set(rand(-14,14), 0, rand(-14,14)); car.rotation.y = Math.random()*TAU;
+  scene.add(car);
+
+  return { ground, moon };
 }
 
 /* ─── player ────────────────────────────────────────────────────────────────
@@ -729,15 +699,15 @@ function buildEnvironment(scene) {
 // movement (units/second) — both modifiable by upgrades in Milestone 4
 const WALK_SPEED   = 5.0;
 const SPRINT_SPEED = 8.5;
-const ARENA_RADIUS = 27;          // simple circular bound; zones replace this in M5
+const ARENA_RADIUS = 27;          // simple circular bound; zones replace this later
 
 // melee swing timing (ms from swing start) and reach
-const SWING_WINDUP_END   = 140;   // 0-140ms     : stick winds back
+const SWING_WINDUP_END   = 140;   // 0-140ms     : club winds back
 const SWING_STRIKE_END   = 320;   // 140-320ms   : the slash — HIT WINDOW
 const SWING_RECOVERY_END = 520;   // 320-520ms   : returns to rest
 const SWING_COOLDOWN     = 480;   // gap before another swing is allowed
-const MELEE_RANGE = 3.0;
-const MELEE_CONE  = 0.4;          // cos(half-angle) — 0.4 ≈ 67 degrees
+const MELEE_RANGE  = 5.0;         // longer reach — keeps the dead at bay
+const MELEE_CONE   = 0.4;         // cos(half-angle) — 0.4 ≈ 67 degrees
 const MELEE_DAMAGE = 2;
 
 // input
@@ -914,7 +884,8 @@ function spawnZombie() {
   scene.add(z.root);
 
   const speed = rand(1.2, 2.4) + state.wave*0.08;
-  const hp = 3 + Math.floor(state.wave*0.4);
+  // HP scales with the wave: wave 1 dies in one hit, +1 hit needed per wave.
+  const hp = MELEE_DAMAGE * state.wave;
   zombies.push({
     parts: z, hp, maxHp: hp, speed,
     attackCooldown: 0, alive: true, dyingAt: 0,
@@ -1019,8 +990,9 @@ function updateZombies(dt) {
 /* ─── waves ──────────────────────────────────────────────────────────────────
    Spawn scheduling, difficulty scaling and the end-of-wave bonus. updateWaves()
    runs only while phase === PLAYING.
-   M1 NOTE: scaling values match v1 exactly. The brief's reworked formulas
-   (5+N*2, 30-alive cap, 6s inter-wave pause) are Milestone 3.                */
+   M1 NOTE: the brief's reworked formulas (5+N*2, 30-alive cap, 6s inter-wave
+   pause) are Milestone 3. The end-of-wave bonus is applied once (v1 applied it
+   every frame of the gap — a bug; brief 5.5 specifies it once).              */
 function startNextWave() {
   state.wave++;
   state.zombiesToSpawn = 4 + state.wave * 2;
@@ -1043,7 +1015,7 @@ function updateWaves(dt) {
       state.zombiesToSpawn--;
     }
   } else if (state.zombiesToSpawn === 0 && state.zombiesAlive === 0) {
-    // wave cleared — bonus, then schedule the next wave
+    // wave cleared — bonus once, then schedule the next wave
     if (!state.nextWaveAt) {
       state.score += 250 * state.wave;
       updateScoreUI();
@@ -1089,7 +1061,7 @@ function spawnHitFloater(text, head) {
   const el = document.createElement("div");
   el.className = "floater";
   el.textContent = text;
-  if (head) el.style.color = "#ff6f4a";
+  if (head) el.style.color = "#c0392b";
   el.style.left = (window.innerWidth/2 + rand(-30, 30)) + "px";
   el.style.top  = (window.innerHeight/2 + rand(-30, -10)) + "px";
   document.body.appendChild(el);
@@ -1107,11 +1079,10 @@ function spawnHitFloater(text, head) {
    Explicit game-flow FSM. `state` is the single global mutable record; every
    gameplay system reads and writes through it.
 
-     TITLE -> PLAYING <-> UPGRADE_PICK ;  PLAYING -> GAME_OVER -> TITLE
+     TITLE - PLAYING - UPGRADE_PICK ;  PLAYING - GAME_OVER - TITLE
 
-   M1 NOTE: UPGRADE_PICK is declared but unused until Milestone 4. "Try again"
-   still routes GAME_OVER -> TITLE via a page reload (a seamless reset is a
-   later polish item).                                                         */
+   UPGRADE_PICK is declared but unused until Milestone 4. "Try again" routes
+   GAME_OVER - TITLE via a page reload (a seamless reset is a later item).    */
 const Phase = { TITLE: "TITLE", PLAYING: "PLAYING", UPGRADE_PICK: "UPGRADE_PICK", GAME_OVER: "GAME_OVER" };
 
 const state = {
@@ -1173,7 +1144,7 @@ function beginGame() {
 // PLAYING -> GAME_OVER
 function gameOver() {
   centerCard.innerHTML =
-      '<div class="big">You Were Eaten</div>'
+      '<div class="big">You Were Devoured</div>'
     + '<div class="sub">Survived ' + state.wave + ' wave' + (state.wave===1?"":"s")
     + ' · ' + state.kills + ' kill' + (state.kills===1?"":"s")
     + ' · score ' + state.score + '</div>'
@@ -1200,18 +1171,23 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 stage.appendChild(renderer.domElement);
 
-// lights
-const hemi = new THREE.HemisphereLight(0xb0c7ff, 0x1a1228, 0.55);
+// heavy fog — the dead loom out of the dark
+scene.fog = new THREE.Fog(0x070811, 7, 40);
+
+// lighting — dark and cold, with a warm survivor light pool
+const hemi = new THREE.HemisphereLight(0x2a2f3a, 0x050507, 0.55);
 scene.add(hemi);
-const keyLight = new THREE.DirectionalLight(0xfff7d6, 0.9);
-keyLight.position.set(-22, 28, -10); keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(1024, 1024);
-keyLight.shadow.camera.left = -30; keyLight.shadow.camera.right = 30;
-keyLight.shadow.camera.top = 30; keyLight.shadow.camera.bottom = -30;
-keyLight.shadow.camera.near = 0.1; keyLight.shadow.camera.far = 80;
-scene.add(keyLight);
-const rim = new THREE.DirectionalLight(0x8090ff, 0.3);
-rim.position.set(10, 8, 15); scene.add(rim);
+const moonLight = new THREE.DirectionalLight(0x90a0bc, 0.4);
+moonLight.position.set(-24, 34, -18); moonLight.castShadow = true;
+moonLight.shadow.mapSize.set(1024, 1024);
+moonLight.shadow.camera.left = -34; moonLight.shadow.camera.right = 34;
+moonLight.shadow.camera.top = 34; moonLight.shadow.camera.bottom = -34;
+moonLight.shadow.camera.near = 0.1; moonLight.shadow.camera.far = 90;
+scene.add(moonLight);
+// warm light that follows the player — a pool of safety against the dark
+const playerLight = new THREE.PointLight(0xffb070, 2.3, 30);
+playerLight.position.set(0, 4.2, 0);
+scene.add(playerLight);
 
 // build the world and the player
 buildEnvironment(scene);
@@ -1227,6 +1203,7 @@ function updateCamera() {
     state.pos.z + Math.cos(cy) * chp * CAM_DIST
   );
   camera.lookAt(state.pos.x, 2.3, state.pos.z);
+  playerLight.position.set(state.pos.x, 4.2, state.pos.z);
 }
 
 const clock = new THREE.Clock();
