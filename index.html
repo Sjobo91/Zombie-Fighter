@@ -1,17 +1,1265 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zombie Fighter</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mortimer's Horde — Survival</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0f0a1c; overscroll-behavior: none; }
+  body { font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", sans-serif;
+         color: #f3edff; overflow: hidden; user-select: none; }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; touch-action: none; cursor: crosshair; }
+
+  /* HUD */
+  .hud { position: fixed; pointer-events: none; z-index: 5;
+         text-shadow: 0 1px 2px rgba(0,0,0,.65); }
+  .hud .label { font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+                opacity: .6; margin-bottom: 2px; }
+  .hud .value { font-family: "Times New Roman", Georgia, serif; font-style: italic;
+                font-size: 28px; letter-spacing: -.005em; }
+
+  #healthHud   { left: 16px; top: 14px; }
+  #waveHud     { right: 16px; top: 14px; text-align: right; }
+  #ammoHud     { right: 16px; bottom: 16px; text-align: right; }
+  #scoreHud    { left: 16px; bottom: 16px; }
+
+  /* Health bar */
+  .bar { width: 220px; height: 8px; background: rgba(255,255,255,.12);
+         border: 1.5px solid rgba(255,255,255,.4); border-radius: 2px; overflow: hidden;
+         box-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  .bar > i { display: block; height: 100%;
+             background: linear-gradient(90deg, #ff6b4a, #ffd166);
+             transition: width .18s ease; }
+
+  /* Crosshair */
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 26px; height: 26px;
+               transform: translate(-50%,-50%); z-index: 4; pointer-events: none;
+               opacity: .85; }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: #fff7d6;
+    box-shadow: 0 0 4px rgba(0,0,0,.7);
+  }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+  #crosshair::after  { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+  #crosshair.hit { animation: hitPulse .18s ease; }
+  @keyframes hitPulse { 0%{transform:translate(-50%,-50%) scale(1.6); opacity:1}
+                        100%{transform:translate(-50%,-50%) scale(1); opacity:.85} }
+
+  /* Center messages */
+  .center { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+            z-index: 7; text-align: center; pointer-events: auto; }
+  .center .big { font-family: "Times New Roman", Georgia, serif; font-style: italic;
+                 font-size: 48px; letter-spacing: -.01em; margin-bottom: 8px;
+                 text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+  .center .sub { font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+                 opacity: .75; max-width: 380px; margin: 0 auto 14px; line-height: 1.6; }
+  .btn { display: inline-block; padding: 10px 22px; border: 2px solid #fff7d6;
+         background: rgba(255,247,214,.05); color: #fff7d6; cursor: pointer;
+         font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
+         border-radius: 2px; transition: all .15s; }
+  .btn:hover { background: #fff7d6; color: #1a0f08; }
+
+  #overlay { position: fixed; inset: 0; z-index: 6;
+             background: radial-gradient(ellipse at center, rgba(15,10,28,.4), rgba(15,10,28,.92));
+             pointer-events: auto; }
+  #overlay.hidden { display: none; }
+
+  /* Wave announcement banner */
+  #waveBanner { position: fixed; left: 50%; top: 28%; transform: translate(-50%,-50%);
+                z-index: 8; text-align: center; pointer-events: none;
+                opacity: 0; transition: opacity .35s; }
+  #waveBanner.on { opacity: 1; }
+  #waveBanner .b1 { font-size: 11px; letter-spacing: .3em; text-transform: uppercase; opacity: .7; }
+  #waveBanner .b2 { font-family: "Times New Roman", Georgia, serif; font-style: italic;
+                    font-size: 56px; line-height: 1; margin-top: 4px;
+                    text-shadow: 0 2px 12px rgba(255,107,74,.5); }
+
+  /* Damage vignette */
+  #damageVignette { position: fixed; inset: 0; z-index: 3; pointer-events: none;
+                    box-shadow: inset 0 0 120px 30px rgba(255,40,40,0);
+                    transition: box-shadow .25s ease; }
+  #damageVignette.on { box-shadow: inset 0 0 200px 60px rgba(255,40,40,.55); }
+
+  /* Hit marker text */
+  .floater { position: fixed; z-index: 7; pointer-events: none;
+             font-family: "Courier New", monospace; font-weight: 700;
+             font-size: 22px; color: #fff1a6; text-shadow: 1px 1px 0 #1a0f08, 0 0 8px rgba(255,200,80,.6); }
+</style>
 </head>
 <body>
-  <canvas id="game"></canvas>
-  <div id="instructions">
-    <strong>ZOMBIE FIGHTER</strong>
-    &nbsp;&nbsp;Move: W A S D &nbsp;&nbsp;|&nbsp;&nbsp; Aim: Mouse &nbsp;&nbsp;|&nbsp;&nbsp; Shoot: Hold Click
+  <div id="stage"></div>
+
+  <div id="crosshair"></div>
+  <div id="damageVignette"></div>
+
+  <div class="hud" id="healthHud">
+    <div class="label">Vitality</div>
+    <div class="bar"><i id="healthFill" style="width:100%"></i></div>
   </div>
-  <script src="game.js"></script>
+
+  <div class="hud" id="waveHud">
+    <div class="label">Wave</div>
+    <div class="value" id="waveNum">1</div>
+  </div>
+
+  <div class="hud" id="ammoHud">
+    <div class="label">Weapon</div>
+    <div class="value" id="weaponText">Gnarled Stick</div>
+  </div>
+
+  <div class="hud" id="scoreHud">
+    <div class="label">Kills · Score</div>
+    <div class="value" id="scoreText">0 · 0</div>
+  </div>
+
+  <div id="waveBanner">
+    <div class="b1" id="waveBannerSub">Brace yourself</div>
+    <div class="b2" id="waveBannerBig">Wave 1</div>
+  </div>
+
+  <div id="overlay">
+    <div class="center" id="centerCard">
+      <div class="big">Mortimer's Horde</div>
+      <div class="sub">
+        Survive the graveyard. WASD to move · Mouse to look · Click to swing · Shift+W to sprint.
+      </div>
+      <button class="btn" id="startBtn">Begin</button>
+    </div>
+  </div>
+
+<!-- Three.js — try multiple CDNs in case one is blocked / down -->
+<script>
+(function loadThree() {
+  var urls = [
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.149.0/three.min.js",
+    "https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js",
+    "https://unpkg.com/three@0.149.0/build/three.min.js"
+  ];
+  var i = 0;
+  function next() {
+    if (i >= urls.length) {
+      document.body.innerHTML =
+        '<div style="color:#f3edff;font-family:sans-serif;padding:40px;max-width:520px;margin:60px auto;">'
+      + '<h2 style="font-style:italic;font-family:Georgia,serif">Could not load Three.js</h2>'
+      + '<p>None of the CDN URLs were reachable. Check your internet connection or try opening this file from a local web server (e.g. <code>python -m http.server</code>) rather than via <code>file://</code>.</p>'
+      + '</div>';
+      return;
+    }
+    var s = document.createElement("script");
+    s.src = urls[i++];
+    s.onload = function () { if (window.startMortimersHorde) window.startMortimersHorde(); };
+    s.onerror = next;
+    document.head.appendChild(s);
+  }
+  next();
+})();
+</script>
+<script>
+/* =========================================================================
+   MORTIMER'S HORDE — third-person zombie survival
+   Single self-contained file. Three.js (r149) via a 3-CDN fallback chain;
+   vanilla JavaScript otherwise. Reuses the Mortimer cartoon aesthetic
+   (toon shading, primitive meshes, green skin / glowing eyes).
+
+   Layout — each system is fenced with a /* --- name --- *​/ separator:
+     helpers · asset builders · audio · world · player · zombies ·
+     waves · upgrades · hud · state machine · main loop
+
+   Game flow is an explicit finite state machine:
+     TITLE -> PLAYING <-> UPGRADE_PICK ;  PLAYING -> GAME_OVER -> TITLE
+   Gameplay systems only update while phase === PLAYING.
+
+   --- MILESTONE 1 ---
+   Refactor of the v1 prototype (zombie_shooter) into this section
+   architecture + FSM. Functional parity: every gameplay value is unchanged.
+   Deliberate, behaviour-safe changes noted inline with "M1 NOTE".
+   ========================================================================= */
+
+window.startMortimersHorde = function () {
+  if (window._mortimerStarted) return;
+  window._mortimerStarted = true;
+
+/* ─── helpers ──────────────────────────────────────────────────────────────
+   Pure math / easing / colour utilities. No game state here.                */
+
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp  = (a, b, t) => a + (b - a) * t;
+const rand  = (a, b) => a + Math.random() * (b - a);
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+const easeInQuad   = (t) => t * t;
+
+// shortest-arc angular interpolation (radians)
+function lerpAngle(a, b, t) {
+  let diff = b - a;
+  while (diff >  Math.PI) diff -= TAU;
+  while (diff < -Math.PI) diff += TAU;
+  return a + diff * t;
+}
+
+// multiply a hex colour's brightness, clamped — used for shading variants
+function shade(hex, mul) {
+  const c = new THREE.Color(hex);
+  c.r = clamp(c.r * mul, 0, 1);
+  c.g = clamp(c.g * mul, 0, 1);
+  c.b = clamp(c.b * mul, 0, 1);
+  return "#" + c.getHexString();
+}
+
+// shared scratch values — reused every frame, never reallocated in the loop
+const _chase = new THREE.Vector3();
+const _fwd   = new THREE.Vector3();
+const _rgt   = new THREE.Vector3();
+const _qTmp  = new THREE.Quaternion();
+
+/* ─── asset builders ───────────────────────────────────────────────────────
+   Procedural meshes built once from Three.js primitives — toon-shaded with
+   the cell-outline trick. Zombies and the player live here.                 */
+
+// 4-step toon ramp shared by every MeshToonMaterial
+function makeToonRamp() {
+  const data = new Uint8Array([
+    90,90,90,255, 170,170,170,255, 235,235,235,255, 255,255,255,255
+  ]);
+  const tex = new THREE.DataTexture(data, 4, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+  tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+  return tex;
+}
+const TOON = makeToonRamp();
+
+// outline trick — a BackSide-rendered clone, slightly scaled up
+function withOutline(mesh, scale = 1.05, color = 0x110a18) {
+  const g = mesh.geometry.clone();
+  const m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
+  const out = new THREE.Mesh(g, m); out.scale.setScalar(scale);
+  mesh.add(out); return mesh;
+}
+
+// soft radial sprite glow (zombie eyes, etc.)
+function makeGlowTexture() {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(64,64,0, 64,64,64);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.3, "rgba(255,241,166,0.6)");
+  g.addColorStop(1, "rgba(255,241,166,0)");
+  ctx.fillStyle = g; ctx.fillRect(0,0,128,128);
+  const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true;
+  return tex;
+}
+const GLOW_TEX = makeGlowTexture();
+
+// vertical gradient — used for the sky background
+function makeGradientTexture(top, bot) {
+  const c = document.createElement("canvas"); c.width = 4; c.height = 256;
+  const ctx = c.getContext("2d");
+  const g = ctx.createLinearGradient(0,0,0,256);
+  g.addColorStop(0, top); g.addColorStop(1, bot);
+  ctx.fillStyle = g; ctx.fillRect(0,0,4,256);
+  const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true;
+  return tex;
+}
+
+/* zombie — reuses Mortimer's design, simplified for many-at-once performance.
+   Returns a `parts` record: { root, head, torso, armL/R, legL/R, pupils,
+   materials }. variant selects one of four palettes.                        */
+function buildZombie(variant = 0) {
+  const palettes = [
+    { skin:"#9bc77a", shirt:"#6c4ba0", pants:"#3a2f4a", eye:"#fff1a6" }, // classic Mortimer
+    { skin:"#7fb8d1", shirt:"#b04a3a", pants:"#2a2a2a", eye:"#a6ffd1" }, // bluish
+    { skin:"#c79b7a", shirt:"#3a4a6c", pants:"#2a3a2a", eye:"#ff6f4a" }, // ruddy
+    { skin:"#bfb55a", shirt:"#2b2630", pants:"#5a3a3a", eye:"#ff6fc8" }, // sickly yellow
+  ];
+  const p = palettes[variant % palettes.length];
+
+  const matSkin   = new THREE.MeshToonMaterial({ color: p.skin,   gradientMap: TOON });
+  const matSkinD  = new THREE.MeshToonMaterial({ color: shade(p.skin, 0.8), gradientMap: TOON });
+  const matShirt  = new THREE.MeshToonMaterial({ color: p.shirt,  gradientMap: TOON });
+  const matPants  = new THREE.MeshToonMaterial({ color: p.pants,  gradientMap: TOON });
+  const matShoe   = new THREE.MeshToonMaterial({ color: "#1a1220", gradientMap: TOON });
+  const matTooth  = new THREE.MeshToonMaterial({ color: "#f3ead0", gradientMap: TOON });
+  const matMouth  = new THREE.MeshToonMaterial({ color: "#2a0d20", gradientMap: TOON });
+  const matStitch = new THREE.MeshToonMaterial({ color: "#1a0f08", gradientMap: TOON });
+  const matHair   = new THREE.MeshToonMaterial({ color: "#1a0f08", gradientMap: TOON });
+  const matBone   = new THREE.MeshToonMaterial({ color: "#f1e8cf", gradientMap: TOON });
+  const pupilMat  = new THREE.MeshBasicMaterial({ color: p.eye });
+
+  const root = new THREE.Group();
+  const parts = {};
+
+  /* torso */
+  const torso = new THREE.Group();
+  const shirt = new THREE.Mesh(new THREE.BoxGeometry(1.35, 1.4, 0.85), matShirt);
+  shirt.castShadow = true; withOutline(shirt, 1.05);
+  torso.add(shirt);
+  // ragged hem
+  for (let i = 0; i < 6; i++) {
+    const tri = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.22, 4), matShirt);
+    tri.rotation.x = Math.PI;
+    tri.position.set(-0.55 + i*0.22, -0.78, 0.40);
+    torso.add(tri);
+    const tri2 = tri.clone(); tri2.position.z = -0.40; torso.add(tri2);
+  }
+  // chest patch
+  const patch = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, 0.04), matSkinD);
+  patch.position.set(0.18, 0.12, 0.44); torso.add(patch);
+
+  /* head */
+  const head = new THREE.Group();
+  const skull = new THREE.Mesh(new THREE.BoxGeometry(1.10, 1.0, 0.95), matSkin);
+  skull.castShadow = true; withOutline(skull, 1.045); head.add(skull);
+  // tufts
+  for (let i = 0; i < 4; i++) {
+    const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.24, 5), matHair);
+    tuft.position.set(-0.36 + i*0.24, 0.55, -0.08 + (i%2)*0.16);
+    tuft.rotation.z = (Math.random()-0.5)*0.4;
+    head.add(tuft);
+  }
+  // ears
+  const earL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.16), matSkin);
+  earL.position.set(-0.62, 0.04, 0); head.add(earL);
+  const earR = earL.clone(); earR.position.x = 0.62; head.add(earR);
+  // sockets
+  const socketL = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.26, 0.08), matStitch);
+  socketL.position.set(-0.24, 0.08, 0.48); head.add(socketL);
+  const socketR = socketL.clone(); socketR.position.x = 0.24; head.add(socketR);
+  // pupils
+  const pupilGeom = new THREE.SphereGeometry(0.07, 10, 8);
+  const pupilL = new THREE.Mesh(pupilGeom, pupilMat); pupilL.position.set(-0.24, 0.08, 0.54); head.add(pupilL);
+  const pupilR = pupilL.clone(); pupilR.position.x = 0.24; head.add(pupilR);
+  // glow sprites
+  const glowMat = new THREE.SpriteMaterial({ map: GLOW_TEX, color: p.eye,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  const glowL = new THREE.Sprite(glowMat); glowL.scale.set(0.5,0.5,1);
+  glowL.position.set(-0.24, 0.08, 0.52); head.add(glowL);
+  const glowR = new THREE.Sprite(glowMat); glowR.scale.set(0.5,0.5,1);
+  glowR.position.set(0.24, 0.08, 0.52); head.add(glowR);
+  // mouth + teeth
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.16, 0.05), matMouth);
+  mouth.position.set(0.0, -0.26, 0.49); head.add(mouth);
+  for (let i = 0; i < 4; i++) {
+    const t = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.11, 4), matTooth);
+    t.position.set(-0.21 + i*0.14, -0.32, 0.52);
+    head.add(t);
+  }
+  // neck bolt
+  const nub = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.18, 10), matBone);
+  nub.position.set(-0.55, -0.5, 0); nub.rotation.z = Math.PI/2;
+  head.add(nub);
+  head.position.set(0, 1.05, 0);
+
+  /* arms (outstretched zombie pose) */
+  function buildArm(side) {
+    const arm = new THREE.Group();
+    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.5), matShirt);
+    withOutline(shoulder, 1.05); arm.add(shoulder);
+
+    const upper = new THREE.Group();
+    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.7, 0.36), matSkin);
+    upperArm.position.y = -0.38; withOutline(upperArm, 1.05); upper.add(upperArm);
+    arm.add(upper);
+
+    const forearm = new THREE.Group();
+    forearm.position.y = -0.74;
+    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.7, 0.32), matSkin);
+    fore.position.y = -0.36; withOutline(fore, 1.05); forearm.add(fore);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.26, 0.35), matSkin);
+    hand.position.y = -0.82; withOutline(hand, 1.05); forearm.add(hand);
+    upper.add(forearm);
+
+    // outstretched: rotate upper arm forward
+    upper.rotation.x = -1.3;
+    forearm.rotation.x = -0.3;
+
+    arm.userData = { upper, forearm };
+    return arm;
+  }
+  const armL = buildArm('L'); armL.position.set(-0.88, 0.5, 0); armL.userData.side = 'L';
+  const armR = buildArm('R'); armR.position.set( 0.88, 0.5, 0); armR.userData.side = 'R';
+
+  /* legs */
+  function buildLeg() {
+    const leg = new THREE.Group();
+    const thighPiv = new THREE.Group();
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.78, 0.45), matPants);
+    thigh.position.y = -0.39; withOutline(thigh, 1.05); thighPiv.add(thigh);
+
+    const shin = new THREE.Group();
+    shin.position.y = -0.78;
+    const shinMesh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.78, 0.42), matPants);
+    shinMesh.position.y = -0.39; withOutline(shinMesh, 1.05); shin.add(shinMesh);
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.2, 0.7), matShoe);
+    shoe.position.set(0, -0.86, 0.1); withOutline(shoe, 1.05); shin.add(shoe);
+    thighPiv.add(shin);
+    leg.add(thighPiv);
+    leg.userData = { thighPiv, shin };
+    return leg;
+  }
+  const legL = buildLeg(); legL.position.set(-0.32, -0.7, 0);
+  const legR = buildLeg(); legR.position.set( 0.32, -0.7, 0);
+
+  root.add(torso); root.add(head); root.add(armL); root.add(armR); root.add(legL); root.add(legR);
+  root.position.y = 1.8;
+
+  parts.root = root; parts.head = head; parts.torso = torso;
+  parts.armL = armL; parts.armR = armR; parts.legL = legL; parts.legR = legR;
+  parts.pupilL = pupilL; parts.pupilR = pupilR;
+  parts.materials = { matSkin, matShirt, matPants };
+  return parts;
+}
+
+/* player — a grown man with a gnarled stick, two-handed grip stance.
+   Returns { root, torso, head, armL/R, legL/R, stickPivot }.                */
+function buildPlayer() {
+  const matSkin  = new THREE.MeshToonMaterial({ color: "#e0b894", gradientMap: TOON });
+  const matVest  = new THREE.MeshToonMaterial({ color: "#3a4a3a", gradientMap: TOON });
+  const matPants = new THREE.MeshToonMaterial({ color: "#2a2e26", gradientMap: TOON });
+  const matBoot  = new THREE.MeshToonMaterial({ color: "#1a1410", gradientMap: TOON });
+  const matHair  = new THREE.MeshToonMaterial({ color: "#3a2818", gradientMap: TOON });
+  const matEye   = new THREE.MeshBasicMaterial({ color: "#1a0f08" });
+
+  const root = new THREE.Group();
+  const parts = {};
+
+  /* torso */
+  const torso = new THREE.Group();
+  const vest = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.35, 0.8), matVest);
+  vest.castShadow = true; withOutline(vest, 1.05); torso.add(vest);
+  // tactical strap
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.4, 0.86), matBoot);
+  strap.position.set(0.25, 0, 0); torso.add(strap);
+  // chest pouch
+  const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.08), matBoot);
+  pouch.position.set(-0.25, 0.0, 0.42); torso.add(pouch);
+
+  /* head */
+  const head = new THREE.Group();
+  const skull = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.95, 0.9), matSkin);
+  skull.castShadow = true; withOutline(skull, 1.045); head.add(skull);
+  // hair cap
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.32, 0.94), matHair);
+  cap.position.y = 0.45; head.add(cap);
+  // ears
+  const earL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.24, 0.14), matSkin);
+  earL.position.set(-0.56, 0.0, 0); head.add(earL);
+  const earR = earL.clone(); earR.position.x = 0.56; head.add(earR);
+  // eyes (small dots)
+  const eyeGeom = new THREE.SphereGeometry(0.06, 8, 6);
+  const eyeL = new THREE.Mesh(eyeGeom, matEye); eyeL.position.set(-0.2, 0.06, 0.46); head.add(eyeL);
+  const eyeR = eyeL.clone(); eyeR.position.x = 0.2; head.add(eyeR);
+  // eyebrows (thick dark — a "serious" adult look)
+  const browGeom = new THREE.BoxGeometry(0.22, 0.05, 0.06);
+  const browL = new THREE.Mesh(browGeom, matHair); browL.position.set(-0.2, 0.20, 0.46);
+  browL.rotation.z = 0.12; head.add(browL);
+  const browR = browL.clone(); browR.position.x = 0.2; browR.rotation.z = -0.12; head.add(browR);
+  // beard — boxy stubble around chin and lower jaw
+  const beardMain = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.32, 0.18), matHair);
+  beardMain.position.set(0, -0.30, 0.42); head.add(beardMain);
+  // mustache patch over upper lip
+  const mustache = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.07, 0.08), matHair);
+  mustache.position.set(0, -0.12, 0.46); head.add(mustache);
+  // mouth (small dark slit, visible within the beard)
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.05), new THREE.MeshBasicMaterial({color:"#3a1f1a"}));
+  mouth.position.set(0, -0.22, 0.50); head.add(mouth);
+  head.position.set(0, 1.0, 0);
+
+  /* arms — natural two-handed grip stance */
+  function buildArm(side) {
+    const arm = new THREE.Group();
+    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.36, 0.46), matVest);
+    withOutline(shoulder, 1.05); arm.add(shoulder);
+
+    const upper = new THREE.Group();
+    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.62, 0.32), matVest);
+    upperArm.position.y = -0.34; withOutline(upperArm, 1.05); upper.add(upperArm);
+    arm.add(upper);
+
+    const forearm = new THREE.Group();
+    forearm.position.y = -0.66;
+    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.55, 0.3), matSkin);
+    fore.position.y = -0.30; withOutline(fore, 1.05); forearm.add(fore);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.32), matSkin);
+    hand.position.y = -0.68; withOutline(hand, 1.05); forearm.add(hand);
+    upper.add(forearm);
+
+    // hands meet in front of the body at chest height to grip the stick
+    if (side === 'R') {
+      upper.rotation.x = -0.45;     // upper arm forward & down (back hand)
+      upper.rotation.z = -0.15;
+      forearm.rotation.x = -1.25;
+      forearm.rotation.y = -0.25;
+    } else {
+      upper.rotation.x = -0.55;     // front hand reaches a touch further
+      upper.rotation.z = 0.15;
+      forearm.rotation.x = -1.35;
+      forearm.rotation.y = 0.35;
+    }
+
+    arm.userData = { upper, forearm, hand };
+    return arm;
+  }
+  const armL = buildArm('L'); armL.position.set(-0.78, 0.45, 0);
+  const armR = buildArm('R'); armR.position.set( 0.78, 0.45, 0);
+
+  /* stick — wooden club. Mesh extends along +X so rotating the pivot around
+     Y produces a true horizontal slash arc. Pivot sits where the hands meet. */
+  const stickPivot = new THREE.Group();
+  stickPivot.position.set(0.0, 0.55, 0.5);
+
+  const stickMesh = new THREE.Group();
+  const matWood = new THREE.MeshToonMaterial({ color: "#6b4423", gradientMap: TOON });
+  const matBark = new THREE.MeshToonMaterial({ color: "#3d2814", gradientMap: TOON });
+
+  // shaft — tapered, length along +X
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1.5, 7), matWood);
+  shaft.rotation.z = Math.PI/2;
+  shaft.position.x = 0.7;
+  withOutline(shaft, 1.06); stickMesh.add(shaft);
+  // gnarled knot partway up
+  const knot = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), matBark);
+  knot.position.set(1.05, 0.07, 0); stickMesh.add(knot);
+  // tip cap
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), matBark);
+  tip.position.x = 1.45; stickMesh.add(tip);
+  // grip wrap at the gripped end
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.32, 8), matBark);
+  grip.rotation.z = Math.PI/2;
+  grip.position.x = 0.15; stickMesh.add(grip);
+
+  stickPivot.add(stickMesh);
+
+  // Three key orientations as quaternions for a clean slerp:
+  //   REST   — tilted up over the right shoulder (ready)
+  //   WIND   — pulled further back behind the shoulder
+  //   STRIKE — swept across horizontal, extended to the left
+  const E = THREE.Euler, Q = THREE.Quaternion;
+  const qRest   = new Q().setFromEuler(new E(0.05,  0.10, 0.95));
+  const qWind   = new Q().setFromEuler(new E(0.15,  1.10, 0.80));
+  const qStrike = new Q().setFromEuler(new E(-0.10, -1.50, 0.15));
+  stickPivot.quaternion.copy(qRest);
+  stickPivot.userData = { qRest, qWind, qStrike };
+
+  /* legs */
+  function buildLeg() {
+    const leg = new THREE.Group();
+    const thighPiv = new THREE.Group();
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.72, 0.42), matPants);
+    thigh.position.y = -0.36; withOutline(thigh, 1.05); thighPiv.add(thigh);
+
+    const shin = new THREE.Group();
+    shin.position.y = -0.72;
+    const shinMesh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.72, 0.4), matPants);
+    shinMesh.position.y = -0.36; withOutline(shinMesh, 1.05); shin.add(shinMesh);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.6), matBoot);
+    boot.position.set(0, -0.8, 0.08); withOutline(boot, 1.05); shin.add(boot);
+    thighPiv.add(shin);
+    leg.add(thighPiv);
+    leg.userData = { thighPiv, shin };
+    return leg;
+  }
+  const legL = buildLeg(); legL.position.set(-0.28, -0.65, 0);
+  const legR = buildLeg(); legR.position.set( 0.28, -0.65, 0);
+
+  root.add(torso); root.add(head); root.add(armL); root.add(armR);
+  root.add(stickPivot); root.add(legL); root.add(legR);
+  root.position.y = 1.65;
+
+  parts.root = root; parts.torso = torso; parts.head = head;
+  parts.armL = armL; parts.armR = armR; parts.legL = legL; parts.legR = legR;
+  parts.stickPivot = stickPivot;
+  return parts;
+}
+
+/* ─── audio ─────────────────────────────────────────────────────────────────
+   Procedurally-generated WebAudio sound bank. No external files. The context
+   is created lazily on first use (after a user gesture).
+   M1 NOTE: v1's unused gun sounds (shot/reload/empty) are dropped — this is a
+   melee game. The brief's expanded sound bank arrives in Milestone 11.       */
+const Audio = (() => {
+  let ctx = null;
+  function ensure() {
+    if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} }
+    return ctx;
+  }
+  function hit() {
+    const c = ensure(); if (!c) return;
+    const t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "triangle"; o.frequency.setValueAtTime(800, t);
+    o.frequency.exponentialRampToValueAtTime(200, t+0.08);
+    g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.09);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.1);
+  }
+  function groan() {
+    const c = ensure(); if (!c) return;
+    const t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(80 + Math.random()*20, t);
+    o.frequency.linearRampToValueAtTime(50, t+0.5);
+    g.gain.setValueAtTime(0.0, t);
+    g.gain.linearRampToValueAtTime(0.06, t+0.1);
+    g.gain.linearRampToValueAtTime(0.001, t+0.55);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.6);
+  }
+  function hurt() {
+    const c = ensure(); if (!c) return;
+    const t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "sawtooth"; o.frequency.value = 220;
+    g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.25);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t+0.26);
+  }
+  function swing() {
+    // a quick filtered-noise whoosh
+    const c = ensure(); if (!c) return;
+    const t = c.currentTime;
+    const bs = c.createBufferSource();
+    const buf = c.createBuffer(1, 0.18 * c.sampleRate, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      const env = Math.sin((i / data.length) * Math.PI);
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+    bs.buffer = buf;
+    const filter = c.createBiquadFilter();
+    filter.type = "bandpass"; filter.frequency.value = 1200; filter.Q.value = 1.4;
+    const g = c.createGain(); g.gain.value = 0.18;
+    bs.connect(filter).connect(g).connect(c.destination);
+    bs.start(t); bs.stop(t + 0.2);
+  }
+  return { hit, groan, hurt, swing };
+})();
+
+/* ─── world ─────────────────────────────────────────────────────────────────
+   The scene environment: sky, ground, the graveyard prop set. Built once into
+   the scene at boot. Collision is presently a simple arena radius (see
+   ARENA_RADIUS in the player section); the declarative zone system with
+   polygon bounds arrives in Milestone 5.                                     */
+function buildEnvironment(scene) {
+  const palette = { top:"#1a3146", bot:"#06090f", fog:"#0b1320", moon:"#cfe6ff", ground:"#0b1320" };
+
+  scene.background = makeGradientTexture(palette.top, palette.bot);
+  scene.fog = new THREE.Fog(palette.fog, 18, 65);
+
+  // ground
+  const groundMat = new THREE.MeshToonMaterial({ color: palette.ground, gradientMap: TOON });
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(80, 64), groundMat);
+  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
+  scene.add(ground);
+
+  // arena border ring — a subtle lighter disc marking the play area
+  const ringMat = new THREE.MeshToonMaterial({ color: shade(palette.ground, 1.4), gradientMap: TOON });
+  const arena = new THREE.Mesh(new THREE.RingGeometry(28, 30, 64), ringMat);
+  arena.rotation.x = -Math.PI/2; arena.position.y = 0.01;
+  scene.add(arena);
+
+  // moon
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(3, 32, 24),
+    new THREE.MeshBasicMaterial({ color: palette.moon }));
+  moon.position.set(-22, 18, -28); scene.add(moon);
+
+  // stars
+  const N = 380;
+  const starGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(N*3);
+  for (let i = 0; i < N; i++) {
+    const r = 50 + Math.random()*15;
+    const th = Math.random()*TAU;
+    const ph = Math.random()*Math.PI*0.55 + 0.1;
+    positions[i*3+0] = Math.cos(th)*Math.sin(ph)*r;
+    positions[i*3+1] = Math.cos(ph)*r + 5;
+    positions[i*3+2] = Math.sin(th)*Math.sin(ph)*r - 6;
+  }
+  starGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  scene.add(new THREE.Points(starGeo,
+    new THREE.PointsMaterial({ color: palette.moon, size: 0.18, sizeAttenuation: true,
+                                transparent: true, opacity: 0.85 })));
+
+  // tombstones — scattered, each with collision data (for the zone system later)
+  const tombstones = [];
+  const propMat = new THREE.MeshToonMaterial({ color: shade(palette.ground, 1.7), gradientMap: TOON });
+  const propMatDark = new THREE.MeshToonMaterial({ color: shade(palette.ground, 1.2), gradientMap: TOON });
+  for (let i = 0; i < 32; i++) {
+    const r = 6 + Math.random()*18;
+    const a = Math.random()*TAU;
+    const w = rand(0.7, 1.3), h = rand(1.0, 2.2);
+    const stone = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.28), propMat);
+    withOutline(stone, 1.04);
+    stone.position.set(Math.cos(a)*r, h/2, Math.sin(a)*r);
+    stone.rotation.y = a + (Math.random()-0.5)*0.6;
+    stone.castShadow = true; stone.receiveShadow = true;
+    scene.add(stone);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(w*1.3, 0.22, 0.42), propMatDark);
+    base.position.copy(stone.position); base.position.y = 0.11;
+    base.rotation.y = stone.rotation.y;
+    scene.add(base);
+    tombstones.push({ pos: stone.position.clone(), radius: w*0.8 });
+  }
+
+  // crooked dead trees in the distance
+  for (let i = 0; i < 14; i++) {
+    const r = 26 + Math.random()*8;
+    const a = Math.random()*TAU;
+    const treeMat = new THREE.MeshToonMaterial({ color: "#1a0f1a", gradientMap: TOON });
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.3, 4, 6), treeMat);
+    trunk.position.set(Math.cos(a)*r, 2, Math.sin(a)*r);
+    trunk.rotation.z = (Math.random()-0.5)*0.3;
+    trunk.castShadow = true;
+    scene.add(trunk);
+    for (let j = 0; j < 3; j++) {
+      const br = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 1.4, 5), treeMat);
+      br.position.set(0, 1 + j*0.6, 0);
+      br.rotation.z = (Math.random()-0.5)*1.4 + (j%2 ? 0.6 : -0.6);
+      br.rotation.x = (Math.random()-0.5)*0.6;
+      trunk.add(br);
+    }
+  }
+
+  return { ground, moon, tombstones };
+}
+
+/* ─── player ────────────────────────────────────────────────────────────────
+   Movement, melee combat and procedural animation. Reads `state` and the
+   `keys` map; mutates `state.pos` and the player meshes. updatePlayer() runs
+   once per frame while phase === PLAYING.                                    */
+
+// movement (units/second) — both modifiable by upgrades in Milestone 4
+const WALK_SPEED   = 5.0;
+const SPRINT_SPEED = 8.5;
+const ARENA_RADIUS = 27;          // simple circular bound; zones replace this in M5
+
+// melee swing timing (ms from swing start) and reach
+const SWING_WINDUP_END   = 140;   // 0-140ms     : stick winds back
+const SWING_STRIKE_END   = 320;   // 140-320ms   : the slash — HIT WINDOW
+const SWING_RECOVERY_END = 520;   // 320-520ms   : returns to rest
+const SWING_COOLDOWN     = 480;   // gap before another swing is allowed
+const MELEE_RANGE = 3.0;
+const MELEE_CONE  = 0.4;          // cos(half-angle) — 0.4 ≈ 67 degrees
+const MELEE_DAMAGE = 2;
+
+// input
+const keys = Object.create(null);
+
+document.addEventListener("keydown", (e) => {
+  keys[e.code] = true;
+  if (e.code === "ShiftLeft" || e.code === "ShiftRight") state.sprinting = true;
+});
+document.addEventListener("keyup", (e) => {
+  keys[e.code] = false;
+  if (e.code === "ShiftLeft" || e.code === "ShiftRight") state.sprinting = false;
+});
+document.addEventListener("mousemove", (e) => {
+  if (!pointerLocked || state.phase !== Phase.PLAYING) return;
+  const s = 0.0022;
+  state.yaw   -= e.movementX * s;
+  state.pitch += e.movementY * s;   // standard (non-inverted) Y
+  state.pitch = clamp(state.pitch, -0.6, 0.85);
+});
+document.addEventListener("mousedown", (e) => {
+  if (state.phase !== Phase.PLAYING) return;
+  if (e.button === 0) trySwing();
+});
+
+// begin a swing if not mid-swing and off cooldown
+function trySwing() {
+  const now = performance.now();
+  if (state.swinging) return;
+  if (now - state.swingStartAt < SWING_COOLDOWN) return;
+  state.swinging = true;
+  state.swingStartAt = now;
+  state.swingHitIds.clear();
+  Audio.swing();
+}
+
+// resolve hits for the current swing — a forward cone, one hit per zombie
+function checkMeleeHits(now) {
+  const fx = -Math.sin(state.yaw);   // player forward (opposite the camera offset)
+  const fz = -Math.cos(state.yaw);
+
+  for (let i = 0; i < zombies.length; i++) {
+    const zd = zombies[i];
+    if (!zd.alive) continue;
+    if (state.swingHitIds.has(zd)) continue;
+
+    const dx = zd.parts.root.position.x - state.pos.x;
+    const dz = zd.parts.root.position.z - state.pos.z;
+    const dist = Math.sqrt(dx*dx + dz*dz);
+    if (dist > MELEE_RANGE || dist < 0.01) continue;
+
+    const nx = dx / dist, nz = dz / dist;
+    if (nx*fx + nz*fz < MELEE_CONE) continue;   // outside the forward cone
+
+    // hit!
+    state.swingHitIds.add(zd);
+    zd.hp -= MELEE_DAMAGE;
+    Audio.hit();
+    crosshair.classList.add("hit");
+    setTimeout(() => crosshair.classList.remove("hit"), 180);
+    spawnHitFloater(zd.hp <= 0 ? "DOWN!" : "+" + MELEE_DAMAGE, zd.hp <= 0);
+
+    // knockback — shove the zombie away from the player
+    zd.knockX = fx * 0.6;
+    zd.knockZ = fz * 0.6;
+    zd.knockUntil = now + 220;
+    zd.attackCooldown = Math.max(zd.attackCooldown, 0.5);   // brief stagger
+
+    if (zd.hp <= 0) killZombie(zd);
+  }
+}
+
+// apply damage to the player; triggers GAME_OVER at 0
+function damagePlayer(amt) {
+  state.health = Math.max(0, state.health - amt);
+  state.lastDamageAt = performance.now();
+  damageVignette.classList.add("on");
+  setTimeout(() => damageVignette.classList.remove("on"), 220);
+  Audio.hurt();
+  updateHealthUI();
+  if (state.health <= 0 && state.phase === Phase.PLAYING) gameOver();
+}
+
+function updatePlayer(dt) {
+  const now = performance.now();
+
+  // movement input, relative to camera yaw
+  state.moveVec.set(0, 0);
+  if (keys["KeyW"]) state.moveVec.y += 1;
+  if (keys["KeyS"]) state.moveVec.y -= 1;
+  if (keys["KeyA"]) state.moveVec.x -= 1;
+  if (keys["KeyD"]) state.moveVec.x += 1;
+  if (state.moveVec.lengthSq() > 0) state.moveVec.normalize();
+
+  // "forward" is the camera-offset direction; walking forward = away from it
+  _fwd.set(Math.sin(state.yaw), 0, Math.cos(state.yaw));
+  _rgt.set(Math.sin(state.yaw + Math.PI/2), 0, Math.cos(state.yaw + Math.PI/2));
+
+  const speed = (state.sprinting && state.moveVec.y > 0) ? SPRINT_SPEED : WALK_SPEED;
+  state.pos.x += (_rgt.x * state.moveVec.x - _fwd.x * state.moveVec.y) * speed * dt;
+  state.pos.z += (_rgt.z * state.moveVec.x - _fwd.z * state.moveVec.y) * speed * dt;
+
+  // keep within the arena
+  const distFromCenter = Math.hypot(state.pos.x, state.pos.z);
+  if (distFromCenter > ARENA_RADIUS) {
+    const a = Math.atan2(state.pos.z, state.pos.x);
+    state.pos.x = Math.cos(a) * ARENA_RADIUS;
+    state.pos.z = Math.sin(a) * ARENA_RADIUS;
+  }
+
+  // place + face the player (player faces the camera-forward direction)
+  player.root.position.set(state.pos.x, 1.65, state.pos.z);
+  player.root.rotation.y = state.yaw + Math.PI;
+
+  // walk-cycle leg bob
+  const moving = state.moveVec.lengthSq() > 0.01;
+  if (moving) {
+    state.bobTime += dt * (state.sprinting ? 12 : 8);
+    const swing = state.sprinting ? 0.7 : 0.5;
+    player.legL.userData.thighPiv.rotation.x =  Math.sin(state.bobTime) * swing;
+    player.legR.userData.thighPiv.rotation.x = -Math.sin(state.bobTime) * swing;
+  } else {
+    player.legL.userData.thighPiv.rotation.x = lerp(player.legL.userData.thighPiv.rotation.x, 0, 0.2);
+    player.legR.userData.thighPiv.rotation.x = lerp(player.legR.userData.thighPiv.rotation.x, 0, 0.2);
+  }
+
+  // melee swing — horizontal arc slash via quaternion slerp
+  const sp = player.stickPivot;
+  const { qRest, qWind, qStrike } = sp.userData;
+  if (state.swinging) {
+    const elapsed = now - state.swingStartAt;
+    let armTwist = 0;
+    if (elapsed < SWING_WINDUP_END) {
+      const t = easeOutCubic(elapsed / SWING_WINDUP_END);
+      _qTmp.slerpQuaternions(qRest, qWind, t);
+      armTwist = t * 0.35;
+    } else if (elapsed < SWING_STRIKE_END) {
+      const t = easeInQuad((elapsed - SWING_WINDUP_END) / (SWING_STRIKE_END - SWING_WINDUP_END));
+      _qTmp.slerpQuaternions(qWind, qStrike, t);
+      armTwist = lerp(0.35, -0.30, t);
+      checkMeleeHits(now);
+    } else if (elapsed < SWING_RECOVERY_END) {
+      const t = easeOutCubic((elapsed - SWING_STRIKE_END) / (SWING_RECOVERY_END - SWING_STRIKE_END));
+      _qTmp.slerpQuaternions(qStrike, qRest, t);
+      armTwist = lerp(-0.30, 0, t);
+    } else {
+      state.swinging = false;
+      _qTmp.copy(qRest);
+    }
+    sp.quaternion.copy(_qTmp);
+    player.armR.rotation.y = armTwist;
+    player.armL.rotation.y = armTwist;
+  } else {
+    sp.quaternion.slerp(qRest, 0.15);
+    player.armR.rotation.y = lerp(player.armR.rotation.y, 0, 0.2);
+    player.armL.rotation.y = lerp(player.armL.rotation.y, 0, 0.2);
+  }
+}
+
+/* ─── zombies ───────────────────────────────────────────────────────────────
+   Spawning, chase/attack AI and animation. Each entry of `zombies` is:
+   { parts, hp, maxHp, speed, attackCooldown, alive, dyingAt, walkPhase,
+     groanAt, knockX/Z, knockUntil, fallAxis, fallDir }.
+   M1 NOTE: zombies are still allocated per spawn — pooling arrives in M2.    */
+const zombies = [];
+
+function spawnZombie() {
+  const variant = Math.floor(Math.random()*4);
+  const z = buildZombie(variant);
+  // spawn on the outer ring, around the player
+  const r = 22 + Math.random()*5;
+  const a = Math.random()*TAU;
+  z.root.position.set(Math.cos(a)*r + state.pos.x, 1.8, Math.sin(a)*r + state.pos.z);
+  scene.add(z.root);
+
+  const speed = rand(1.2, 2.4) + state.wave*0.08;
+  const hp = 3 + Math.floor(state.wave*0.4);
+  zombies.push({
+    parts: z, hp, maxHp: hp, speed,
+    attackCooldown: 0, alive: true, dyingAt: 0,
+    walkPhase: Math.random()*TAU,
+    groanAt: performance.now() + rand(2000, 8000),
+  });
+  state.zombiesAlive++;
+}
+
+// take a zombie down — score, topple animation setup
+function killZombie(zd) {
+  zd.alive = false;
+  zd.dyingAt = performance.now();
+  state.zombiesAlive--;
+  state.kills++;
+  state.score += 100;
+  updateScoreUI();
+  zd.fallAxis = Math.random() < 0.5 ? "x" : "z";
+  zd.fallDir  = Math.random() < 0.5 ? 1 : -1;
+}
+
+function updateZombies(dt) {
+  const now = performance.now();
+
+  for (let i = zombies.length - 1; i >= 0; i--) {
+    const zd = zombies[i];
+
+    // dying animation: topple, sink, fade, then remove
+    if (!zd.alive) {
+      const t = (now - zd.dyingAt) / 1000;
+      if (t < 1.2) {
+        const angle = clamp(t * 1.6, 0, Math.PI/2);
+        if (zd.fallAxis === "x") zd.parts.root.rotation.x = -angle * zd.fallDir;
+        else                     zd.parts.root.rotation.z =  angle * zd.fallDir;
+        zd.parts.root.position.y = 1.8 - t*0.2;
+      } else if (t < 3) {
+        zd.parts.root.position.y = 1.6 - (t-1.2)*0.5;
+        zd.parts.root.traverse(o => {
+          if (o.material && o.material.opacity != null) {
+            o.material.transparent = true;
+            o.material.opacity = clamp(1 - (t-1.2)/1.8, 0, 1);
+          }
+        });
+      } else {
+        scene.remove(zd.parts.root);
+        zd.parts.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+        zombies.splice(i, 1);
+      }
+      continue;
+    }
+
+    // knockback (from melee) — overrides chase movement briefly
+    if (zd.knockUntil && now < zd.knockUntil) {
+      const knockT = (zd.knockUntil - now) / 220;
+      zd.parts.root.position.x += zd.knockX * knockT * dt * 8;
+      zd.parts.root.position.z += zd.knockZ * knockT * dt * 8;
+      zd.parts.torso.rotation.x = lerp(zd.parts.torso.rotation.x, -0.3, 0.3);
+      continue;
+    } else if (zd.parts.torso.rotation.x !== 0) {
+      zd.parts.torso.rotation.x = lerp(zd.parts.torso.rotation.x, 0, 0.2);
+    }
+
+    // chase the player
+    _chase.set(state.pos.x - zd.parts.root.position.x, 0, state.pos.z - zd.parts.root.position.z);
+    const dist = _chase.length();
+    if (dist > 0.0001) _chase.normalize();
+    const targetYaw = Math.atan2(_chase.x, _chase.z);
+    zd.parts.root.rotation.y = lerpAngle(zd.parts.root.rotation.y, targetYaw, 0.12);
+
+    if (dist > 1.7) {
+      // move closer + walk cycle
+      zd.parts.root.position.x += _chase.x * zd.speed * dt;
+      zd.parts.root.position.z += _chase.z * zd.speed * dt;
+      zd.walkPhase += dt * (3 + zd.speed*0.5);
+      const sw = Math.sin(zd.walkPhase) * 0.4;
+      zd.parts.legL.userData.thighPiv.rotation.x = sw;
+      zd.parts.legR.userData.thighPiv.rotation.x = -sw;
+      zd.parts.torso.rotation.z = Math.sin(zd.walkPhase*0.5) * 0.06;
+      zd.parts.root.position.y = 1.8 + Math.abs(Math.sin(zd.walkPhase))*0.05;
+      zd.parts.armL.userData.upper.rotation.x = -1.3 + Math.sin(zd.walkPhase)*0.15;
+      zd.parts.armR.userData.upper.rotation.x = -1.3 - Math.sin(zd.walkPhase)*0.15;
+    } else {
+      // in range — attack
+      zd.attackCooldown -= dt;
+      const lunge = Math.sin(now * 0.012) * 0.3 - 1.6;
+      zd.parts.armL.userData.upper.rotation.x = lunge;
+      zd.parts.armR.userData.upper.rotation.x = lunge;
+      if (zd.attackCooldown <= 0) {
+        damagePlayer(10);
+        zd.attackCooldown = 1.1;
+      }
+    }
+
+    // occasional groan, only when reasonably close (avoids sound spam)
+    if (now > zd.groanAt) {
+      if (dist < 18) Audio.groan();
+      zd.groanAt = now + rand(4000, 12000);
+    }
+  }
+}
+
+/* ─── waves ──────────────────────────────────────────────────────────────────
+   Spawn scheduling, difficulty scaling and the end-of-wave bonus. updateWaves()
+   runs only while phase === PLAYING.
+   M1 NOTE: scaling values match v1 exactly. The brief's reworked formulas
+   (5+N*2, 30-alive cap, 6s inter-wave pause) are Milestone 3.                */
+function startNextWave() {
+  state.wave++;
+  state.zombiesToSpawn = 4 + state.wave * 2;
+  waveNum.textContent = state.wave;
+  showBanner("Wave " + state.wave, state.wave === 1 ? "Brace yourself" : "More are coming");
+}
+
+function showBanner(big, sub) {
+  waveBannerBig.textContent = big;
+  waveBannerSub.textContent = sub;
+  waveBanner.classList.add("on");
+  setTimeout(() => waveBanner.classList.remove("on"), 2200);
+}
+
+function updateWaves(dt) {
+  const now = performance.now();
+  if (state.zombiesToSpawn > 0 && state.zombiesAlive < 12) {
+    if (Math.random() < 0.04) {            // throttled trickle spawn
+      spawnZombie();
+      state.zombiesToSpawn--;
+    }
+  } else if (state.zombiesToSpawn === 0 && state.zombiesAlive === 0) {
+    // wave cleared — bonus, then schedule the next wave
+    if (!state.nextWaveAt) {
+      state.score += 250 * state.wave;
+      updateScoreUI();
+      state.nextWaveAt = now + 3500;
+    }
+    if (now >= state.nextWaveAt) {
+      state.nextWaveAt = 0;
+      startNextWave();
+    }
+  }
+}
+
+/* ─── upgrades ───────────────────────────────────────────────────────────────
+   Between-wave card picker and run-state modifiers. Added in Milestone 4 —
+   this section is an intentional placeholder so the architecture is complete. */
+// (Milestone 4)
+
+/* ─── hud ────────────────────────────────────────────────────────────────────
+   Overlay DOM references and their update helpers. All HUD is plain DOM —
+   nothing is rendered as text in the 3D scene.                               */
+const stage          = document.getElementById("stage");
+const overlay        = document.getElementById("overlay");
+const centerCard     = document.getElementById("centerCard");
+const startBtn       = document.getElementById("startBtn");
+const healthFill     = document.getElementById("healthFill");
+const scoreText      = document.getElementById("scoreText");
+const waveNum        = document.getElementById("waveNum");
+const waveBanner     = document.getElementById("waveBanner");
+const waveBannerBig  = document.getElementById("waveBannerBig");
+const waveBannerSub  = document.getElementById("waveBannerSub");
+const crosshair      = document.getElementById("crosshair");
+const damageVignette = document.getElementById("damageVignette");
+
+function updateScoreUI() {
+  scoreText.textContent = state.kills + " · " + state.score;
+}
+function updateHealthUI() {
+  healthFill.style.width = (state.health / state.maxHealth * 100) + "%";
+}
+
+// rising "+N" / "DOWN!" text near screen centre
+function spawnHitFloater(text, head) {
+  const el = document.createElement("div");
+  el.className = "floater";
+  el.textContent = text;
+  if (head) el.style.color = "#ff6f4a";
+  el.style.left = (window.innerWidth/2 + rand(-30, 30)) + "px";
+  el.style.top  = (window.innerHeight/2 + rand(-30, -10)) + "px";
+  document.body.appendChild(el);
+  const start = performance.now();
+  (function tick() {
+    const t = (performance.now() - start) / 700;
+    if (t >= 1) { el.remove(); return; }
+    el.style.transform = "translateY(" + (-t*60) + "px)";
+    el.style.opacity = (1 - t).toString();
+    requestAnimationFrame(tick);
+  })();
+}
+
+/* ─── state machine ──────────────────────────────────────────────────────────
+   Explicit game-flow FSM. `state` is the single global mutable record; every
+   gameplay system reads and writes through it.
+
+     TITLE -> PLAYING <-> UPGRADE_PICK ;  PLAYING -> GAME_OVER -> TITLE
+
+   M1 NOTE: UPGRADE_PICK is declared but unused until Milestone 4. "Try again"
+   still routes GAME_OVER -> TITLE via a page reload (a seamless reset is a
+   later polish item).                                                         */
+const Phase = { TITLE: "TITLE", PLAYING: "PLAYING", UPGRADE_PICK: "UPGRADE_PICK", GAME_OVER: "GAME_OVER" };
+
+const state = {
+  phase: Phase.TITLE,
+  health: 100, maxHealth: 100,
+  score: 0, kills: 0,
+  wave: 0,
+  zombiesAlive: 0, zombiesToSpawn: 0,
+  nextWaveAt: 0,
+  yaw: 0, pitch: 0.35,
+  pos: new THREE.Vector3(0, 0, 0),
+  sprinting: false,
+  moveVec: new THREE.Vector2(),
+  bobTime: 0,
+  lastDamageAt: -10,
+  swinging: false,
+  swingStartAt: -1000,
+  swingHitIds: new Set(),
+};
+
+// pointer lock is held only during PLAYING
+let pointerLocked = false;
+function lockPointer() {
+  if (document.pointerLockElement !== renderer.domElement) {
+    renderer.domElement.requestPointerLock();
+  }
+}
+document.addEventListener("pointerlockchange", () => {
+  pointerLocked = (document.pointerLockElement === renderer.domElement);
+});
+
+// the single phase-transition entry point
+function setPhase(next) {
+  state.phase = next;
+  const playing = (next === Phase.PLAYING);
+  overlay.classList.toggle("hidden", playing);
+  if (playing) lockPointer();
+  else if (document.pointerLockElement) document.exitPointerLock();
+}
+
+// TITLE -> PLAYING : fresh run
+function beginGame() {
+  state.health = state.maxHealth;
+  state.score = 0; state.kills = 0;
+  state.wave = 0;
+  state.zombiesAlive = 0; state.zombiesToSpawn = 0;
+  state.nextWaveAt = 0;
+  state.pos.set(0, 0, 0);
+  state.yaw = 0; state.pitch = 0.35;
+  state.sprinting = false;
+  state.swinging = false; state.swingStartAt = -1000;
+  state.swingHitIds.clear();
+  updateHealthUI();
+  updateScoreUI();
+  startNextWave();
+  setPhase(Phase.PLAYING);
+}
+
+// PLAYING -> GAME_OVER
+function gameOver() {
+  centerCard.innerHTML =
+      '<div class="big">You Were Eaten</div>'
+    + '<div class="sub">Survived ' + state.wave + ' wave' + (state.wave===1?"":"s")
+    + ' · ' + state.kills + ' kill' + (state.kills===1?"":"s")
+    + ' · score ' + state.score + '</div>'
+    + '<button class="btn" id="restartBtn">Try again</button>';
+  setPhase(Phase.GAME_OVER);
+  document.getElementById("restartBtn").addEventListener("click", () => location.reload());
+}
+
+/* ─── main loop ──────────────────────────────────────────────────────────────
+   Three.js core (renderer / scene / camera / lights), the per-frame update +
+   render, and boot wiring. The render loop runs continuously; gameplay systems
+   are stepped only while phase === PLAYING.                                   */
+
+// third-person orbit camera — base framing (modifiable by upgrades in M4)
+const CAM_DIST = 11.0;
+const CAM_HEIGHT = 6.5;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 200);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+
+// lights
+const hemi = new THREE.HemisphereLight(0xb0c7ff, 0x1a1228, 0.55);
+scene.add(hemi);
+const keyLight = new THREE.DirectionalLight(0xfff7d6, 0.9);
+keyLight.position.set(-22, 28, -10); keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.camera.left = -30; keyLight.shadow.camera.right = 30;
+keyLight.shadow.camera.top = 30; keyLight.shadow.camera.bottom = -30;
+keyLight.shadow.camera.near = 0.1; keyLight.shadow.camera.far = 80;
+scene.add(keyLight);
+const rim = new THREE.DirectionalLight(0x8090ff, 0.3);
+rim.position.set(10, 8, 15); scene.add(rim);
+
+// build the world and the player
+buildEnvironment(scene);
+const player = buildPlayer();
+scene.add(player.root);
+
+// third-person follow camera — computes position directly, no per-frame alloc
+function updateCamera() {
+  const ph = state.pitch, cy = state.yaw, chp = Math.cos(ph);
+  camera.position.set(
+    state.pos.x + Math.sin(cy) * chp * CAM_DIST,
+    CAM_HEIGHT + Math.sin(ph) * CAM_DIST,
+    state.pos.z + Math.cos(cy) * chp * CAM_DIST
+  );
+  camera.lookAt(state.pos.x, 2.3, state.pos.z);
+}
+
+const clock = new THREE.Clock();
+let raf = null;
+
+function frame() {
+  raf = requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (state.phase === Phase.PLAYING) {
+    updatePlayer(dt);
+    updateZombies(dt);
+    updateWaves(dt);
+  }
+  updateCamera();
+  renderer.render(scene, camera);
+}
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ── boot ── */
+setPhase(Phase.TITLE);
+startBtn.addEventListener("click", beginGame);
+// re-acquire pointer lock if it was dropped mid-run (e.g. via Esc)
+renderer.domElement.addEventListener("click", () => {
+  if (state.phase === Phase.PLAYING && !pointerLocked) lockPointer();
+});
+frame();
+
+};  // end window.startMortimersHorde
+</script>
 </body>
 </html>
