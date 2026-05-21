@@ -1492,43 +1492,6 @@ function updateLoot(dt) {
   }
 }
 
-/* loot crates dotted across the ruin */
-let crates = [];
-function buildCrates() {
-  for (let i = 0; i < 4; i++) {
-    let x, z, tries = 0;
-    do { const a = rand(0, TAU), rr = rand(18, ARENA - 12);
-      x = Math.cos(a) * rr; z = Math.sin(a) * rr; tries++;
-    } while ((Math.hypot(x, z) < 12 || blocked(x, z, 3)) && tries < 30);
-    const g = new THREE.Group();
-    const box = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2),
-      mat(0x241a10, 1));
-    box.position.y = 1; box.castShadow = box.receiveShadow = true;
-    const band = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.3, 2.1),
-      metalMat(0x4a3a20, 0.5));
-    band.position.y = 1;
-    const gleam = new THREE.PointLight(0xd8b75a, 1.2, 8, 2);
-    gleam.position.y = 2.4;
-    g.add(box, band, gleam);
-    g.position.set(x, groundHeight(x, z), z);
-    g.rotation.y = rand(0, TAU);
-    scene.add(g);
-    crates.push({ obj: g, x, z });
-  }
-}
-function updateCrates() {
-  for (let i = crates.length - 1; i >= 0; i--) {
-    const c = crates[i];
-    if (Math.hypot(player.x - c.x, player.z - c.z) < 3.4) {
-      const item = makeItem(Math.random() < 0.5 ? "weapon" : "armor", 0, 2);
-      spawnParts(c.x, groundHeight(c.x, c.z) + 1.5, c.z, 30,
-        { color: 0xd8b75a, speed: 13, up: 6, life: 0.8 });
-      flashLight(c.x, groundHeight(c.x, c.z) + 2, c.z, 0.4, 0xd8b75a);
-      pickupItem(item);
-      scene.remove(c.obj); crates.splice(i, 1);
-    }
-  }
-}
 
 /* ─── heal orbs (dropped on kill) ─────────────────────────────────────────── */
 let orbs = [];
@@ -1880,11 +1843,11 @@ function killZombie(z) {
     }
     pulseAbil("soul");
   }
-  // loot drops — rare elites & bosses always; everything else just 3%
+  // loot drops — rare elites & bosses always; everything else just 1.5%
   let dropChance, minR, maxR;
   if (z.rare) { dropChance = 1; minR = 2; maxR = 3; }
   else if (z.type === "giant") { dropChance = 1; minR = 2; maxR = 3; }
-  else { dropChance = 0.03; minR = 0; maxR = 2; }
+  else { dropChance = 0.015; minR = 0; maxR = 2; }
   if (Math.random() < dropChance)
     spawnLoot(z.x, z.z, makeItem(Math.random() < 0.5 ? "weapon" : "armor",
       minR, maxR));
@@ -2261,7 +2224,8 @@ function renderInv() {
   list.innerHTML = "";
   if (!player.inventory.length) {
     list.innerHTML = '<div class="invempty">No loot yet. ' +
-      'Smash crates and slay the rare Revenants to fill your pack.</div>';
+      'Slay the horde &mdash; and hunt the rare Revenants &mdash; ' +
+      'for their loot.</div>';
     return;
   }
   // best items first
@@ -2380,7 +2344,6 @@ function resetGame() {
   zombies = [];
   for (const o of orbs) scene.remove(o.obj); orbs = [];
   for (const l of loot) scene.remove(l.obj); loot = [];
-  for (const c of crates) scene.remove(c.obj); crates = [];
   for (const p of projectiles) scene.remove(p.obj); projectiles = [];
   for (let i = 0; i < PCOUNT; i++) { pState[i].life = 0; pPos[i*3+1] = -999; }
   pGeo.attributes.position.needsUpdate = true;
@@ -2400,7 +2363,6 @@ function resetGame() {
   grassFlatten = null; levelFx = 0;
   updateWeaponVisual();
   buildAbilityHUD();
-  buildCrates();
 }
 function startGame() {
   resetGame();
@@ -2788,7 +2750,6 @@ function update(dt) {
   updateProjectiles(dt);
   updateOrbs(dt);
   updateLoot(dt);
-  updateCrates();
   updateParts(dt);
   updateFlashes(dt);
   updateGhosts(dt);
