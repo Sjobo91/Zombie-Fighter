@@ -65,19 +65,6 @@
     border: 1px solid #2a2a36; border-radius: 3px; overflow: hidden; }
   #stamfill { height: 100%; width: 100%;
     background: linear-gradient(90deg, #2c6e8c, #6fd0ff); transition: width .08s; }
-  #ragebar { height: 15px; margin-top: 5px; background: #160810;
-    border: 1px solid #45202a; border-radius: 3px; overflow: hidden;
-    position: relative; }
-  #ragefill { height: 100%; width: 0%;
-    background: linear-gradient(90deg, #8a1410, #ff5a1e, #ff9a3a);
-    transition: width .1s; }
-  #ragebar.full { box-shadow: 0 0 12px rgba(255,120,30,.85);
-    border-color: #ff9a3a; }
-  #ragebar.full #ragefill { animation: ragepulse .9s ease-in-out infinite; }
-  @keyframes ragepulse { 50% { filter: brightness(1.35); } }
-  #ragetext { position: absolute; inset: 0; text-align: center;
-    line-height: 15px; font-size: 10px; font-weight: 800; letter-spacing: 2px;
-    color: #f0d8c0; text-shadow: 0 1px 2px #000; }
   #stats { margin-top: 6px; font-size: 12px; color: #8b8478; font-weight: 700;
     letter-spacing: 1px; }
   #stats .pt { color: #e3bd57; }
@@ -97,18 +84,12 @@
   .abil.pulse { transform: scale(1.2); box-shadow: 0 0 24px currentColor; }
   .abil.active { box-shadow: 0 0 26px currentColor;
     border-color: currentColor; }
-  .abil .picto { position: absolute; left: 7px; right: 7px; top: 5px;
-    bottom: 21px; display: flex; align-items: center;
-    justify-content: center; }
-  .abil .picto svg { width: 100%; height: 100%; display: block; }
-  @keyframes ultspin { to { transform: rotate(360deg); } }
-  .abil .picto.spin svg { animation: ultspin 2.6s linear infinite;
-    transform-origin: 50% 50%; }
-  .abil.dim { opacity: .42; }
+  .abil .dot { position: absolute; left: 50%; top: 30px;
+    transform: translateX(-50%); width: 42px; height: 42px;
+    border-radius: 50%; }
   .abil .glyph { position: absolute; inset: 0; display: flex;
     align-items: center; justify-content: center; font-size: 42px;
     font-weight: 800; }
-  .emblem svg { width: 44px; height: 44px; }
   .abil .cd { position: absolute; left: 0; right: 0; bottom: 0; top: 100%;
     background: rgba(0,0,0,.74); }
   .abil .cdnum { position: absolute; inset: 0; display: flex;
@@ -124,7 +105,7 @@
   #hint .glow { color: #e3bd57; animation: blink 1.1s infinite; }
 
   /* ---- active buff chips ---- */
-  #buffs { position: absolute; right: 22px; top: 274px; display: flex;
+  #buffs { position: absolute; right: 22px; top: 256px; display: flex;
     gap: 8px; flex-wrap: wrap; width: 196px; justify-content: flex-end; }
   .buffchip { width: 58px; height: 66px; background: rgba(8,8,12,.9);
     border: 2px solid #3a3640; border-radius: 9px; position: relative;
@@ -132,28 +113,6 @@
     font-size: 33px; box-shadow: 0 0 16px currentColor; }
   .buffchip .bt { position: absolute; left: 4px; right: 4px; bottom: 4px;
     height: 5px; background: #2a2a36; border-radius: 3px; overflow: hidden; }
-  /* ---- buff section captions ---- */
-  .seccap { position: absolute; font-size: 10px; font-weight: 800;
-    letter-spacing: 2px; color: #7d7668; }
-  #buffsCap { right: 22px; top: 256px; width: 196px; text-align: right;
-    color: #8ac0e0; }
-  #permaCap { left: 26px; top: 62px; color: #f0c040; }
-  /* ---- permanent power chips (left side, gold, no timer) ---- */
-  #permabuffs { position: absolute; left: 26px; top: 78px; display: flex;
-    gap: 8px; flex-wrap: wrap; width: 232px; }
-  .permachip { width: 52px; height: 52px; background: rgba(20,15,6,.92);
-    border: 2px solid #f0c040; border-radius: 9px; position: relative;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 27px; box-shadow: 0 0 16px rgba(240,192,64,.6); }
-  .permachip .inf { position: absolute; top: -7px; right: -7px; width: 18px;
-    height: 18px; background: #f0c040; color: #1a1206; border-radius: 50%;
-    font-size: 11px; font-weight: 800; display: flex; align-items: center;
-    justify-content: center; }
-  .permachip .pc { position: absolute; bottom: -6px; right: -6px;
-    min-width: 17px; height: 17px; padding: 0 3px; background: #2a2030;
-    border: 1px solid #f0c040; color: #f0c040; border-radius: 9px;
-    font-size: 10px; font-weight: 800; display: flex; align-items: center;
-    justify-content: center; }
   #abilDesc { position: absolute; left: 50%; top: 132px;
     transform: translateX(-50%); width: 430px; max-width: 86vw;
     padding: 15px 22px 17px; background: rgba(10,9,14,.93);
@@ -420,28 +379,25 @@
   <div id="hpwrap">
     <div id="hpbar"><div id="hpfill"></div><div id="hptext">140 / 140</div></div>
     <div id="stambar"><div id="stamfill"></div></div>
-    <div id="ragebar"><div id="ragefill"></div>
-      <div id="ragetext">RAGE 0 / 100</div></div>
     <div id="stats">PWR 0 &nbsp; DEF 0 &nbsp; SPD 0</div>
   </div>
 
   <div id="hint"></div>
-  <div id="permaCap" class="seccap" style="display:none">PERMANENT POWERS</div>
-  <div id="permabuffs"></div>
-  <div id="buffsCap" class="seccap" style="display:none">TEMPORARY BUFFS</div>
   <div id="buffs"></div>
 
   <div id="abilities">
-    <div class="abil" id="ab-atk"><div class="picto" id="pic-atk"></div>
-      <div class="key">LMB</div></div>
-    <div class="abil" id="ab-smash"><div class="picto" id="pic-smash"></div>
+    <div class="abil" id="ab-atk"><div class="dot" style="background:#9298a1"></div>
+      <div class="cd"></div><div class="key">LMB</div></div>
+    <div class="abil" id="ab-smash"><div class="dot" style="background:#caa24a"></div>
       <div class="cd" id="cd-smash"></div>
-      <div class="cdnum" id="cdn-smash"></div><div class="key">RMB</div></div>
-    <div class="abil" id="ab-dash"><div class="picto" id="pic-dash"></div>
+      <div class="cdnum" id="cdn-smash"></div><div class="key">RMB SMASH</div></div>
+    <div class="abil" id="ab-dash"><div class="dot" style="background:#e0843a"></div>
       <div class="cd" id="cd-dash"></div>
-      <div class="cdnum" id="cdn-dash"></div><div class="key">SPACE</div></div>
-    <div class="abil" id="ab-ult"><div class="picto" id="pic-ult"></div>
-      <div class="key">Q</div></div>
+      <div class="cdnum" id="cdn-dash"></div><div class="key">SPACE LEAP</div></div>
+    <div class="abil" id="ab-ult"><div class="glyph"
+      style="color:#5a5660">&#9733;</div>
+      <div class="cd" id="cd-ult"></div>
+      <div class="cdnum" id="cdn-ult"></div><div class="key">Q ULT</div></div>
   </div>
 
   <div id="xpbar"><div id="xpfill"></div></div>
@@ -547,16 +503,6 @@ const RISE_DUR = 1.45;
 // stat-point yields — simple, readable metrics
 const PWR_DMG = 3, DEF_HP = 18, SPD_PCT = 0.04;
 const PTS_PER_LEVEL = 1, PTS_START = 0;   // exactly 1 point per level
-// rage — charges on every hit, spent to fuel the ultimate
-const RAGE_BASE = 100;          // base maximum rage
-const RAGE_PER_DEF = 12;        // each Defense point raises the rage ceiling
-const RAGE_PER_ARMOR = 25;      // each armour rarity tier raises it too
-const RAGE_DRAIN = 5;           // rage spent per second while the ult is live
-const RAGE_MIN_ACTIVATE = 10;   // rage needed to unleash the ultimate
-const RAGE_HIT = 5;             // rage gained per foe struck (light cleave)
-const RAGE_SMASH = 24;          // rage gained for a SMASH
-const RAGE_LEAP = 20;           // rage gained for a LEAP slam
-const ULT_LEVEL = 9;            // the ultimate is unlocked at level 9
 
 // archetypes — the horde compounds in strength every wave
 const ETYPES = {
@@ -3119,11 +3065,9 @@ function makePlayer() {
     smashCd: 0, dashCd: 0, moveAng: 0, iframes: 0, hurt: 0, dashTrailT: 0,
     leaping: false, leapT: 0, leapH: 0, leapSlowT: 0,
     leapSX: 0, leapSZ: 0, leapTX: 0, leapTZ: 0,
-    ultId: null, ultChosen: false, ultActive: false,
+    ultId: null, ultChosen: false, ultActive: false, ultT: 0, ultCd: 0,
     ultImmune: false, ultHitT: 0,
-    rage: 0, maxRage: RAGE_BASE,
-    buffs: [], permaBuffs: [],
-    perma: { dmg: 0, hp: 0, spd: 0, crit: 0, life: 0 },
+    buffs: [], perma: { dmg: 0, hp: 0, spd: 0, crit: 0, life: 0 },
     lifesteal: 0, dmgTakenMul: 1, sizeMul: 1,
     alive: true,
   };
@@ -3156,23 +3100,13 @@ function recalc() {
     if (m.critMul) critMul += m.critMul;
     if (m.size) sizeMul *= m.size;
   }
-  if (featherOn()) { atkSpeed *= 2.5; dmgMul *= 1.5; }   // +150% attack speed
+  if (featherOn()) { atkSpeed *= 4; dmgMul *= 1.5; }
   player.moveMul = moveMul; player.atkSpeed = atkSpeed;
   player.dmgMul = dmgMul; player.dmgTakenMul = dmgTakenMul;
   player.lifesteal = lifesteal; player.sizeMul = sizeMul;
   player.critChance = critC; player.critMul = critMul;
-  // the rage ceiling rises with Defense stat points and equipped armour
-  const armorRarity = player.gear.armor ? player.gear.armor.rarity : 0;
-  player.maxRage = RAGE_BASE + player.stat.defense * RAGE_PER_DEF +
-    armorRarity * RAGE_PER_ARMOR;
-  player.rage = clamp(player.rage, 0, player.maxRage);
   if (player.maxHp > before) player.hp += player.maxHp - before;
   player.hp = clamp(player.hp, 1, player.maxHp);
-}
-function gainRage(n) {
-  // rage builds only between ultimates — while one is live the bar only drains
-  if (!player.alive || player.ultActive) return;
-  player.rage = clamp(player.rage + n, 0, player.maxRage);
 }
 
 /* ─── gear / loot ─────────────────────────────────────────────────────────── */
@@ -3415,10 +3349,6 @@ function applyBuff(buff) {
     if (m.spd) pm.spd += m.spd;
     if (m.crit) pm.crit += m.crit;
     if (m.life) pm.life += m.life;
-    // record it so it shows on the permanent-powers HUD shelf
-    const ex = player.permaBuffs.find(p => p.def.id === buff.id);
-    if (ex) ex.count++;
-    else player.permaBuffs.push({ def: buff, count: 1 });
     recalc();
     achievement({ hex: buff.hex, glyph: buff.glyph, n: buff.n });
     Sound.levelup();
@@ -3568,10 +3498,7 @@ function applyGearVisual(obj) {
   if (obj === player.obj) swingArc.material.color.setHex(glow || 0xfff2dc);
   applyOutfit(obj, (player.gear.armor && player.gear.armor.outfit) || "rags");
 }
-function updateWeaponVisual() {
-  applyGearVisual(player.obj);
-  updateAbilityIcons();          // the LMB/RMB slash follows the weapon
-}
+function updateWeaponVisual() { applyGearVisual(player.obj); }
 function grantAbility(id) {
   if (hasA(id)) return;
   player.abil.add(id);
@@ -3583,36 +3510,29 @@ function grantAbility(id) {
   showAbilityCard(ab.n, ab.d, ab.hex, ab.glyph, "SWORD ABILITY UNLOCKED");
 }
 
-/* ─── ULTIMATE — Q, unlocked at level 9, one of three, kept all run.
-   Fuelled by RAGE: it drains the rage bar and ends when rage runs dry —
-   or the instant you press Q again. There is no cooldown. ─────────────────── */
+/* ─── ULTIMATE — Q, unlocked at level 10, one of three, kept all run ──────── */
+const ULT_DUR = 30, ULT_CD = 180;
 let pendingUlt = false, tornadoes = [];
 const ULTIMATES = [
   { id: "whirlwind", n: "WHIRLWIND", glyph: "\u{1F300}", col: 0xff8a4a,
     hex: "#ff8a4a",
-    d: "Spin like a berserker — immune to all harm while you carve 3x " +
-       "your attack damage into everything around you. Drains RAGE; " +
-       "press Q to end." },
+    d: "Spin like a berserker for 30s — immune to all harm while you " +
+       "carve 3x your attack damage into everything around you." },
   { id: "feather", n: "FEATHERWEIGHT", glyph: "\u{1FAB6}", col: 0x9fe4ff,
     hex: "#9fe4ff",
-    d: "Your weapon weighs nothing: +150% attack speed, +50% damage, " +
-       "immune to all harm. Drains RAGE; press Q to end." },
+    d: "For 30s your weapon weighs nothing: +300% attack speed, +50% " +
+       "damage, immune to all harm." },
   { id: "storm", n: "ELEMENTAL STORM", glyph: "\u{1F329}", col: 0xc06bff,
     hex: "#c06bff",
-    d: "Thunder hammers nearby foes and roaming fire tornadoes scour " +
-       "the field — and you keep full control. Drains RAGE; press Q to end." },
+    d: "For 30s, thunder hammers nearby foes and roaming fire tornadoes " +
+       "scour the field — and you keep full control." },
 ];
 function ultDef(id) { return ULTIMATES.find(u => u.id === id); }
 function featherOn() { return player.ultActive && player.ultId === "feather"; }
 function tryUltimate() {
   const e = player;
-  if (!e.ultId || !e.alive) return;
-  if (e.ultActive) { endUltimate(); return; }    // press Q again to cancel it
-  if (e.rage < RAGE_MIN_ACTIVATE) {
-    banner("your rage has not yet risen", "NOT ENOUGH RAGE");
-    Sound.hurt(); return;
-  }
-  e.ultActive = true; e.ultHitT = 0;
+  if (!e.ultId || e.ultActive || e.ultCd > 0 || !e.alive) return;
+  e.ultActive = true; e.ultT = ULT_DUR; e.ultCd = ULT_CD; e.ultHitT = 0;
   const u = ultDef(e.ultId);
   if (e.ultId === "whirlwind" || e.ultId === "feather") e.ultImmune = true;
   if (e.ultId === "storm") spawnTornadoes();
@@ -3633,9 +3553,10 @@ function endUltimate() {
 }
 function updateUltimate(dt) {
   const e = player;
+  if (e.ultCd > 0) e.ultCd -= dt;
   if (!e.ultActive) return;
-  e.rage -= RAGE_DRAIN * dt;            // the ultimate burns through rage
-  if (e.rage <= 0) { e.rage = 0; endUltimate(); return; }
+  e.ultT -= dt;
+  if (e.ultT <= 0) { endUltimate(); return; }
   if (e.ultId === "whirlwind") {
     e.ultHitT -= dt;
     if (e.ultHitT <= 0) {
@@ -3724,8 +3645,11 @@ function grantUltimate(id) {
   player.ultId = id; player.ultChosen = true;
   const u = ultDef(id);
   const slot = document.getElementById("ab-ult");
-  if (slot) { slot.style.borderColor = u.hex; slot.style.color = u.hex; }
-  updateAbilityIcons();
+  if (slot) {
+    const gl = slot.querySelector(".glyph");
+    if (gl) { gl.textContent = u.glyph; gl.style.color = u.hex; }
+    slot.style.borderColor = u.hex; slot.style.color = u.hex;
+  }
   achievement({ hex: u.hex, glyph: u.glyph, n: u.n });
   Sound.ability();
 }
@@ -3757,7 +3681,6 @@ function trySmash() {
 function smashStrike() {
   const e = player, ham = hasA("hammer");
   const dmg = e.dmg * e.dmgMul * (ham ? 4.2 : 3.0) + e.level * 4;
-  gainRage(RAGE_SMASH);
   hitStop = 0.1;
   if (ham) {
     const ix = e.x + Math.sin(e.aim) * 6.2;
@@ -3858,7 +3781,6 @@ function tryDash() {
 /* the leap lands — an earthquake tears the ground along the whole arc */
 function leapLand() {
   const e = player;
-  gainRage(RAGE_LEAP);
   e.leapSlowT = 3;                               // crushing recovery
   const smashBase = e.dmg * e.dmgMul * (hasA("hammer") ? 4.2 : 3.0)
     + e.level * 4;
@@ -3932,7 +3854,6 @@ function meleeStrike() {
     player.z + Math.cos(player.aim) * range * 0.7, range * 0.6,
     player.dmg * player.dmgMul);
   if (hits) {
-    gainRage(hits * RAGE_HIT);
     hitStop = 0.05; shake(0.16 + hits * 0.05);
     const fx = player.x + Math.sin(player.aim) * range * 0.62;
     const fz = player.z + Math.cos(player.aim) * range * 0.62;
@@ -4033,10 +3954,6 @@ function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
   }
   if (z.hp <= 0 && z.state !== "die") killZombie(z);
 }
-/* loot/buff drop chance shrinks steadily as the player levels up */
-function dropMul() {
-  return clamp(1.12 - player.level * 0.07, 0.18, 1);
-}
 function killZombie(z) {
   z.state = "die"; z.dieT = 0;
   zombiesAlive--;
@@ -4070,15 +3987,12 @@ function killZombie(z) {
     }
     pulseAbil("soul");
   }
-  // drops thin out as you level — late game is mastery, not a loot flood
-  const dm = dropMul();
+  // elites & bosses drop gear + a buff; the common dead rarely drop a buff
   if (z.rare || z.boss || z.type === "giant") {
-    if (z.boss || Math.random() < 0.55)
-      spawnLoot(z.x, z.z, makeItem(Math.random() < 0.5 ? "weapon" : "armor",
-        2, 3));
-    if (z.boss || Math.random() < 0.5 * dm)
-      spawnBuffDrop(z.x + rand(-3, 3), z.z + rand(-3, 3), true);
-  } else if (Math.random() < 0.022 * dm) {
+    spawnLoot(z.x, z.z, makeItem(Math.random() < 0.5 ? "weapon" : "armor",
+      2, 3));
+    spawnBuffDrop(z.x + rand(-3, 3), z.z + rand(-3, 3), true);
+  } else if (Math.random() < 0.022) {
     spawnBuffDrop(z.x, z.z, false);
   }
   if (Math.random() < (z.boss || z.type === "giant" || z.rare ? 1 :
@@ -4120,7 +4034,7 @@ function gainXp(n) {
       { color: 0xffe27a, speed: 11, up: 6, life: 0.9, grav: 0.4 });
     banner("+" + PTS_PER_LEVEL + " STAT POINT  (" + player.statPoints +
       " TO SPEND)", "LEVEL " + player.level);
-    if (player.level >= ULT_LEVEL && !player.ultChosen) pendingUlt = true;
+    if (player.level >= 10 && !player.ultChosen) pendingUlt = true;
   }
 }
 function startWave(n) {
@@ -4183,16 +4097,13 @@ function spawnZombie(type, rare) {
   if (!ok) { x = clamp(x, -ARENA + 12, ARENA - 12);
     z = clamp(z, -ARENA + 12, ZSHORE - 8); }
   const gy = groundHeight(x, z);
-  // the horde swells in stature as the waves climb
-  const sizeMul = 1 + Math.min(wave, 24) * (type === "boss" ? 0.008 : 0.014);
   const obj = buildZombie(type, rare);
-  obj.scale.setScalar(sizeMul);
-  obj.position.set(x, gy - d.h * 0.95 * sizeMul, z);
+  obj.position.set(x, gy - d.h * 0.95, z);
   scene.add(obj);
   const mound = new THREE.Mesh(moundGeo,
     new THREE.MeshStandardMaterial({ color: 0x2c2114, roughness: 1 }));
   mound.position.set(x, gy + 0.1, z);
-  mound.scale.set(d.r * 1.5 * sizeMul, 1, d.r * 1.5 * sizeMul);
+  mound.scale.set(d.r * 1.5, 1, d.r * 1.5);
   mound.receiveShadow = true;
   scene.add(mound);
   // gentle, mostly-linear scaling — the horde stays a hack-and-slash romp,
@@ -4203,8 +4114,8 @@ function spawnZombie(type, rare) {
   const hp = d.hp * hpScale;
   zombies.push({
     obj, mound, type, rare: !!rare, boss: type === "boss", x, z, y: gy,
-    hp: hp, maxHp: hp, sizeMul: sizeMul,
-    speed: d.speed * (1 + Math.min(wave, 26) * 0.016), r: d.r * sizeMul,
+    hp: hp, maxHp: hp,
+    speed: d.speed * (1 + Math.min(wave, 26) * 0.016), r: d.r,
     state: "rising", riseT: 0, walkP: rand(0, TAU), t: rand(0, 9),
     flash: 0, atkCd: rand(0.3, 1.2), stagger: 0, kx: 0, kz: 0,
     groanT: rand(2, 9), dieT: 0,
@@ -4334,11 +4245,7 @@ function syncTouchUI() {
   if (state !== ST.PLAYING || !player) return;
   tcdBtn("tb-smash", player.smashCd);
   tcdBtn("tb-leap", player.dashCd);
-  // the ult has no cooldown — but grey it out until there's rage to spend
-  const ultBtn = document.getElementById("tb-ult");
-  if (ultBtn) ultBtn.classList.toggle("cooling",
-    !player.ultActive && (!player.ultId ||
-      player.rage < RAGE_MIN_ACTIVATE));
+  tcdBtn("tb-ult", player.ultActive ? 0 : player.ultCd);
 }
 function setupTouchControls() {
   if (!isTouch) return;
@@ -4503,17 +4410,12 @@ const UI = {
   overAgain: document.getElementById("over-again"),
   cdnSmash: document.getElementById("cdn-smash"),
   cdnDash: document.getElementById("cdn-dash"),
+  cdUlt: document.getElementById("cd-ult"),
+  cdnUlt: document.getElementById("cdn-ult"),
   abUlt: document.getElementById("ab-ult"),
-  picUlt: document.getElementById("pic-ult"),
-  ragebar: document.getElementById("ragebar"),
-  ragefill: document.getElementById("ragefill"),
-  ragetext: document.getElementById("ragetext"),
   combo: document.getElementById("combo"),
   comboMulEl: document.querySelector("#combo .cmul"),
   buffs: document.getElementById("buffs"),
-  buffsCap: document.getElementById("buffsCap"),
-  permabuffs: document.getElementById("permabuffs"),
-  permaCap: document.getElementById("permaCap"),
   bossbar: document.getElementById("bossbar"),
   bossFill: document.querySelector("#bossbar .bfill"),
   minimap: document.getElementById("minimap"),
@@ -4562,150 +4464,6 @@ function pulseAbil(id) {
   el.classList.add("pulse");
   setTimeout(() => el.classList.remove("pulse"), 130);
 }
-
-/* ─── ability pictograms — drawn SVG icons, no text ───────────────────────────
-   LMB is a slash shaped by the weapon you carry; RMB is the same weapon with a
-   heavier double-slash; SPACE is a leap arc; Q becomes your chosen ultimate. */
-function svgEl(inner) {
-  return '<svg viewBox="0 0 100 100" ' +
-    'xmlns="http://www.w3.org/2000/svg">' + inner + '</svg>';
-}
-// each weapon, drawn diagonally: hilt lower-left, blade tip upper-right
-const WEAP_SVG = {
-  greatsword:
-    '<circle cx="19" cy="88" r="5" fill="#caa24a"/>' +
-    '<line x1="22" y1="85" x2="38" y2="69" stroke="#4a4a55" ' +
-      'stroke-width="7" stroke-linecap="round"/>' +
-    '<line x1="28" y1="61" x2="50" y2="79" stroke="#caa24a" ' +
-      'stroke-width="7" stroke-linecap="round"/>' +
-    '<polygon points="33,66 47,80 88,21" fill="#dfe4ec" ' +
-      'stroke="#aab0bc" stroke-width="2" stroke-linejoin="round"/>',
-  cleaver:
-    '<line x1="23" y1="85" x2="38" y2="70" stroke="#4a4a55" ' +
-      'stroke-width="7" stroke-linecap="round"/>' +
-    '<circle cx="40" cy="68" r="5.5" fill="#caa24a"/>' +
-    '<polygon points="33,73 55,84 82,40 52,30" fill="#dfe4ec" ' +
-      'stroke="#aab0bc" stroke-width="2" stroke-linejoin="round"/>',
-  axe:
-    '<line x1="21" y1="89" x2="76" y2="22" stroke="#6a4a2a" ' +
-      'stroke-width="6" stroke-linecap="round"/>' +
-    '<path d="M50,52 Q 82,10 94,44 Q 78,48 62,64 Z" fill="#dfe4ec" ' +
-      'stroke="#aab0bc" stroke-width="2" stroke-linejoin="round"/>',
-  saber:
-    '<circle cx="20" cy="87" r="4.5" fill="#caa24a"/>' +
-    '<line x1="23" y1="84" x2="36" y2="71" stroke="#4a4a55" ' +
-      'stroke-width="6.5" stroke-linecap="round"/>' +
-    '<line x1="29" y1="65" x2="45" y2="79" stroke="#caa24a" ' +
-      'stroke-width="5.5" stroke-linecap="round"/>' +
-    '<path d="M37,71 Q 72,52 90,18 Q 78,56 48,81 Z" fill="#dfe4ec" ' +
-      'stroke="#aab0bc" stroke-width="2" stroke-linejoin="round"/>',
-  halberd:
-    '<line x1="16" y1="93" x2="84" y2="14" stroke="#6a4a2a" ' +
-      'stroke-width="5" stroke-linecap="round"/>' +
-    '<polygon points="84,14 92,30 75,25" fill="#dfe4ec" ' +
-      'stroke="#aab0bc" stroke-width="1.6" stroke-linejoin="round"/>' +
-    '<path d="M55,46 Q 80,24 86,52 Q 72,53 62,62 Z" fill="#dfe4ec" ' +
-      'stroke="#aab0bc" stroke-width="2" stroke-linejoin="round"/>',
-  mace:
-    '<line x1="24" y1="86" x2="56" y2="50" stroke="#6a4a2a" ' +
-      'stroke-width="7" stroke-linecap="round"/>' +
-    '<g fill="#dfe4ec" stroke="#aab0bc" stroke-width="1.4">' +
-      '<polygon points="65,12 58,31 73,31"/>' +
-      '<polygon points="92,40 73,34 73,48"/>' +
-      '<polygon points="86,17 70,30 78,38"/>' +
-      '<polygon points="44,18 60,30 52,38"/>' +
-      '<polygon points="40,42 57,36 57,50"/>' +
-      '<polygon points="86,64 70,52 78,46"/></g>' +
-    '<circle cx="65" cy="40" r="13" fill="#cdd2dc" ' +
-      'stroke="#aab0bc" stroke-width="2"/>',
-};
-const LMB_SLASH =
-  '<path d="M12,82 C 30,30 58,12 93,19 C 63,30 41,52 27,87 Z" ' +
-    'fill="#ff8a32" opacity="0.95"/>' +
-  '<circle cx="85" cy="32" r="3" fill="#ffc878"/>' +
-  '<circle cx="22" cy="71" r="2.4" fill="#ffc878"/>';
-const SMASH_SLASH =
-  '<path d="M7,86 C 27,20 62,4 98,14 C 63,27 38,50 21,92 Z" ' +
-    'fill="#ff4a1e" opacity="0.95"/>' +
-  '<path d="M20,80 C 36,32 61,17 88,22 C 61,33 42,52 31,83 Z" ' +
-    'fill="#ffcf3a" opacity="0.92"/>' +
-  '<g fill="#ffcf3a">' +
-    '<polygon points="90,38 99,44 88,49"/>' +
-    '<polygon points="62,8 70,15 58,18"/>' +
-    '<polygon points="14,66 22,72 11,76"/></g>';
-function slashIcon(model, strong) {
-  return svgEl((strong ? SMASH_SLASH : LMB_SLASH) +
-    (WEAP_SVG[model] || WEAP_SVG.greatsword));
-}
-function leapIcon() {
-  return svgEl(
-    '<path d="M14,82 Q 50,2 86,82" fill="none" stroke="#e0a04a" ' +
-      'stroke-width="9" stroke-linecap="round"/>' +
-    '<circle cx="14" cy="82" r="6" fill="#e0a04a"/>' +
-    '<polygon points="86,94 75,72 97,72" fill="#e0a04a"/>' +
-    '<g stroke="#ffd23a" stroke-width="4" stroke-linecap="round">' +
-      '<line x1="70" y1="90" x2="62" y2="98"/>' +
-      '<line x1="86" y1="96" x2="86" y2="100"/>' +
-      '<line x1="102" y1="90" x2="110" y2="98"/></g>');
-}
-function ultSVG(id) {
-  if (id === "whirlwind")
-    return svgEl(
-      '<g fill="none" stroke-linecap="round">' +
-        '<path d="M50,9 A41,41 0 1 1 12,34" stroke="#ff7a2e" ' +
-          'stroke-width="8"/>' +
-        '<path d="M50,27 A23,23 0 1 1 29,41" stroke="#ffb24a" ' +
-          'stroke-width="7"/>' +
-        '<path d="M50,43 A8,8 0 1 1 43,54" stroke="#ffe07a" ' +
-          'stroke-width="6"/></g>' +
-      '<circle cx="50" cy="51" r="4.5" fill="#ffe07a"/>');
-  if (id === "storm")
-    return svgEl(
-      '<path d="M34,90 C14,72 24,50 40,32 C38,52 56,50 52,34 ' +
-        'C72,52 76,76 56,90 C64,76 52,68 46,74 C42,80 46,86 34,90 Z" ' +
-        'fill="#ff5a1e"/>' +
-      '<path d="M40,88 C31,79 33,63 42,51 C42,64 52,64 50,53 ' +
-        'C60,66 62,80 49,88 C53,81 45,77 43,81 Z" fill="#ffb23a"/>' +
-      '<path d="M61,5 L40,49 L53,49 L43,95 L82,40 L65,40 Z" ' +
-        'fill="#ffe24a" stroke="#fff7c8" stroke-width="2" ' +
-        'stroke-linejoin="round"/>');
-  if (id === "feather")
-    return svgEl(
-      '<g stroke="#9fe4ff" stroke-width="6" stroke-linecap="round">' +
-        '<line x1="5" y1="33" x2="25" y2="33"/>' +
-        '<line x1="1" y1="50" x2="23" y2="50"/>' +
-        '<line x1="5" y1="67" x2="25" y2="67"/></g>' +
-      '<path d="M34,22 L62,50 L34,78" fill="none" stroke="#9fe4ff" ' +
-        'stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>' +
-      '<path d="M58,22 L86,50 L58,78" fill="none" stroke="#cdf2ff" ' +
-        'stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>');
-  return ultLockedSVG();
-}
-function ultLockedSVG() {
-  return svgEl(
-    '<polygon points="50,13 60,40 89,40 66,57 75,85 50,68 25,85 ' +
-      '34,57 11,40 40,40" fill="none" stroke="#5a5660" ' +
-      'stroke-width="5" stroke-linejoin="round"/>');
-}
-function setPicto(id, svg, spin) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.innerHTML = svg;
-  el.classList.toggle("spin", !!spin);
-}
-function updateAbilityIcons() {
-  const wk = (player && player.gear.weapon && player.gear.weapon.model)
-    || "greatsword";
-  setPicto("pic-atk", slashIcon(wk, false), false);
-  setPicto("pic-smash", slashIcon(wk, true), false);
-  setPicto("pic-dash", leapIcon(), false);
-  if (player && player.ultId)
-    setPicto("pic-ult", ultSVG(player.ultId),
-      player.ultId === "whirlwind");
-  else
-    setPicto("pic-ult", ultLockedSVG(), false);
-}
-updateAbilityIcons();
 /* ─── minimap ─────────────────────────────────────────────────────────────── */
 function drawMinimap() {
   if (!player) return;
@@ -4778,22 +4536,15 @@ function updateHUD() {
   }
   cdb(UI.cdSmash, UI.cdnSmash, player.smashCd, P.smashCd);
   cdb(UI.cdDash, UI.cdnDash, player.dashCd, P.dashCd);
-  // the ultimate — fuelled by rage, no cooldown to wait out
   if (player.ultActive) {
+    UI.cdUlt.style.top = "100%";
+    UI.cdnUlt.textContent = Math.ceil(player.ultT);
     UI.abUlt.classList.add("active");
-    UI.abUlt.classList.remove("dim");
   } else {
     UI.abUlt.classList.remove("active");
-    const ready = !!player.ultId && player.rage >= RAGE_MIN_ACTIVATE;
-    UI.abUlt.classList.toggle("dim", !ready);
+    cdb(UI.cdUlt, UI.cdnUlt, player.ultCd, ULT_CD);
   }
-  // rage bar
-  const rf = clamp(player.rage / player.maxRage, 0, 1);
-  UI.ragefill.style.width = (rf * 100) + "%";
-  UI.ragetext.textContent = "RAGE " + Math.floor(player.rage) + " / " +
-    player.maxRage;
-  UI.ragebar.classList.toggle("full", rf >= 0.999);
-  // active temporary buffs — timer chips, top-right
+  // active temporary buffs
   let bh = "";
   for (const b of player.buffs) {
     const k = clamp(b.t / 30, 0, 1);
@@ -4803,17 +4554,6 @@ function updateHUD() {
       '%"></div></div></div>';
   }
   UI.buffs.innerHTML = bh;
-  UI.buffsCap.style.display = player.buffs.length ? "block" : "none";
-  // permanent powers — gold chips, no timer, kept for the whole run
-  let ph = "";
-  for (const p of player.permaBuffs) {
-    ph += '<div class="permachip">' + p.def.glyph +
-      '<div class="inf">&#8734;</div>' +
-      (p.count > 1 ? '<div class="pc">&times;' + p.count + '</div>' : '') +
-      '</div>';
-  }
-  UI.permabuffs.innerHTML = ph;
-  UI.permaCap.style.display = player.permaBuffs.length ? "block" : "none";
   if (comboMul > 1) {
     UI.combo.style.opacity = "1";
     UI.comboMulEl.textContent = "×" + comboMul;
@@ -5147,8 +4887,7 @@ function openUltimateChoice() {
   state = ST.CHOICE;
   document.body.style.cursor = "default";
   document.exitPointerLock();
-  UI.choice.querySelector(".ctitle").textContent =
-    "LEVEL " + ULT_LEVEL + " — ASCENSION";
+  UI.choice.querySelector(".ctitle").textContent = "LEVEL 10 — ASCENSION";
   UI.choice.querySelector(".csub").textContent =
     "CHOOSE YOUR ULTIMATE — IT IS YOURS FOR THE REST OF THE RUN";
   const ready = UI.choice.querySelector(".ready");
@@ -5159,8 +4898,8 @@ function openUltimateChoice() {
     card.className = "card locked";
     card.style.borderColor = u.hex;
     card.innerHTML =
-      '<div class="emblem" style="background:#100d18;box-shadow:0 0 26px ' +
-        u.hex + '">' + ultSVG(u.id) + '</div>' +
+      '<div class="emblem" style="background:' + u.hex + ';color:' + u.hex +
+        '">' + u.glyph + '</div>' +
       '<div class="cn">' + u.n + '</div>' +
       '<div class="cd2">' + u.d + '</div>' +
       '<div class="take">CLAIM YOUR ULTIMATE</div>';
@@ -5356,17 +5095,12 @@ function updatePlayer(dt) {
   }
   poseSurvivor();
 }
-function playerSizeScale() {
-  // you grow into a towering warrior — bigger with every level and wave
-  return 1 + Math.min(player.level - 1, 20) * 0.009
-           + Math.min(wave, 25) * 0.015;
-}
 function poseSurvivor() {
   const e = player, o = e.obj, u = o.userData;
   o.rotation.y = (e.ultActive && e.ultId === "whirlwind")
     ? e.t * 17 : e.aim;
-  // you grow into a larger, older warrior as the run goes on
-  o.scale.setScalar(playerSizeScale() * e.sizeMul);
+  // you grow into a larger, older warrior as you gain levels
+  o.scale.setScalar((1 + Math.min(e.level - 1, 24) * 0.014) * e.sizeMul);
   const bob = (e.moving && !e.leaping) ? Math.abs(Math.sin(e.walkP)) *
     (e.sprinting ? 0.34 : 0.22) : 0;
   o.position.set(e.x, e.y + bob + e.leapH, e.z);
@@ -5447,7 +5181,7 @@ function updateZombies(dt) {
       const k = clamp(z.dieT / 0.8, 0, 1);
       z.obj.rotation.x = k * 1.5;
       z.obj.position.y = groundHeight(z.x, z.z) - k * 1.8;
-      z.obj.scale.setScalar(z.sizeMul * (1 - k * 0.4));
+      z.obj.scale.setScalar(1 - k * 0.4);
       if (z.dieT > 0.85) { scene.remove(z.obj); zombies.splice(i, 1); }
       continue;
     }
@@ -5457,8 +5191,7 @@ function updateZombies(dt) {
       const k = clamp(z.riseT / RISE_DUR, 0, 1);
       const gy = groundHeight(z.x, z.z);
       z.y = gy;
-      z.obj.position.set(z.x,
-        gy - d.h * 0.95 * z.sizeMul * (1 - easeOut(k)), z.z);
+      z.obj.position.set(z.x, gy - d.h * 0.95 * (1 - easeOut(k)), z.z);
       z.obj.rotation.y = Math.atan2(player.x - z.x, player.z - z.z);
       // clawing-up pose
       z.obj.userData.arms[0].rotation.x = -2.2 + Math.sin(z.riseT * 9) * 0.3;
@@ -5732,11 +5465,11 @@ function breakCrate(c) {
   spawnParts(c.x, y + c.s * 0.6, c.z, 26,
     { color: 0x6a4e2e, speed: 16, up: 9, life: 0.8, grav: 1.4 });
   spawnGibs(c.x, y + 0.8, c.z, 10, 0x5a4226);
-  const roll = Math.random(), dm = dropMul();
-  if (roll < 0.34 * dm)
+  const roll = Math.random();
+  if (roll < 0.34)
     spawnLoot(c.x + rand(-1.2, 1.2), c.z + rand(-1.2, 1.2),
       makeItem(Math.random() < 0.5 ? "weapon" : "armor", 0, 2));
-  else if (roll < 0.40 * dm)
+  else if (roll < 0.40)
     spawnBuffDrop(c.x, c.z, false);
   else {
     const bonus = 55 + wave * 12;
