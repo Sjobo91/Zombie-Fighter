@@ -640,7 +640,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.34;
+renderer.toneMappingExposure = 1.22;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x2b3040);
@@ -659,8 +659,8 @@ function resize() {
 addEventListener("resize", resize); resize();
 
 /* ─── lights ──────────────────────────────────────────────────────────────── */
-scene.add(new THREE.HemisphereLight(0x9badc8, 0x4c4738, 1.2));
-const moon = new THREE.DirectionalLight(0xd8d9e2, 1.05);
+scene.add(new THREE.HemisphereLight(0x9badc8, 0x4c4738, 1.0));
+const moon = new THREE.DirectionalLight(0xd8d9e2, 0.95);
 moon.position.set(62, 100, 44);
 moon.castShadow = true;
 moon.shadow.mapSize.set(lowQ ? 1024 : 2048, lowQ ? 1024 : 2048);
@@ -938,6 +938,99 @@ const GROUND = 580, GSEG = 210;
   mesh.receiveShadow = true;
   scene.add(mesh);
 })();
+/* ─── walkable verticality — hills & a bridge layered over the terrain ────── */
+const walkZones = [];
+function walkHeight(x, z) {
+  let h = groundHeight(x, z);
+  for (let i = 0; i < walkZones.length; i++) {
+    const wy = walkZones[i](x, z);
+    if (wy != null && wy > h) h = wy;
+  }
+  return h;
+}
+function addHill(hx, hz, r, hh) {
+  const sm = (d) => { const k = 1 - d / r; return k * k * (3 - 2 * k); };
+  walkZones.push((x, z) => {
+    const d = Math.hypot(x - hx, z - hz);
+    if (d >= r) return null;
+    return groundHeight(x, z) + hh * sm(d);
+  });
+  const N = 30;
+  const geo = new THREE.PlaneGeometry(r * 2, r * 2, N, N);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  const lo = new THREE.Color(0x2a3018), hi = new THREE.Color(0x3c4626),
+    rock = new THREE.Color(0x4c473a), tmp = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const lx = pos.getX(i), lz = pos.getZ(i), d = Math.hypot(lx, lz);
+    const s = d < r ? sm(d) : 0;
+    pos.setY(i, groundHeight(hx + lx, hz + lz) + hh * s + 0.05);
+    tmp.copy(lo).lerp(hi, clamp(s * 1.5, 0, 1));
+    if (s > 0.74) tmp.lerp(rock, (s - 0.74) / 0.26 * 0.7);
+    tmp.multiplyScalar(rand(0.85, 1.12));
+    col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+  }
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 1, metalness: 0 }));
+  m.position.set(hx, 0, hz);
+  m.receiveShadow = true; m.castShadow = true;
+  scene.add(m);
+}
+function addBridge(x1, z1, x2, z2, archH, deckW) {
+  const y1 = groundHeight(x1, z1), y2 = groundHeight(x2, z2);
+  const len = Math.hypot(x2 - x1, z2 - z1), hw = deckW / 2;
+  const archPt = (t) => {
+    const ct = clamp(t, 0, 1);
+    return { x: x1 + (x2 - x1) * ct, z: z1 + (z2 - z1) * ct,
+      y: y1 + (y2 - y1) * ct + archH * Math.sin(Math.PI * ct) };
+  };
+  walkZones.push((x, z) => {
+    const t = ((x - x1) * (x2 - x1) + (z - z1) * (z2 - z1)) / (len * len);
+    if (t < 0 || t > 1) return null;
+    const px = x1 + (x2 - x1) * t, pz = z1 + (z2 - z1) * t;
+    if (Math.hypot(x - px, z - pz) > hw) return null;
+    return archPt(t).y + 0.5;                    // stand on the deck top
+  });
+  const deckMat = mat(0x42351f, 0.95), stone = mat(0x423f39, 1),
+    railMat = mat(0x322c24, 1);
+  const segs = Math.max(10, Math.round(len / 3.5));
+  const segLen = len / segs + 0.55;
+  for (let i = 0; i < segs; i++) {
+    const mid = archPt((i + 0.5) / segs), nxt = archPt((i + 1) / segs);
+    const sg = new THREE.Group();
+    sg.position.set(mid.x, mid.y, mid.z);
+    sg.lookAt(nxt.x, nxt.y, nxt.z);
+    const deck = new THREE.Mesh(
+      new THREE.BoxGeometry(deckW, 1, segLen), deckMat);
+    deck.castShadow = deck.receiveShadow = true; sg.add(deck);
+    for (const sx of [-1, 1]) {
+      const rail = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 1.5, segLen), railMat);
+      rail.position.set(sx * hw, 1.25, 0); rail.castShadow = true;
+      sg.add(rail);
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(0.52, 0.3, segLen), stone);
+      cap.position.set(sx * hw, 2.05, 0); sg.add(cap);
+    }
+    scene.add(sg);
+  }
+  for (const t of [0.32, 0.68]) {                // stone support piers
+    const p = archPt(t), baseY = SEA_Y - 3;
+    const pier = new THREE.Mesh(
+      new THREE.BoxGeometry(4.4, p.y - baseY, 5.2), stone);
+    pier.position.set(p.x, (p.y + baseY) / 2, p.z);
+    pier.castShadow = true; scene.add(pier);
+  }
+  for (const t of [0, 1]) {                      // end abutments
+    const p = archPt(t);
+    const ab = new THREE.Mesh(new THREE.BoxGeometry(deckW + 4, 5, 7), stone);
+    ab.position.set(p.x, p.y - 1.6, p.z); ab.castShadow = true;
+    scene.add(ab);
+  }
+}
 /* ─── the sea ─────────────────────────────────────────────────────────────── */
 let seaMesh = null;
 const SEA_Y = -3.4;
@@ -2054,6 +2147,10 @@ function addPark(cx, cz) {
   // wrecked cars parked along the new streets
   for (const c of [[96, 8], [150, 26], [44, -148], [-44, -88], [188, 8]])
     if (!blocked(c[0], c[1], 4)) addProp("car", c[0], c[1]);
+  // ════ verticality — hills to climb and an arched bridge to cross ════
+  addHill(15, -85, 30, 11);
+  addHill(-35, 35, 24, 8);
+  addBridge(-52, -52, 52, -52, 7, 9);
   // ---- the lived-in centre: wreckage, barricades, hazards, the dead ----
   function scatterDetail(n, rMin, rMax, pad, fn) {
     let placed = 0, guard = 0;
@@ -2195,7 +2292,7 @@ function updatePeople(dt) {
       p.ang += 2.4; p.retarget = rand(0.6, 1.6);
     } else { p.x = nx; p.z = nz; }
     p.walkP += dt * sp * 1.7;
-    p.g.position.set(p.x, groundHeight(p.x, p.z), p.z);
+    p.g.position.set(p.x, walkHeight(p.x, p.z), p.z);
     p.g.rotation.y = p.ang;
     const sw = Math.sin(p.walkP) * (p.flee > 0 ? 1.0 : 0.6);
     p.legs[0].rotation.x = sw; p.legs[1].rotation.x = -sw;
@@ -2486,7 +2583,7 @@ function buildSurvivor() {
   arm.add(weaponMount);
   const weapon = buildWeapon("greatsword");
   weaponMount.add(weapon);
-  const torch = new THREE.PointLight(0xffb878, 2.3, 44, 1.6);
+  const torch = new THREE.PointLight(0xffb878, 0.85, 30, 1.8);
   torch.position.set(0, 3.8, 0); g.add(torch);
   upper.traverse(o => { if (o.isMesh) o.castShadow = true; });
   arm.traverse(o => { if (o.isMesh) o.castShadow = true; });
@@ -2909,6 +3006,89 @@ function updateScorch(dt) {
     s.age += dt;
     if (s.age >= s.life) { s.m.visible = false; continue; }
     s.m.material.opacity = 0.85 * (1 - s.age / s.life);
+  }
+}
+
+/* ─── busted ground — fracture cracks & heaved slabs from heavy impacts ───── */
+const crackTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d");
+  g.strokeStyle = "rgba(9,6,4,0.95)"; g.lineCap = "round";
+  for (let i = 0; i < 11; i++) {                 // radial fracture lines
+    let aa = i / 11 * TAU + rand(-0.3, 0.3), x = 64, y = 64;
+    const step = rand(8.5, 12.5);
+    g.lineWidth = rand(2, 5.5);
+    g.beginPath(); g.moveTo(x, y);
+    for (let s = 0; s < 5; s++) {
+      aa += rand(-0.5, 0.5);
+      x += Math.cos(aa) * step; y += Math.sin(aa) * step;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  return new THREE.CanvasTexture(c);
+})();
+const cracks = [], slabs = [];
+(function () {
+  const cgeo = new THREE.PlaneGeometry(1, 1); cgeo.rotateX(-Math.PI / 2);
+  for (let i = 0; i < 26; i++) {
+    const m = new THREE.Mesh(cgeo, new THREE.MeshBasicMaterial({
+      map: crackTex, transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false; scene.add(m);
+    cracks.push({ m, age: 0, life: 0 });
+  }
+  const sgeo = new THREE.BoxGeometry(1, 1, 1);
+  for (let i = 0; i < 18; i++) {
+    const m = new THREE.Mesh(sgeo, mat(0x3a3026, 1));
+    m.castShadow = true; m.visible = false; scene.add(m);
+    slabs.push({ m, age: 0, life: 0, x: 0, z: 0, baseY: 0 });
+  }
+})();
+let crackCur = 0, slabCur = 0;
+function bustGround(x, z, r) {
+  const n = Math.min(7, 3 + Math.round(r / 8));
+  for (let i = 0; i < n; i++) {
+    const cr = cracks[crackCur]; crackCur = (crackCur + 1) % cracks.length;
+    const a = rand(0, TAU), d = i === 0 ? 0 : rand(r * 0.2, r * 0.72);
+    const cx = x + Math.cos(a) * d, cz = z + Math.sin(a) * d;
+    const sc = i === 0 ? r * 1.5 : rand(r * 0.6, r * 1.05);
+    cr.age = 0; cr.life = rand(14, 22); cr.m.visible = true;
+    cr.m.position.set(cx, groundHeight(cx, cz) + 0.06 + i * 0.012, cz);
+    cr.m.rotation.y = rand(0, TAU);
+    cr.m.scale.set(sc, 1, sc);
+    cr.m.material.opacity = 0.92;
+  }
+  const sn = Math.min(7, 2 + Math.round(r / 8));
+  for (let i = 0; i < sn; i++) {
+    const sl = slabs[slabCur]; slabCur = (slabCur + 1) % slabs.length;
+    const a = rand(0, TAU), d = rand(r * 0.28, r * 0.78);
+    const sx = x + Math.cos(a) * d, sz = z + Math.sin(a) * d;
+    const w = rand(1.8, 3.6);
+    sl.age = 0; sl.life = rand(7, 11);
+    sl.x = sx; sl.z = sz; sl.baseY = groundHeight(sx, sz);
+    sl.m.visible = true;
+    sl.m.scale.set(w, rand(0.5, 1.1), w * rand(0.7, 1.05));
+    sl.m.position.set(sx, sl.baseY + rand(0.2, 0.7), sz);
+    sl.m.rotation.set(rand(-0.45, 0.45), rand(0, TAU), rand(-0.45, 0.45));
+  }
+}
+function updateCracks(dt) {
+  for (const cr of cracks) {
+    if (cr.age >= cr.life) continue;
+    cr.age += dt;
+    if (cr.age >= cr.life) { cr.m.visible = false; continue; }
+    const k = cr.age / cr.life;
+    cr.m.material.opacity = 0.92 * (k < 0.72 ? 1 : (1 - k) / 0.28);
+  }
+  for (const sl of slabs) {
+    if (sl.age >= sl.life) continue;
+    sl.age += dt;
+    if (sl.age >= sl.life) { sl.m.visible = false; continue; }
+    const k = sl.age / sl.life;
+    if (k > 0.62) {                              // settle back into the earth
+      const sink = (k - 0.62) / 0.38;
+      sl.m.position.y = sl.baseY + 0.45 - sink * 1.5;
+    }
   }
 }
 
@@ -3865,6 +4045,7 @@ function smashStrike() {
     flashLight(fx, e.y + 1.6, fz, 0.42, 0xffe7c0);
     grassFlatten = { x: e.x, z: e.z, r: range, t: 0 };
     damageInteractables(e.x, e.z, range, dmg);
+    bustGround(e.x, e.z, range);
   }
 }
 /* GOD'S HAMMER impact — flattens what's close, quakes the wider horde */
@@ -3875,6 +4056,7 @@ function quakeImpact(x, y, z, dmg) {
   boomRing.setColor(0xc89030); boomRing.show(x, y + 0.2, z, 44, 0.84);
   windRing.setColor(0x8a6c44); windRing.show(x, y + 0.25, z, 22, 0.5);
   scorch(x, z, 24);
+  bustGround(x, z, 27);
   spawnParts(x, y + 0.5, z, 150,
     { color: 0x6a5236, speed: 32, up: 17, life: 1.3 });
   spawnParts(x, y + 0.5, z, 74,
@@ -3948,6 +4130,7 @@ function leapLand() {
       rand(5, 9), pick([0xf4c850, 0xffe7a0, 0xffffff]), rand(0.4, 0.7));
   flashLight(e.x, e.y + 3.4, e.z, 0.6, 0xf4c850);
   grassFlatten = { x: e.x, z: e.z, r: 42, t: 0 };
+  bustGround(e.x, e.z, 25);
   // the quake tears a path — scorch & dust along the arc
   for (let i = 0; i <= 4; i++) {
     const sx = lerp(e.leapSX, e.x, i / 4), sz = lerp(e.leapSZ, e.z, i / 4);
@@ -5293,7 +5476,7 @@ function resetGame() {
   player.gear.armor = { slot: "armor", rarity: 0, outfit: "rags",
     name: "Worn Rags", value: 25 };
   recalc(); player.hp = player.maxHp;
-  player.y = groundHeight(0, 0);
+  player.y = walkHeight(0, 0);
   player.obj.position.set(0, player.y, 0);
   camera.position.set(CAM_OFF.x, player.y + CAM_OFF.y, CAM_OFF.z);
   kills = 0; score = 0; zombiesAlive = 0; wave = 0; waveCountPrev = 0;
@@ -5409,7 +5592,7 @@ function updatePlayer(dt) {
   }
   e.x = clamp(e.x, -ARENA + P.r + 3, ARENA - P.r - 3);
   e.z = clamp(e.z, -ARENA + P.r + 3, ZSHORE);
-  e.y = groundHeight(e.x, e.z);
+  e.y = walkHeight(e.x, e.z);
 
   let lt = (e.sprinting ? 0.26 : 0) - (e.atk ? 0.1 : 0);
   if (e.leaping) lt = e.leapT < P.leapTime * 0.5 ? -0.36 : 0.5;
@@ -5559,7 +5742,7 @@ function updateZombies(dt) {
     if (z.state === "rising") {
       z.riseT += dt;
       const k = clamp(z.riseT / RISE_DUR, 0, 1);
-      const gy = groundHeight(z.x, z.z);
+      const gy = walkHeight(z.x, z.z);
       z.y = gy;
       z.obj.position.set(z.x,
         gy - d.h * 0.95 * z.sizeMul * (1 - easeOut(k)), z.z);
@@ -5747,7 +5930,7 @@ function updateZombies(dt) {
 const _camQ = new THREE.Quaternion();
 function poseZombie(z, d, chillMul) {
   const o = z.obj, u = o.userData;
-  const gy = groundHeight(z.x, z.z);
+  const gy = walkHeight(z.x, z.z);
   z.y = gy;
   o.rotation.y = Math.atan2(player.x - z.x, player.z - z.z);
   const moving = (z.state === "chase" || z.dodgeT > 0) && chillMul > 0;
@@ -6002,7 +6185,7 @@ function updateAmbient(dt, t) {
     moon.target.position.set(player.x, 0, player.z);
     moon.position.set(player.x + 62, 100, player.z + 44);
   }
-  moon.intensity = 1.05 + (lightFlashT > 0 ? lightFlashT * 8 : 0);
+  moon.intensity = 0.95 + (lightFlashT > 0 ? lightFlashT * 8 : 0);
   updateSea(t);
   updateRain(dt);
   updateBats(dt, t);
@@ -6055,7 +6238,7 @@ function update(dt) {
   updateFlashes(dt);
   updateGhosts(dt);
   updateBolts(dt);
-  updateFlares(dt); updateGibs(dt); updateScorch(dt);
+  updateFlares(dt); updateGibs(dt); updateScorch(dt); updateCracks(dt);
   updateScreenFlash(dt); updateFireflies(dt, clock);
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
   updateCamera(dt);
@@ -6074,7 +6257,7 @@ function idleTick(dt) {
   updateFlashes(dt);
   updateGhosts(dt);
   updateBolts(dt);
-  updateFlares(dt); updateGibs(dt); updateScorch(dt);
+  updateFlares(dt); updateGibs(dt); updateScorch(dt); updateCracks(dt);
   updateScreenFlash(dt); updateFireflies(dt, clock);
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
   updateGrass(dt, clock);
