@@ -75,26 +75,29 @@
     background: linear-gradient(90deg, #caa23a, #f4e08a); transition: width .15s; }
 
   #abilities { position: absolute; left: 50%; transform: translateX(-50%);
-    bottom: 24px; display: flex; gap: 14px; }
-  .abil { width: 66px; height: 66px; background: rgba(8,8,10,.85);
-    border: 2px solid #2c2c33; border-radius: 9px; position: relative;
+    bottom: 22px; display: flex; gap: 14px; align-items: flex-end; }
+  .abil { width: 88px; height: 88px; background: rgba(8,8,10,.86);
+    border: 2px solid #2c2c33; border-radius: 12px; position: relative;
     overflow: hidden; transition: transform .1s, box-shadow .1s; }
+  .abil.ab-extra { width: 58px; height: 58px; }
+  .abil.ab-extra .glyph { font-size: 30px; }
   .abil.pulse { transform: scale(1.2); box-shadow: 0 0 24px currentColor; }
   .abil.active { box-shadow: 0 0 26px currentColor;
     border-color: currentColor; }
-  .abil .dot { position: absolute; left: 50%; top: 24px;
-    transform: translateX(-50%); width: 30px; height: 30px;
+  .abil .dot { position: absolute; left: 50%; top: 30px;
+    transform: translateX(-50%); width: 42px; height: 42px;
     border-radius: 50%; }
   .abil .glyph { position: absolute; inset: 0; display: flex;
-    align-items: center; justify-content: center; font-size: 30px;
+    align-items: center; justify-content: center; font-size: 42px;
     font-weight: 800; }
   .abil .cd { position: absolute; left: 0; right: 0; bottom: 0; top: 100%;
     background: rgba(0,0,0,.74); }
   .abil .cdnum { position: absolute; inset: 0; display: flex;
-    align-items: center; justify-content: center; font-size: 21px;
+    align-items: center; justify-content: center; font-size: 28px;
     font-weight: 800; color: #fff; text-shadow: 0 2px 5px #000; }
-  .abil .key { position: absolute; left: 0; right: 0; bottom: 3px;
-    text-align: center; font-size: 10px; color: #9b9488; }
+  .abil .key { position: absolute; left: 0; right: 0; bottom: 5px;
+    text-align: center; font-size: 11px; font-weight: 700;
+    color: #b0a890; }
 
   #hint { position: absolute; right: 26px; bottom: 30px; text-align: right;
     font-size: 12px; letter-spacing: 1px; color: #6f6a60; line-height: 1.7; }
@@ -102,14 +105,28 @@
   #hint .glow { color: #e3bd57; animation: blink 1.1s infinite; }
 
   /* ---- active buff chips ---- */
-  #buffs { position: absolute; left: 26px; bottom: 104px; display: flex;
-    gap: 7px; }
-  .buffchip { width: 42px; height: 48px; background: rgba(8,8,12,.86);
-    border: 2px solid #3a3640; border-radius: 7px; position: relative;
+  #buffs { position: absolute; right: 22px; top: 256px; display: flex;
+    gap: 8px; flex-wrap: wrap; width: 196px; justify-content: flex-end; }
+  .buffchip { width: 58px; height: 66px; background: rgba(8,8,12,.9);
+    border: 2px solid #3a3640; border-radius: 9px; position: relative;
     display: flex; align-items: center; justify-content: center;
-    font-size: 23px; box-shadow: 0 0 12px currentColor; }
-  .buffchip .bt { position: absolute; left: 3px; right: 3px; bottom: 3px;
-    height: 4px; background: #2a2a36; border-radius: 2px; overflow: hidden; }
+    font-size: 33px; box-shadow: 0 0 16px currentColor; }
+  .buffchip .bt { position: absolute; left: 4px; right: 4px; bottom: 4px;
+    height: 5px; background: #2a2a36; border-radius: 3px; overflow: hidden; }
+  #abilDesc { position: absolute; left: 50%; top: 132px;
+    transform: translateX(-50%); width: 430px; max-width: 86vw;
+    padding: 15px 22px 17px; background: rgba(10,9,14,.93);
+    border: 2px solid #caa24a; border-radius: 11px; text-align: center;
+    opacity: 0; transition: opacity .3s; pointer-events: none;
+    box-shadow: 0 0 34px rgba(0,0,0,.75); }
+  #abilDesc.show { opacity: 1; }
+  #abilDesc .adGlyph { font-size: 42px; line-height: 1; }
+  #abilDesc .adName { font-size: 22px; font-weight: 800; letter-spacing: 2px;
+    margin: 5px 0 6px; }
+  #abilDesc .adKind { font-size: 11px; letter-spacing: 3px; color: #8b8478;
+    font-weight: 700; }
+  #abilDesc .adDesc { font-size: 14.5px; color: #cdc5b4; line-height: 1.5;
+    margin-top: 5px; }
   .buffchip .btf { height: 100%; background: currentColor; }
 
   #crosshair { position: absolute; width: 26px; height: 26px; margin: -13px;
@@ -496,10 +513,10 @@ const ETYPES = {
   brute:    { hp: 160,  speed: 4.2,  dmg: 30, r: 2.1,  h: 5.0,  xp: 48 },
   giant:    { hp: 560,  speed: 3.2,  dmg: 54, r: 3.5,  h: 7.6,  xp: 200 },
   revenant: { hp: 380,  speed: 6.8,  dmg: 34, r: 1.85, h: 4.7,  xp: 160 },
-  boss:     { hp: 2600, speed: 3.0,  dmg: 96, r: 5.4,  h: 12.5, xp: 950 },
+  boss:     { hp: 1700, speed: 3.0,  dmg: 46, r: 5.4,  h: 12.5, xp: 950 },
 };
 // per-wave compounding — late waves become a true test
-const HP_SCALE = 1.28, DMG_SCALE = 1.13, BOSS_HP_SCALE = 1.17;
+const DMG_SCALE = 1.075;    // gentle per-wave damage ramp
 const DISTRICTS = ["THE BONEYARD", "THE IRON GATE", "THE OLD STREETS",
                    "THE MARKET SQUARE", "THE OUTER WARD", "THE BLACK CATHEDRAL"];
 
@@ -2863,46 +2880,65 @@ function updateLoot(dt) {
 /* ─── buff drops — 20 ability powers; gold-ringed ones are permanent ──────── */
 const BUFFS = [
   { id:"berserk", n:"BERSERK", glyph:"⚔", col:0xff5a3a, hex:"#ff6a4a",
-    perma:false, mod:{ dmgMul:0.6 } },
+    perma:false, mod:{ dmgMul:1.0 },
+    d:"+100% weapon damage — every cleave hits twice as hard." },
   { id:"swift", n:"SWIFTNESS", glyph:"\u{1F4A8}", col:0x8ad0ff, hex:"#8ad0ff",
-    perma:false, mod:{ moveMul:1.45 } },
+    perma:false, mod:{ moveMul:1.6 },
+    d:"+60% movement speed — blaze through the horde." },
   { id:"frenzy", n:"FRENZY", glyph:"⚡", col:0xffe04a, hex:"#ffe04a",
-    perma:false, mod:{ atkSpeed:1.75 } },
+    perma:false, mod:{ atkSpeed:2.1 },
+    d:"+110% attack speed — your blade becomes a blur of steel." },
   { id:"ironhide", n:"IRONHIDE", glyph:"\u{1F6E1}", col:0x9aa6b4,
-    hex:"#9aa6b4", perma:false, mod:{ dmgTakenMul:0.45 } },
+    hex:"#9aa6b4", perma:false, mod:{ dmgTakenMul:0.4 },
+    d:"Take 60% less damage from every blow." },
   { id:"bloodthirst", n:"BLOODTHIRST", glyph:"\u{1FA78}", col:0xc8201a,
-    hex:"#e0382a", perma:false, mod:{ lifesteal:11 } },
+    hex:"#e0382a", perma:false, mod:{ lifesteal:22 },
+    d:"Every strike drains 22 life from your victim." },
   { id:"colossus", n:"COLOSSUS", glyph:"\u{1F5FF}", col:0xc0a060,
-    hex:"#c0a060", perma:false, mod:{ size:1.6, dmgMul:0.7 } },
-  { id:"hawkeye", n:"HAWKEYE", glyph:"\u{1F3AF}", col:0x6ad07a, hex:"#6ad07a",
-    perma:false, mod:{ critC:0.45 } },
-  { id:"execaxe", n:"EXECUTIONER", glyph:"\u{1FA93}", col:0xff8a3a,
-    hex:"#ff8a3a", perma:false, mod:{ critMul:2.0 } },
+    hex:"#c0a060", perma:false, mod:{ size:1.6, dmgMul:1.1 },
+    d:"Grow into a titan — +110% damage and a huge reach." },
+  { id:"hawkeye", n:"DEADEYE", glyph:"\u{1F3AF}", col:0x6ad07a, hex:"#6ad07a",
+    perma:false, mod:{ critC:0.55 },
+    d:"+55% critical strike chance — carve crits with abandon." },
+  { id:"execaxe", n:"SAVAGERY", glyph:"\u{1FA93}", col:0xff8a3a,
+    hex:"#ff8a3a", perma:false, mod:{ critMul:2.6 },
+    d:"Critical hits deal vastly more damage." },
   { id:"juggernaut", n:"JUGGERNAUT", glyph:"\u{1F417}", col:0xb88a4a,
-    hex:"#b88a4a", perma:false, mod:{ dmgTakenMul:0.55, dmgMul:0.35 } },
+    hex:"#b88a4a", perma:false, mod:{ dmgTakenMul:0.5, dmgMul:0.7 },
+    d:"+70% damage and take half damage — an unstoppable wall." },
   { id:"bloodrage", n:"BLOODRAGE", glyph:"\u{1F621}", col:0xff3a2a,
-    hex:"#ff4a3a", perma:false, mod:{ dmgMul:0.45, atkSpeed:1.35 } },
+    hex:"#ff4a3a", perma:false, mod:{ dmgMul:0.85, atkSpeed:1.6 },
+    d:"+85% damage and +60% attack speed — pure fury." },
   { id:"quicksilver", n:"QUICKSILVER", glyph:"\u{1F4AB}", col:0xcfe0ff,
-    hex:"#cfe0ff", perma:false, mod:{ moveMul:1.35, atkSpeed:1.35 } },
+    hex:"#cfe0ff", perma:false, mod:{ moveMul:1.5, atkSpeed:1.5 },
+    d:"+50% movement and +50% attack speed." },
   { id:"brutality", n:"BRUTALITY", glyph:"\u{1F44A}", col:0xff5a2a,
-    hex:"#ff6a3a", perma:false, mod:{ dmgMul:0.95 } },
+    hex:"#ff6a3a", perma:false, mod:{ dmgMul:1.6 },
+    d:"+160% weapon damage — devastate the dead in one swing." },
   { id:"wraithskin", n:"WRAITHSKIN", glyph:"\u{1F47B}", col:0xb0c8e0,
-    hex:"#b0c8e0", perma:false, mod:{ dmgTakenMul:0.35 } },
+    hex:"#b0c8e0", perma:false, mod:{ dmgTakenMul:0.3 },
+    d:"Take 70% less damage — nigh untouchable." },
   { id:"stormcaller", n:"STORMCALLER", glyph:"\u{1F329}", col:0x8ac8ff,
-    hex:"#8ac8ff", perma:false, mod:{ atkSpeed:1.55, critC:0.25 } },
+    hex:"#8ac8ff", perma:false, mod:{ atkSpeed:1.85, critC:0.35 },
+    d:"+85% attack speed and +35% critical chance." },
   { id:"vanguard", n:"VANGUARD", glyph:"\u{1F9BE}", col:0xd0c090,
-    hex:"#d0c090", perma:false, mod:{ dmgMul:0.4, dmgTakenMul:0.6,
-    moveMul:1.2 } },
+    hex:"#d0c090", perma:false, mod:{ dmgMul:0.8, dmgTakenMul:0.55,
+    moveMul:1.35 }, d:"+80% damage, sturdier, and swifter all at once." },
   { id:"e_might", n:"ETERNAL MIGHT", glyph:"\u{1F48E}", col:0xf0c040,
-    hex:"#f0c040", perma:true, mod:{ dmg:12 } },
+    hex:"#f0c040", perma:true, mod:{ dmg:16 },
+    d:"PERMANENT — +16 weapon damage, kept for the whole run." },
   { id:"e_vigor", n:"ETERNAL VIGOR", glyph:"❤", col:0xf0c040,
-    hex:"#f0c040", perma:true, mod:{ hp:70 } },
+    hex:"#f0c040", perma:true, mod:{ hp:90 },
+    d:"PERMANENT — +90 maximum health, kept for the whole run." },
   { id:"e_haste", n:"ETERNAL HASTE", glyph:"\u{1FAB6}", col:0xf0c040,
-    hex:"#f0c040", perma:true, mod:{ spd:0.1 } },
+    hex:"#f0c040", perma:true, mod:{ spd:0.12 },
+    d:"PERMANENT — +12% speed, kept for the whole run." },
   { id:"e_wrath", n:"ETERNAL WRATH", glyph:"☄", col:0xf0c040,
-    hex:"#f0c040", perma:true, mod:{ crit:0.07 } },
+    hex:"#f0c040", perma:true, mod:{ crit:0.09 },
+    d:"PERMANENT — +9% critical chance, kept for the whole run." },
   { id:"e_hunger", n:"ETERNAL HUNGER", glyph:"\u{1F9B7}", col:0xf0c040,
-    hex:"#f0c040", perma:true, mod:{ life:3 } },
+    hex:"#f0c040", perma:true, mod:{ life:5 },
+    d:"PERMANENT — +5 lifesteal on every hit, for the whole run." },
 ];
 const buffTexCache = {};
 function buffTex(buff) {
@@ -2986,6 +3022,8 @@ function applyBuff(buff) {
     Sound.loot(); pulseAbil("atk");
     showToast("BUFF  —  " + buff.n + "  (30s)", buff.hex);
   }
+  showAbilityCard(buff.n, buff.d, buff.hex, buff.glyph,
+    buff.perma ? "PERMANENT POWER" : "BUFF — LASTS 30 SECONDS");
 }
 function updateBuffs(dt) {
   let changed = false;
@@ -3044,9 +3082,9 @@ const ABILITIES = [
   { id: "hammer", n: "GOD'S HAMMER", glyph: "\u{1F528}", col: 0xf0c040,
     hex: "#f0c040",
     d: "Your blade becomes a colossal hammer — Smash stuns all it strikes." },
-  { id: "dashcannon", n: "DASHCANNON", glyph: "\u{1F4A5}", col: 0xff9a3a,
-    hex: "#ff9a3a",
-    d: "Every Dash fires an explosive cannon shot at the nearest foe." },
+  { id: "execute", n: "DEATHBLOW", glyph: "\u{1F5E1}", col: 0xff5a4a,
+    hex: "#ff5a4a",
+    d: "Your strikes behead any foe already below a third of its health." },
   { id: "frost", n: "FROST SWORD", glyph: "❄", col: 0x9fe4ff,
     hex: "#9fe4ff",
     d: "Hits chill foes; three chills freeze them solid." },
@@ -3129,6 +3167,8 @@ function grantAbility(id) {
   achievement(abilityById(id));
   buildAbilityHUD();
   Sound.ability();
+  const ab = abilityById(id);
+  showAbilityCard(ab.n, ab.d, ab.hex, ab.glyph, "SWORD ABILITY UNLOCKED");
 }
 
 /* ─── ULTIMATE — Q, unlocked at level 10, one of three, kept all run ──────── */
@@ -3398,26 +3438,11 @@ function tryDash() {
     { color: 0xcaa46a, speed: 17, up: 9, life: 0.5 });
   windRing.setColor(0xcaa46a);
   windRing.show(player.x, player.y + 0.15, player.z, 13, 0.36);
-  // DASHCANNON still fires on the launch
-  if (hasA("dashcannon")) {
-    let best = null, bd = 1e9;
-    for (const z of zombies) {
-      if (z.state === "die" || z.state === "rising") continue;
-      const d = Math.hypot(z.x - player.x, z.z - player.z);
-      if (d < bd) { bd = d; best = z; }
-    }
-    const cx = best ? best.x : player.leapTX;
-    const cz = best ? best.z : player.leapTZ;
-    spawnCannon(player.x, player.z, cx, cz);
-    flare(player.x, player.y + 2.4, player.z, 7, 0xff9a3a, 0.4);
-    Sound.boom();
-    pulseAbil("dashcannon");
-  }
 }
 /* the leap lands — an earthquake tears the ground along the whole arc */
 function leapLand() {
   const e = player;
-  e.leapSlowT = 5;                               // crushing recovery
+  e.leapSlowT = 3;                               // crushing recovery
   const smashBase = e.dmg * e.dmgMul * (hasA("hammer") ? 4.2 : 3.0)
     + e.level * 4;
   const dmg = smashBase * 5;                     // 5x a right-click SMASH
@@ -3540,6 +3565,7 @@ function applyChill(z) {
 function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
   registerCombat();                            // keep the combo alive
   dmg = Math.max(1, Math.round(dmg));
+  totalDmg += dmg;                             // tallied for the death screen
   z.hp -= dmg; z.flash = 0.14;
   if (player.lifesteal && !isChain && player.alive)
     player.hp = Math.min(player.maxHp, player.hp + player.lifesteal);
@@ -3577,6 +3603,14 @@ function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
     }
     if (links) { Sound.zap(); pulseAbil("lightning");
       screenFlash("#bfeaff", 0.24); }
+  }
+  // DEATHBLOW — a strike on a badly-wounded foe lops its head clean off
+  if (hasA("execute") && z.hp > 0 && !z.boss &&
+      z.state !== "die" && z.hp < z.maxHp * 0.3) {
+    z.hp = 0;
+    flare(z.x, hy, z.z, 6, 0xff5a4a, 0.42, 1.0);
+    spawnParts(z.x, hy, z.z, 22, { color: 0xff5a4a, speed: 17, up: 3 });
+    pulseAbil("execute");
   }
   if (z.hp <= 0 && z.state !== "die") killZombie(z);
 }
@@ -3627,7 +3661,7 @@ function killZombie(z) {
 }
 
 /* ─── progression & waves ─────────────────────────────────────────────────── */
-let wave = 0, kills = 0, score = 0, zombiesAlive = 0;
+let wave = 0, kills = 0, score = 0, zombiesAlive = 0, totalDmg = 0;
 let waveState = "fight", toSpawn = [], spawnT = 0, waveCountPrev = 0;
 let levelFx = 0;
 // ─── combat combo — sustained fighting compounds your score multiplier ───
@@ -3667,8 +3701,8 @@ function startWave(n) {
   wave = n;
   toSpawn = [];
   let count;
-  if (n === 1) count = 12;
-  else count = Math.max(waveCountPrev + 1, Math.round(waveCountPrev * 1.1));
+  if (n === 1) count = 18;
+  else count = Math.round(waveCountPrev * 1.18) + 4;
   waveCountPrev = count;
   for (let i = 0; i < count; i++) {
     const r = Math.random();
@@ -3692,11 +3726,11 @@ function updateWaves(dt) {
   if (waveState !== "fight") return;
   if (toSpawn.length) {
     spawnT -= dt;
-    if (spawnT <= 0 && zombiesAlive < 44) {
+    if (spawnT <= 0 && zombiesAlive < 80) {
       // 5% of the time (from wave 3) a rare Revenant claws free instead
       if (wave >= 3 && Math.random() < 0.05) spawnZombie("revenant", true);
       else spawnZombie(toSpawn.pop());
-      spawnT = Math.max(0.2, 0.85 - wave * 0.03);
+      spawnT = Math.max(0.1, 0.6 - wave * 0.025);
     }
   } else if (zombiesAlive <= 0) {
     waveState = "cleared";
@@ -3732,8 +3766,11 @@ function spawnZombie(type, rare) {
   mound.scale.set(d.r * 1.5, 1, d.r * 1.5);
   mound.receiveShadow = true;
   scene.add(mound);
-  const hpScale = Math.pow(type === "boss" ? BOSS_HP_SCALE : HP_SCALE,
-    wave - 1);
+  // gentle, mostly-linear scaling — the horde stays a hack-and-slash romp,
+  // never an unkillable sponge wall
+  const hpScale = type === "boss"
+    ? 1 + Math.max(0, wave - 5) * 0.3
+    : 1 + (wave - 1) * 0.16;
   const hp = d.hp * hpScale;
   zombies.push({
     obj, mound, type, rare: !!rare, boss: type === "boss", x, z, y: gy,
@@ -4573,6 +4610,7 @@ function resetGame() {
   player.obj.position.set(0, player.y, 0);
   camera.position.set(CAM_OFF.x, player.y + CAM_OFF.y, CAM_OFF.z);
   kills = 0; score = 0; zombiesAlive = 0; wave = 0; waveCountPrev = 0;
+  totalDmg = 0;
   comboMul = 1; comboT = 0; comboOut = 99; comboFx = 0;
   camYaw = 0; camPitch = 0.69; pendingUlt = false; clearTornadoes();
   resetInteractables();
@@ -4596,8 +4634,10 @@ function startGame() {
 function gameOver() {
   state = ST.GAMEOVER; gameOverT = 0; shake(1.2);
   Ambience.stop(); Music.stop();
-  UI.overStats.textContent = "WAVE " + wave + "  ·  LEVEL " +
-    player.level + "  ·  " + kills + " KILLS  ·  SCORE " + score;
+  UI.overStats.innerHTML = "WAVE " + wave + "  &middot;  LEVEL " +
+    player.level + "  &middot;  SCORE " + score + "<br>" +
+    kills + " ENEMIES SLAIN  &middot;  " +
+    Math.round(totalDmg).toLocaleString() + " TOTAL DAMAGE DEALT";
   UI.overAgain.style.visibility = "hidden";
   UI.over.classList.remove("hidden");
   crosshairEl.style.display = "none";
@@ -5252,7 +5292,27 @@ function updateAmbient(dt, t) {
   updateBats(dt, t);
   updateWeather(dt);
 }
+/* ─── ability / buff pickup card — an 8-second on-screen explainer ────────── */
+const abilDescEl = (function () {
+  const d = document.createElement("div");
+  d.id = "abilDesc";
+  document.getElementById("ui").appendChild(d);
+  return d;
+})();
+let abilDescT = 0;
+function showAbilityCard(name, desc, hex, glyph, kind) {
+  abilDescEl.innerHTML =
+    '<div class="adGlyph" style="color:' + hex + '">' + glyph + '</div>' +
+    '<div class="adName" style="color:' + hex + '">' + name + '</div>' +
+    '<div class="adKind">' + (kind || "") + '</div>' +
+    '<div class="adDesc">' + desc + '</div>';
+  abilDescEl.style.borderColor = hex;
+  abilDescEl.classList.add("show");
+  abilDescT = 8;
+}
 function updateToasts(dt) {
+  if (abilDescT > 0) { abilDescT -= dt;
+    if (abilDescT <= 0) abilDescEl.classList.remove("show"); }
   if (bannerT > 0) { bannerT -= dt;
     if (bannerT <= 0) UI.banner.style.opacity = "0"; }
   if (toastT > 0) { toastT -= dt;
