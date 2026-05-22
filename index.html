@@ -19,7 +19,25 @@
   #district { color: #7d7668; font-size: 12px; letter-spacing: 1px; }
   #wave { color: #c8c0b0; font-size: 27px; letter-spacing: 2px;
     text-shadow: 0 0 18px rgba(150,25,15,.7); }
-  #score { color: #8b8478; font-size: 16px; text-align: right; }
+  #score { color: #f0d8a8; font-size: 25px; font-weight: 800;
+    text-align: right; text-shadow: 0 0 14px rgba(0,0,0,.95),
+      0 0 22px rgba(160,95,25,.45); }
+  #score .slab { font-size: 11px; color: #8b8478; letter-spacing: 2px;
+    font-weight: 700; }
+
+  /* ---- combo multiplier ---- */
+  #combo { position: absolute; left: 50%; top: 72px;
+    transform: translateX(-50%); text-align: center; opacity: 0;
+    transition: opacity .2s; }
+  #combo .cmul { font-size: 46px; font-weight: 800; color: #ffd23a;
+    text-shadow: 0 0 26px rgba(255,140,20,.95); line-height: 1; }
+  #combo .clab { font-size: 12px; letter-spacing: 4px; color: #e09a4a;
+    font-weight: 800; }
+
+  /* ---- minimap ---- */
+  #minimap { position: absolute; right: 22px; top: 58px; width: 190px;
+    height: 190px; border: 2px solid #3a3640; border-radius: 8px;
+    background: rgba(8,7,12,.66); box-shadow: 0 0 20px rgba(0,0,0,.6); }
 
   #hpwrap { position: absolute; left: 26px; bottom: 30px; width: 290px; }
   #hpbar { height: 22px; background: #1c0707; border: 2px solid #3a2018;
@@ -43,20 +61,24 @@
     background: linear-gradient(90deg, #caa23a, #f4e08a); transition: width .15s; }
 
   #abilities { position: absolute; left: 50%; transform: translateX(-50%);
-    bottom: 22px; display: flex; gap: 12px; }
-  .abil { width: 50px; height: 50px; background: rgba(8,8,10,.85);
-    border: 2px solid #2c2c33; border-radius: 7px; position: relative;
+    bottom: 24px; display: flex; gap: 14px; }
+  .abil { width: 66px; height: 66px; background: rgba(8,8,10,.85);
+    border: 2px solid #2c2c33; border-radius: 9px; position: relative;
     overflow: hidden; transition: transform .1s, box-shadow .1s; }
-  .abil.pulse { transform: scale(1.18); box-shadow: 0 0 18px currentColor; }
-  .abil .dot { position: absolute; left: 50%; top: 19px;
-    transform: translateX(-50%); width: 22px; height: 22px; border-radius: 50%; }
+  .abil.pulse { transform: scale(1.2); box-shadow: 0 0 24px currentColor; }
+  .abil .dot { position: absolute; left: 50%; top: 24px;
+    transform: translateX(-50%); width: 30px; height: 30px;
+    border-radius: 50%; }
   .abil .glyph { position: absolute; inset: 0; display: flex;
-    align-items: center; justify-content: center; font-size: 22px;
+    align-items: center; justify-content: center; font-size: 30px;
     font-weight: 800; }
   .abil .cd { position: absolute; left: 0; right: 0; bottom: 0; top: 100%;
-    background: rgba(0,0,0,.72); }
+    background: rgba(0,0,0,.74); }
+  .abil .cdnum { position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center; font-size: 21px;
+    font-weight: 800; color: #fff; text-shadow: 0 2px 5px #000; }
   .abil .key { position: absolute; left: 0; right: 0; bottom: 3px;
-    text-align: center; font-size: 9px; color: #8b8478; }
+    text-align: center; font-size: 10px; color: #9b9488; }
 
   #hint { position: absolute; right: 26px; bottom: 30px; text-align: right;
     font-size: 12px; letter-spacing: 1px; color: #6f6a60; line-height: 1.7; }
@@ -276,14 +298,18 @@
     <div class="abil" id="ab-atk"><div class="dot" style="background:#9298a1"></div>
       <div class="cd"></div><div class="key">LMB</div></div>
     <div class="abil" id="ab-smash"><div class="dot" style="background:#caa24a"></div>
-      <div class="cd" id="cd-smash"></div><div class="key">Q / RMB</div></div>
-    <div class="abil" id="ab-dash"><div class="dot" style="background:#9fd0ff"></div>
-      <div class="cd" id="cd-dash"></div><div class="key">SPACE</div></div>
+      <div class="cd" id="cd-smash"></div>
+      <div class="cdnum" id="cdn-smash"></div><div class="key">Q / RMB</div></div>
+    <div class="abil" id="ab-dash"><div class="dot" style="background:#e0843a"></div>
+      <div class="cd" id="cd-dash"></div>
+      <div class="cdnum" id="cdn-dash"></div><div class="key">SPACE LEAP</div></div>
   </div>
 
   <div id="xpbar"><div id="xpfill"></div></div>
   <div id="banner"><div class="big"></div><div class="sub"></div></div>
   <div id="toast"></div>
+  <div id="combo"><div class="cmul"></div><div class="clab">COMBO</div></div>
+  <canvas id="minimap" width="190" height="190"></canvas>
   <div id="crosshair"></div>
 
   <div id="ach"><div class="emb"></div>
@@ -372,13 +398,14 @@ const P = {
   atkRange: 8.4, atkArc: 1.2,
   atkWindup: 0.11, atkStrike: 0.13, atkRecover: 0.18,
   smashRange: 12, smashDmg: 44, smashCd: 2.6,
-  dashCd: 1.7, dashTime: 0.18, dashIframes: 0.34,
+  dashCd: 30, leapTime: 0.56, leapDist: 32, leapIframes: 0.82,
   staminaMax: 100, staminaDrain: 30, staminaRegen: 22,
 };
 const ATK_SLOW_DUR = 0.5, ATK_SLOW_AMT = 0.26;
 const RISE_DUR = 1.45;
 // stat-point yields — simple, readable metrics
-const PWR_DMG = 3, DEF_HP = 18, SPD_PCT = 0.04, PTS_PER_LEVEL = 3;
+const PWR_DMG = 3, DEF_HP = 18, SPD_PCT = 0.04;
+const PTS_PER_LEVEL = 1, PTS_START = 6;
 
 // archetypes — far tougher than before; the horde is a real threat
 const ETYPES = {
@@ -402,6 +429,12 @@ const easeOut = (t) => 1 - (1 - t) * (1 - t);
 const easeIn  = (t) => t * t;
 function angDiff(a, b) { let d = b - a; while (d > Math.PI) d -= TAU;
   while (d < -Math.PI) d += TAU; return d; }
+function segDist(ax, az, bx, bz, px, pz) {
+  const dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
+  let t = ((px - ax) * dx + (pz - az) * dz) / L2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(px - (ax + dx * t), pz - (az + dz * t));
+}
 
 /* ─── renderer / scene / camera ───────────────────────────────────────────── */
 const canvas = document.getElementById("game");
@@ -551,6 +584,9 @@ const Sound = (() => {
                noise(0.55,0.2,"bandpass",600,2200,1,0.5); },
     heart() { tone("sine", 56, 30, 0.18, 0.32);
               tone("sine", 52, 28, 0.16, 0.28, 0.2); },
+    thunder() { noise(1.9, 0.5, "lowpass", 440, 70, 0, 0.6);
+                tone("sawtooth", 58, 22, 1.6, 0.15, 0, 0.5);
+                noise(0.34, 0.32, "lowpass", 950, 300, 0, 0.4); },
   };
 })();
 
@@ -2097,6 +2133,80 @@ braziers.forEach(b => {
   b.glow = glow;
 });
 
+/* ─── rain — streaks that fall around the player ──────────────────────────── */
+const RAIN_N = 540;
+const rainPos = new Float32Array(RAIN_N * 6);
+const rainDrop = [];
+for (let i = 0; i < RAIN_N; i++)
+  rainDrop.push({ x: rand(-58, 58), y: rand(0, 52), z: rand(-58, 58),
+    sp: rand(38, 58) });
+const rainGeo = new THREE.BufferGeometry();
+rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({
+  color: 0xa6b6cc, transparent: true, opacity: 0.3 }));
+rain.frustumCulled = false;
+scene.add(rain);
+function updateRain(dt) {
+  const px = player ? player.x : 0, pz = player ? player.z : 0,
+        py = player ? player.y : 0;
+  for (let i = 0; i < RAIN_N; i++) {
+    const d = rainDrop[i];
+    d.y -= d.sp * dt;
+    if (d.y < -5) { d.y = rand(46, 62); d.x = rand(-58, 58);
+      d.z = rand(-58, 58); }
+    const wx = px + d.x, wy = py + d.y, wz = pz + d.z;
+    rainPos[i*6] = wx; rainPos[i*6+1] = wy; rainPos[i*6+2] = wz;
+    rainPos[i*6+3] = wx + 0.4; rainPos[i*6+4] = wy + 2.1;
+    rainPos[i*6+5] = wz - 0.7;
+  }
+  rainGeo.attributes.position.needsUpdate = true;
+}
+
+/* ─── bats — a flock wheeling against the night ───────────────────────────── */
+const bats = [];
+(function () {
+  for (let i = 0; i < 13; i++) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.4, 5, 4),
+      mat(0x0a0a0e, 1)));
+    const wings = [];
+    for (const sx of [-1, 1]) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.12, 1.3),
+        mat(0x16121a, 1));
+      w.position.x = sx * 1.4; g.add(w); wings.push(w);
+    }
+    scene.add(g);
+    bats.push({ g, wings, cx: rand(-150, 150), cz: rand(-150, 150),
+      r: rand(22, 58), a: rand(0, TAU), sp: rand(0.3, 0.7),
+      h: rand(26, 42), phase: rand(0, TAU) });
+  }
+})();
+function updateBats(dt, t) {
+  for (const b of bats) {
+    b.a += b.sp * dt;
+    b.g.position.set(b.cx + Math.cos(b.a) * b.r,
+      b.h + Math.sin(t + b.phase) * 2.2, b.cz + Math.sin(b.a) * b.r);
+    b.g.rotation.y = -b.a;
+    const flap = Math.sin(t * 17 + b.phase) * 0.95;
+    b.wings[0].rotation.z = flap;
+    b.wings[1].rotation.z = -flap;
+  }
+}
+
+/* ─── lightning & thunder ─────────────────────────────────────────────────── */
+let lightningT = rand(7, 16), lightFlashT = 0;
+function updateWeather(dt) {
+  if (lightFlashT > 0) lightFlashT -= dt;
+  lightningT -= dt;
+  if (lightningT <= 0) {
+    lightningT = rand(11, 26);
+    screenFlash("#cdd8ff", rand(0.4, 0.62));
+    lightFlashT = 0.22;
+    setTimeout(() => { try { Sound.thunder(); } catch (e) {} },
+      (rand(500, 1500)) | 0);
+  }
+}
+
 /* ─── expanding rings (smash / wind / explosions) ─────────────────────────── */
 function makeRing(color) {
   const geo = new THREE.RingGeometry(0.9, 1.05, 44);
@@ -2233,8 +2343,8 @@ function makePlayer() {
     hp: P.baseHp, maxHp: P.baseHp, dmg: P.baseDmg,
     dmgMul: 1, atkSpeed: 1, moveMul: 1,
     critChance: P.baseCrit, critMul: P.baseCritMul,
-    level: 1, xp: 0, xpNext: 30,
-    statPoints: 0, stat: { power: 0, defense: 0, speed: 0 },
+    level: 1, xp: 0, xpNext: 74,
+    statPoints: PTS_START, stat: { power: 0, defense: 0, speed: 0 },
     gear: { weapon: null, armor: null }, inventory: [],
     abil: new Set(),
     stamina: P.staminaMax, sprinting: false,
@@ -2243,8 +2353,9 @@ function makePlayer() {
     atkSlowT: 0,
     smash: false, smashT: 0, smashW: 0, smashS: 0, smashR: 0,
     smashDone: false,
-    smashCd: 0, dashCd: 0, dashT: 0, moveAng: 0, iframes: 0, hurt: 0,
-    dashTrailT: 0,
+    smashCd: 0, dashCd: 0, moveAng: 0, iframes: 0, hurt: 0, dashTrailT: 0,
+    leaping: false, leapT: 0, leapH: 0, leapSlowT: 0,
+    leapSX: 0, leapSZ: 0, leapTX: 0, leapTZ: 0,
     alive: true,
   };
 }
@@ -2329,7 +2440,18 @@ function spawnLoot(x, z, item) {
   lid.position.y = 0.7;
   const glow = new THREE.PointLight(RHEX[item.rarity], 2.4, 14, 2);
   glow.position.y = 1.4;
-  m.add(box, lid, glow);
+  // a beacon of light so loot is findable across the whole world
+  const beacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.45, 0.9, 40, 7, 1, true),
+    new THREE.MeshBasicMaterial({ color: RHEX[item.rarity],
+      transparent: true, opacity: 0.3, depthWrite: false,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+  beacon.position.y = 20;
+  const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+    color: RHEX[item.rarity], transparent: true, opacity: 0.75,
+    depthWrite: false, blending: THREE.AdditiveBlending }));
+  spark.position.y = 1.6; spark.scale.setScalar(4.6);
+  m.add(box, lid, glow, beacon, spark);
   m.position.set(x, groundHeight(x, z) + 0.9, z);
   scene.add(m);
   loot.push({ obj: m, x, z, item, t: rand(0, TAU) });
@@ -2496,7 +2618,7 @@ function grantAbility(id) {
 
 /* ─── combat ──────────────────────────────────────────────────────────────── */
 function tryAttack() {
-  if (player.atk || player.smash || player.dashT > 0 || !player.alive) return;
+  if (player.atk || player.smash || player.leaping || !player.alive) return;
   player.atk = true; player.atkT = 0;
   player.atkW = P.atkWindup / player.atkSpeed;
   player.atkS = P.atkStrike / player.atkSpeed;
@@ -2509,7 +2631,7 @@ function tryAttack() {
    It overrides a light swing in progress — the SMASH always takes over. */
 function trySmash() {
   if (player.smashCd > 0 || !player.alive || player.smash ||
-      player.dashT > 0) return;
+      player.leaping) return;
   player.atk = false;                          // the smash interrupts a slash
   player.smashCd = P.smashCd;
   player.smash = true; player.smashT = 0; player.smashDone = false;
@@ -2594,31 +2716,32 @@ function quakeImpact(x, y, z, dmg) {
   }
   pulseAbil("hammer");
 }
+/* SPACE — the LEAP SMASH: arc into the air, crash down, tear an earthquake */
 function tryDash() {
-  if (player.dashCd > 0 || player.dashT > 0 || !player.alive) return;
-  player.atk = false; player.smash = false;     // dash cancels a strike
+  if (player.dashCd > 0 || player.leaping || !player.alive) return;
+  player.atk = false; player.smash = false;
   let mx = 0, mz = 0;
   if (keys["KeyW"] || keys["ArrowUp"]) mz -= 1;
   if (keys["KeyS"] || keys["ArrowDown"]) mz += 1;
   if (keys["KeyA"] || keys["ArrowLeft"]) mx -= 1;
   if (keys["KeyD"] || keys["ArrowRight"]) mx += 1;
-  if (mx === 0 && mz === 0) {
-    mx = Math.sin(player.aim); mz = Math.cos(player.aim);
-  }
-  player.moveAng = Math.atan2(mx, mz);
-  player.dashT = P.dashTime;
+  const ang = (mx === 0 && mz === 0) ? player.aim : Math.atan2(mx, mz);
+  player.moveAng = ang;
+  player.leapSX = player.x; player.leapSZ = player.z;
+  player.leapTX = clamp(player.x + Math.sin(ang) * P.leapDist,
+    -ARENA + 7, ARENA - 7);
+  player.leapTZ = clamp(player.z + Math.cos(ang) * P.leapDist,
+    -ARENA + 7, ZSHORE - 3);
+  player.leaping = true; player.leapT = 0;
   player.dashCd = P.dashCd;
-  player.iframes = P.dashIframes;
+  player.iframes = P.leapIframes;
   player.dashTrailT = 0;
-  Sound.dash();
-  spawnParts(player.x, player.y + 1, player.z, 32,
-    { color: 0xbfe0ff, speed: 17, life: 0.45, grav: 0.2 });
-  for (let i = 0; i < 3; i++)
-    flare(player.x, player.y + 1.4, player.z, rand(3, 5), 0xaad6ff,
-      0.3, 0.7);
-  windRing.setColor(0x9fd0ff);
-  windRing.show(player.x, player.y + 0.15, player.z, 10, 0.34);
-  // DASHCANNON — fire an explosive shot from behind you at the nearest foe
+  Sound.dash(); shake(0.5);
+  spawnParts(player.x, player.y + 0.5, player.z, 28,
+    { color: 0xcaa46a, speed: 17, up: 9, life: 0.5 });
+  windRing.setColor(0xcaa46a);
+  windRing.show(player.x, player.y + 0.15, player.z, 13, 0.36);
+  // DASHCANNON still fires on the launch
   if (hasA("dashcannon")) {
     let best = null, bd = 1e9;
     for (const z of zombies) {
@@ -2626,18 +2749,60 @@ function tryDash() {
       const d = Math.hypot(z.x - player.x, z.z - player.z);
       if (d < bd) { bd = d; best = z; }
     }
-    const tx = best ? best.x : player.x + Math.sin(player.aim) * 30;
-    const tz = best ? best.z : player.z + Math.cos(player.aim) * 30;
-    const bx = player.x - Math.sin(player.moveAng) * 3;
-    const bz = player.z - Math.cos(player.moveAng) * 3;
-    spawnCannon(bx, bz, tx, tz);
-    flare(bx, player.y + 2.4, bz, 7, 0xff9a3a, 0.4);
-    spawnParts(bx, player.y + 2.4, bz, 24,
-      { color: 0xff7a2a, speed: 16, life: 0.5 });
-    flashLight(bx, player.y + 2.4, bz, 0.3, 0xff8a3a);
+    const cx = best ? best.x : player.leapTX;
+    const cz = best ? best.z : player.leapTZ;
+    spawnCannon(player.x, player.z, cx, cz);
+    flare(player.x, player.y + 2.4, player.z, 7, 0xff9a3a, 0.4);
     Sound.boom();
     pulseAbil("dashcannon");
   }
+}
+/* the leap lands — an earthquake tears the ground along the whole arc */
+function leapLand() {
+  const e = player;
+  e.leapSlowT = 5;                               // crushing recovery
+  const smashBase = e.dmg * e.dmgMul * (hasA("hammer") ? 4.2 : 3.0)
+    + e.level * 4;
+  const dmg = smashBase * 5;                     // 5x a right-click SMASH
+  Sound.quake(); Sound.boom(); Sound.smash();
+  shake(2.9); hitStop = 0.18; screenFlash("#f4c850", 0.74);
+  smashRing.setColor(0xf4c850); smashRing.show(e.x, e.y + 0.2, e.z, 44, 0.74);
+  boomRing.setColor(0xc89030); boomRing.show(e.x, e.y + 0.2, e.z, 66, 1.05);
+  windRing.setColor(0x8a6c44); windRing.show(e.x, e.y + 0.26, e.z, 33, 0.62);
+  spawnParts(e.x, e.y + 0.5, e.z, 220,
+    { color: 0x6a5236, speed: 42, up: 24, life: 1.7 });
+  spawnParts(e.x, e.y + 0.5, e.z, 92,
+    { color: 0x2c2418, speed: 24, up: 36, life: 2.3 });
+  spawnGibs(e.x, e.y + 0.5, e.z, 24, 0x4a3a26);
+  for (let i = 0; i < 18; i++)
+    flare(e.x + rand(-9, 9), e.y + rand(0, 9), e.z + rand(-9, 9),
+      rand(7, 17), pick([0xf4c850, 0xffe7a0, 0xffffff]), rand(0.5, 1.0));
+  flashLight(e.x, e.y + 3.4, e.z, 0.95, 0xf4c850);
+  grassFlatten = { x: e.x, z: e.z, r: 42, t: 0 };
+  // the quake tears a path — scorch & dust along the whole arc
+  for (let i = 0; i <= 6; i++) {
+    const sx = lerp(e.leapSX, e.x, i / 6), sz = lerp(e.leapSZ, e.z, i / 6);
+    scorch(sx, sz, rand(11, 19));
+    if (i % 2 === 0) spawnParts(sx, groundHeight(sx, sz) + 0.5, sz, 26,
+      { color: 0x6a5236, speed: 20, up: 12, life: 1.1 });
+  }
+  // damage — a wide crater at the landing, plus the corridor it carved
+  for (const z of zombies) {
+    if (z.state === "die" || z.state === "rising") continue;
+    const dLand = Math.hypot(z.x - e.x, z.z - e.z);
+    const dPath = segDist(e.leapSX, e.leapSZ, e.x, e.z, z.x, z.z);
+    if (dLand < 19 + z.r || dPath < 11 + z.r) {
+      if (lineBlocked(e.x, e.z, z.x, z.z)) continue;
+      const fall = dLand < 19 ? clamp(1 - dLand / 46, 0.5, 1)
+        : clamp(1 - dPath / 32, 0.45, 1);
+      hitZombie(z, dmg * fall, true, Math.atan2(z.x - e.x, z.z - e.z), 5.5);
+      if (z.state !== "die") { z.stun = 1.5; z.quake = 5.0; }
+    } else if (dLand < 52) {
+      z.quake = Math.max(z.quake, 4.2);
+      z.stagger = Math.max(z.stagger, 0.4);
+    }
+  }
+  banner("STAGGERED — RECOVER YOUR FOOTING", "EARTHSHATTER");
 }
 function meleeStrike() {
   let hits = 0;
@@ -2712,6 +2877,7 @@ function applyChill(z) {
   }
 }
 function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
+  registerCombat();                            // keep the combo alive
   dmg = Math.max(1, Math.round(dmg));
   z.hp -= dmg; z.flash = 0.14;
   const kb = 9 * (knockMul || 1) / Math.max(0.4, z.r * 0.5);
@@ -2754,8 +2920,10 @@ function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
 function killZombie(z) {
   z.state = "die"; z.dieT = 0;
   zombiesAlive--;
-  kills++; score += ETYPES[z.type].xp;
-  gainXp(ETYPES[z.type].xp);
+  kills++;
+  const xp = ETYPES[z.type].xp;
+  score += Math.round(xp * comboMul);          // combo multiplies the haul
+  gainXp(xp);
   const d = ETYPES[z.type], hy = z.y + d.h * 0.5;
   spawnParts(z.x, hy, z.z, 40, { color: 0x7c1109, speed: 14, up: 3 });
   spawnGibs(z.x, hy, z.z, z.type === "giant" ? 18 :
@@ -2799,20 +2967,36 @@ function killZombie(z) {
 let wave = 0, kills = 0, score = 0, zombiesAlive = 0;
 let waveState = "fight", toSpawn = [], spawnT = 0, waveCountPrev = 0;
 let levelFx = 0;
+// ─── combat combo — sustained fighting compounds your score multiplier ───
+let comboMul = 1, comboT = 0, comboOut = 99, comboFx = 0;
+const COMBO_STEP = 13;          // seconds of combat per doubling
+function registerCombat() { comboOut = 0; }
+function updateCombo(dt) {
+  comboOut += dt;
+  if (comboOut < 3) {           // still in the thick of it
+    comboT += dt;
+    const m = Math.pow(2, Math.floor(comboT / COMBO_STEP));
+    if (m > comboMul) { comboMul = m; comboFx = 1; Sound.levelup(); }
+  } else if (comboMul !== 1) {  // 3s of calm — the combo breaks
+    comboMul = 1; comboT = 0;
+  }
+  if (comboFx > 0) comboFx -= dt * 1.6;
+}
 
 function gainXp(n) {
   player.xp += n;
   while (player.xp >= player.xpNext) {
     player.xp -= player.xpNext;
     player.level++;
-    player.xpNext = Math.round(30 * Math.pow(player.level, 1.6));
+    // a steady climb so a fresh level — and a stat point — keeps coming
+    player.xpNext = Math.round(40 + player.level * 34);
     player.statPoints += PTS_PER_LEVEL;
     player.hp = Math.min(player.maxHp, player.hp + 16);
     levelFx = 1; Sound.levelup();
     spawnParts(player.x, player.y + 1.5, player.z, 40,
       { color: 0xffe27a, speed: 11, up: 6, life: 0.9, grav: 0.4 });
-    banner(player.statPoints + " STAT POINTS TO SPEND", "LEVEL " +
-      player.level);
+    banner("+" + PTS_PER_LEVEL + " STAT POINT  (" + player.statPoints +
+      " TO SPEND)", "LEVEL " + player.level);
   }
 }
 function startWave(n) {
@@ -2972,7 +3156,13 @@ const UI = {
   over: document.getElementById("over"),
   overStats: document.getElementById("over-stats"),
   overAgain: document.getElementById("over-again"),
+  cdnSmash: document.getElementById("cdn-smash"),
+  cdnDash: document.getElementById("cdn-dash"),
+  combo: document.getElementById("combo"),
+  comboMulEl: document.querySelector("#combo .cmul"),
+  minimap: document.getElementById("minimap"),
 };
+const miniCtx = UI.minimap.getContext("2d");
 let bannerT = 0;
 function banner(sub, big) {
   UI.banner.querySelector(".big").textContent = big;
@@ -3016,6 +3206,47 @@ function pulseAbil(id) {
   el.classList.add("pulse");
   setTimeout(() => el.classList.remove("pulse"), 130);
 }
+/* ─── minimap ─────────────────────────────────────────────────────────────── */
+function drawMinimap() {
+  if (!player) return;
+  const ctx = miniCtx, S = 190, pad = 7, inner = S - pad * 2,
+    span = ARENA * 2;
+  const mx = (x) => pad + (x + ARENA) / span * inner;
+  const mz = (z) => pad + (z + ARENA) / span * inner;
+  ctx.clearRect(0, 0, S, S);
+  // the sea along the southern edge
+  ctx.fillStyle = "rgba(40,82,112,0.55)";
+  ctx.fillRect(pad, mz(118), inner, mz(ARENA) - mz(118));
+  // soft district blobs
+  const dz = [["#8a7ab0", -150, -135], ["#caa46a", 130, -70],
+    ["#a48ad0", -158, 50], ["#cab46a", 52, 96], ["#7aa0b0", 0, 150]];
+  ctx.globalAlpha = 0.22;
+  for (const d of dz) {
+    ctx.fillStyle = d[0];
+    ctx.beginPath(); ctx.arc(mx(d[1]), mz(d[2]), 24, 0, TAU); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // dropped loot
+  for (const l of loot) {
+    ctx.fillStyle = RCOL[l.item.rarity];
+    ctx.beginPath(); ctx.arc(mx(l.x), mz(l.z), 2.8, 0, TAU); ctx.fill();
+  }
+  // the horde
+  for (const z of zombies) {
+    if (z.state === "die") continue;
+    ctx.fillStyle = z.rare ? "#3affc0" : "#d8483a";
+    ctx.beginPath(); ctx.arc(mx(z.x), mz(z.z), z.rare ? 3.2 : 2, 0, TAU);
+    ctx.fill();
+  }
+  // the player — an arrow pointing where you aim
+  const px = mx(player.x), pz = mz(player.z), a = player.aim;
+  ctx.fillStyle = "#ffe7a0";
+  ctx.beginPath();
+  ctx.moveTo(px + Math.sin(a) * 7, pz + Math.cos(a) * 7);
+  ctx.lineTo(px + Math.sin(a + 2.5) * 5.5, pz + Math.cos(a + 2.5) * 5.5);
+  ctx.lineTo(px + Math.sin(a - 2.5) * 5.5, pz + Math.cos(a - 2.5) * 5.5);
+  ctx.closePath(); ctx.fill();
+}
 function currentDistrict(x, z) {
   if (z > 118) return "THE SEASIDE";
   if (x < -52 && z < -28) return "THE GRAVEYARD";
@@ -3028,7 +3259,8 @@ function updateHUD() {
   UI.lvl.textContent = "LEVEL " + player.level;
   UI.district.textContent = currentDistrict(player.x, player.z);
   UI.wave.textContent = "WAVE " + wave;
-  UI.score.textContent = "KILLS " + kills + "  ·  SCORE " + score;
+  UI.score.innerHTML = score +
+    ' <span class="slab">SCORE &middot; ' + kills + ' KILLS</span>';
   const hpf = clamp(player.hp / player.maxHp, 0, 1);
   UI.hpfill.style.width = (hpf * 100) + "%";
   UI.hptext.textContent = Math.ceil(player.hp) + " / " + player.maxHp;
@@ -3040,10 +3272,19 @@ function updateHUD() {
       '  ·  <span class="pt">' + player.statPoints +
       ' PTS</span>' : "");
   UI.xpfill.style.width = clamp(player.xp / player.xpNext, 0, 1) * 100 + "%";
-  UI.cdSmash.style.top = (player.smashCd > 0 ?
-    (1 - player.smashCd / P.smashCd) * 100 : 100) + "%";
-  UI.cdDash.style.top = (player.dashCd > 0 ?
-    (1 - player.dashCd / P.dashCd) * 100 : 100) + "%";
+  function cdb(bar, num, cd, max) {
+    bar.style.top = (cd > 0 ? (1 - cd / max) * 100 : 100) + "%";
+    num.textContent = cd > 0.05 ? Math.ceil(cd) : "";
+  }
+  cdb(UI.cdSmash, UI.cdnSmash, player.smashCd, P.smashCd);
+  cdb(UI.cdDash, UI.cdnDash, player.dashCd, P.dashCd);
+  if (comboMul > 1) {
+    UI.combo.style.opacity = "1";
+    UI.comboMulEl.textContent = "×" + comboMul;
+    const sc = 1 + Math.max(0, comboFx) * 0.55;
+    UI.combo.style.transform = "translateX(-50%) scale(" + sc + ")";
+  } else UI.combo.style.opacity = "0";
+  drawMinimap();
   let h = '<span class="hot">C</span> CHARACTER';
   if (player.statPoints > 0)
     h += ' <span class="glow">◀ ' + player.statPoints + ' PTS</span>';
@@ -3381,6 +3622,7 @@ function resetGame() {
   player.obj.position.set(0, player.y, 0);
   camera.position.set(CAM_OFF.x, player.y + CAM_OFF.y, CAM_OFF.z);
   kills = 0; score = 0; zombiesAlive = 0; wave = 0; waveCountPrev = 0;
+  comboMul = 1; comboT = 0; comboOut = 99; comboFx = 0;
   waveState = "fight"; toSpawn = [];
   hitStop = 0; heartT = 0; camShake = 0;
   grassFlatten = null; levelFx = 0;
@@ -3426,18 +3668,23 @@ function updatePlayer(dt) {
   const wantSprint = (keys["ShiftLeft"] || keys["ShiftRight"]) &&
     e.stamina > 1;
 
-  if (e.dashT > 0) {
-    e.dashT -= dt;
-    e.x += Math.sin(e.moveAng) * P.dashSpeed * dt;
-    e.z += Math.cos(e.moveAng) * P.dashSpeed * dt;
-    e.moving = true;
+  if (e.leapSlowT > 0) e.leapSlowT -= dt;
+
+  if (e.leaping) {
+    e.leapT += dt;
+    const k = clamp(e.leapT / P.leapTime, 0, 1);
+    e.x = lerp(e.leapSX, e.leapTX, easeOut(k));
+    e.z = lerp(e.leapSZ, e.leapTZ, easeOut(k));
+    e.leapH = Math.sin(k * Math.PI) * 9.5;       // the airborne arc
+    e.moving = true; e.sprinting = false;
     e.dashTrailT -= dt;
     if (e.dashTrailT <= 0) {
-      e.dashTrailT = 0.035;
-      dashGhost(e.x, e.y, e.z, e.aim);
-      spawnParts(e.x, e.y + 1.4, e.z, 3,
-        { color: 0xbfe0ff, speed: 5, life: 0.3, grav: 0.1 });
+      e.dashTrailT = 0.04;
+      dashGhost(e.x, e.y + e.leapH, e.z, e.aim);
+      spawnParts(e.x, e.y + e.leapH + 0.5, e.z, 4,
+        { color: 0xcaa46a, speed: 6, life: 0.4, grav: 0.2 });
     }
+    if (e.leapT >= P.leapTime) { e.leaping = false; e.leapH = 0; leapLand(); }
   } else {
     let mx = 0, mz = 0;
     if (keys["KeyW"] || keys["ArrowUp"]) mz -= 1;
@@ -3445,16 +3692,17 @@ function updatePlayer(dt) {
     if (keys["KeyA"] || keys["ArrowLeft"]) mx -= 1;
     if (keys["KeyD"] || keys["ArrowRight"]) mx += 1;
     e.moving = mx !== 0 || mz !== 0;
-    e.sprinting = e.moving && wantSprint;
+    e.sprinting = e.moving && wantSprint && e.leapSlowT <= 0;
     if (e.moving) {
       const inv = 1 / Math.hypot(mx, mz);
       const slow = 1 - ATK_SLOW_AMT * clamp(e.atkSlowT / ATK_SLOW_DUR, 0, 1);
-      const sp = P.speed * e.moveMul * slow *
+      const recover = e.leapSlowT > 0 ? 0.3 : 1;  // staggered after a leap
+      const sp = P.speed * e.moveMul * slow * recover *
         (e.sprinting ? P.sprintMul : 1);
       e.x += mx * inv * sp * dt;
       e.z += mz * inv * sp * dt;
       e.moveAng = Math.atan2(mx, mz);
-      e.walkP += dt * (e.sprinting ? 19 : 13);
+      e.walkP += dt * (e.sprinting ? 19 : e.leapSlowT > 0 ? 6 : 13);
       e.stepT -= dt;
       if (e.stepT <= 0) {
         Sound.step(); e.stepT = e.sprinting ? 0.24 : 0.32;
@@ -3465,19 +3713,21 @@ function updatePlayer(dt) {
     } else e.walkP += dt * 4;
   }
   // stamina
-  if (e.sprinting && e.dashT <= 0)
+  if (e.sprinting)
     e.stamina = Math.max(0, e.stamina - P.staminaDrain * dt);
   else
     e.stamina = Math.min(P.staminaMax, e.stamina + P.staminaRegen * dt);
 
-  // map limits — the world's edge + solid structures
-  resolveColliders(e, P.r);
+  // map limits — the world's edge + solid structures (airborne clears them)
+  if (!e.leaping) resolveColliders(e, P.r);
   e.x = clamp(e.x, -ARENA + P.r + 3, ARENA - P.r - 3);
   e.z = clamp(e.z, -ARENA + P.r + 3, ZSHORE);
   e.y = groundHeight(e.x, e.z);
 
-  let lt = (e.dashT > 0 ? 0.5 : e.sprinting ? 0.26 : 0) - (e.atk ? 0.1 : 0);
-  if (e.smash) lt = e.smashT < e.smashW ? -0.34 : 0.58;   // rear back, slam
+  let lt = (e.sprinting ? 0.26 : 0) - (e.atk ? 0.1 : 0);
+  if (e.leaping) lt = e.leapT < P.leapTime * 0.5 ? -0.36 : 0.5;
+  else if (e.smash) lt = e.smashT < e.smashW ? -0.34 : 0.58;
+  else if (e.leapSlowT > 0) lt = 0.22;            // hunched, recovering
   e.lean = lerp(e.lean, lt, 0.26);
 
   if (e.smashCd > 0) e.smashCd -= dt;
@@ -3485,7 +3735,7 @@ function updatePlayer(dt) {
   if (e.iframes > 0) e.iframes -= dt;
   if (e.hurt > 0) e.hurt -= dt;
 
-  if (mouseDown && !e.atk && !e.smash && e.dashT <= 0) tryAttack();
+  if (mouseDown && !e.atk && !e.smash && !e.leaping) tryAttack();
   if (e.atk) {
     e.atkT += dt;
     if (e.atkT >= e.atkW && e.atkT < e.atkW + e.atkS) meleeStrike();
@@ -3509,9 +3759,9 @@ function poseSurvivor() {
   o.rotation.y = e.aim;
   // you grow into a larger, older warrior as you gain levels
   o.scale.setScalar(1 + Math.min(e.level - 1, 24) * 0.014);
-  const bob = e.moving ? Math.abs(Math.sin(e.walkP)) *
+  const bob = (e.moving && !e.leaping) ? Math.abs(Math.sin(e.walkP)) *
     (e.sprinting ? 0.34 : 0.22) : 0;
-  o.position.set(e.x, e.y + bob, e.z);
+  o.position.set(e.x, e.y + bob + e.leapH, e.z);
   u.upper.rotation.x = e.lean;
   const sw = e.moving ? (e.sprinting ? 1.0 : 0.72) : 0.06;
   u.legs[0].rotation.x = Math.sin(e.walkP) * sw;
@@ -3547,6 +3797,12 @@ function poseSurvivor() {
     else { const t = easeOut(clamp((a - w - s) / r, 0, 1));
       pX = lerp(hit[0], idleP[0], t); pY = lerp(hit[1], idleP[1], t);
       pZ = lerp(hit[2], idleP[2], t); }
+  } else if (e.leaping) {
+    // weapon hauled high overhead through the whole airborne arc
+    const k = clamp(e.leapT / P.leapTime, 0, 1);
+    pX = lerp(idleP[0], -2.8, Math.min(1, k * 3));
+    pY = lerp(idleP[1], 0, Math.min(1, k * 3));
+    pZ = lerp(idleP[2], 0, Math.min(1, k * 3));
   }
   u.arm.rotation.set(pX, pY, pZ);
   for (const eye of u.eyes)
@@ -3762,7 +4018,11 @@ function updateAmbient(dt, t) {
     moon.target.position.set(player.x, 0, player.z);
     moon.position.set(player.x + 62, 100, player.z + 44);
   }
+  moon.intensity = 0.66 + (lightFlashT > 0 ? lightFlashT * 8 : 0);
   updateSea(t);
+  updateRain(dt);
+  updateBats(dt, t);
+  updateWeather(dt);
 }
 function updateToasts(dt) {
   if (bannerT > 0) { bannerT -= dt;
@@ -3779,6 +4039,7 @@ function update(dt) {
   updatePlayer(dt);
   updateZombies(dt);
   updateWaves(dt);
+  updateCombo(dt);
   updateProjectiles(dt);
   updateOrbs(dt);
   updateLoot(dt);
