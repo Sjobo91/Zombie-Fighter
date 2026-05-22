@@ -3481,8 +3481,8 @@ const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _hit = new THREE.Vector3();
 let mouseDown = false;
 const crosshairEl = document.getElementById("crosshair");
-// ─── mouse-look ─── turning the mouse swings the camera; WASD steers
-let camYaw = 0, pointerLocked = false;
+// ─── mouse-look ─── move the mouse to look freely; WASD steers
+let camYaw = 0, camPitch = 0.69, pointerLocked = false;
 const LOOK_SENS = 0.0023;
 function moveVec() {
   let f = 0, s = 0;
@@ -3491,8 +3491,9 @@ function moveVec() {
   if (keys["KeyD"] || keys["ArrowRight"]) s += 1;
   if (keys["KeyA"] || keys["ArrowLeft"]) s -= 1;
   if (f === 0 && s === 0) return null;
-  const mx = Math.sin(camYaw) * f + Math.cos(camYaw) * s;
-  const mz = Math.cos(camYaw) * f - Math.sin(camYaw) * s;
+  // forward = facing; D strafes screen-right, A screen-left
+  const mx = Math.sin(camYaw) * f - Math.cos(camYaw) * s;
+  const mz = Math.cos(camYaw) * f + Math.sin(camYaw) * s;
   const L = Math.hypot(mx, mz) || 1;
   return { x: mx / L, z: mz / L };
 }
@@ -3515,8 +3516,11 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 addEventListener("mousemove", (e) => {
-  if (pointerLocked && state === ST.PLAYING)
-    camYaw += e.movementX * LOOK_SENS;
+  if (pointerLocked && state === ST.PLAYING) {
+    // move the mouse right → look right; move it down → look down (WoW-style)
+    camYaw -= e.movementX * LOOK_SENS;
+    camPitch = clamp(camPitch + e.movementY * LOOK_SENS * 0.7, 0.34, 1.2);
+  }
 });
 addEventListener("mousedown", (e) => {
   if (state === ST.PLAYING) {
@@ -4103,7 +4107,7 @@ function resetGame() {
   camera.position.set(CAM_OFF.x, player.y + CAM_OFF.y, CAM_OFF.z);
   kills = 0; score = 0; zombiesAlive = 0; wave = 0; waveCountPrev = 0;
   comboMul = 1; comboT = 0; comboOut = 99; comboFx = 0;
-  camYaw = 0; pendingUlt = false; clearTornadoes();
+  camYaw = 0; camPitch = 0.69; pendingUlt = false; clearTornadoes();
   waveState = "fight"; toSpawn = [];
   hitStop = 0; heartT = 0; camShake = 0;
   grassFlatten = null; levelFx = 0;
@@ -4195,6 +4199,19 @@ function updatePlayer(dt) {
 
   // map limits — the world's edge + solid structures (airborne clears them)
   if (!e.leaping) resolveColliders(e, P.r);
+  // zombies are solid bodies — they block the hero, he can't run through them
+  if (!e.leaping) {
+    for (const z of zombies) {
+      if (z.state === "die" || z.state === "rising") continue;
+      const dx = e.x - z.x, dz = e.z - z.z;
+      const dd = Math.hypot(dx, dz), mn = P.r + z.r;
+      if (dd > 0.0001 && dd < mn) {
+        const push = (mn - dd) / dd;
+        e.x += dx * push * 0.72;  e.z += dz * push * 0.72;
+        z.x -= dx * push * 0.28;  z.z -= dz * push * 0.28;
+      }
+    }
+  }
   e.x = clamp(e.x, -ARENA + P.r + 3, ARENA - P.r - 3);
   e.z = clamp(e.z, -ARENA + P.r + 3, ZSHORE);
   e.y = groundHeight(e.x, e.z);
@@ -4537,11 +4554,14 @@ function poseZombie(z, d, chillMul) {
 
 /* ─── camera + ambient ────────────────────────────────────────────────────── */
 function updateCamera(dt) {
-  // the camera rides behind the hero along the mouse-look yaw
-  const tx = player.x - Math.sin(camYaw) * 30;
-  const tz = player.z - Math.cos(camYaw) * 30;
+  // the camera orbits the hero — mouse yaw spins it, mouse pitch raises it
+  const D = 39;
+  const ch = D * Math.sin(camPitch);   // height above the hero
+  const cd = D * Math.cos(camPitch);   // ground distance behind him
+  const tx = player.x - Math.sin(camYaw) * cd;
+  const tz = player.z - Math.cos(camYaw) * cd;
   camera.position.x = lerp(camera.position.x, tx, 0.17);
-  camera.position.y = lerp(camera.position.y, player.y + 25, 0.17);
+  camera.position.y = lerp(camera.position.y, player.y + ch, 0.17);
   camera.position.z = lerp(camera.position.z, tz, 0.17);
   camShake = Math.max(0, camShake - dt * 3.2);
   if (camShake > 0) {
