@@ -1161,6 +1161,12 @@ function glowSprite(x, y, z, size, color, opacity) {
    Solid map features push the player and the horde — clear, blocking geometry */
 const colliders = [];
 const interactables = [];   // explosive barrels & breakable crates — destructible
+const occluders = [];        // buildings that fade when they hide the hero
+function registerOccluder(group, x, z, r) {
+  const meshes = [];
+  group.traverse(o => { if (o.isMesh && o.material) meshes.push(o); });
+  occluders.push({ x, z, r, meshes, faded: false });
+}
 function removeCollider(c) {
   const i = colliders.indexOf(c);
   if (i >= 0) colliders.splice(i, 1);
@@ -2050,6 +2056,17 @@ function facadeTex(kind, stories, wallHex) {
     g.fillRect(Math.random() * 96, Math.random() * c.height,
       rand(3, 13), rand(3, 13));
   }
+  if (kind === "A") {                              // brickwork pattern
+    g.strokeStyle = "rgba(0,0,0,0.42)"; g.lineWidth = 1;
+    const bh = 8;                                  // brick height
+    for (let by = c.height - 40; by > -bh; by -= bh) {
+      g.beginPath(); g.moveTo(0, by); g.lineTo(96, by); g.stroke();
+      const off = ((c.height - by) / bh) % 2 === 0 ? 0 : 11;
+      for (let bx = off; bx < 96; bx += 22) {
+        g.beginPath(); g.moveTo(bx, by); g.lineTo(bx, by - bh); g.stroke();
+      }
+    }
+  }
   const lit = ["#ffe6a6", "#ffd482", "#cfe2ff", "#fff2cf"], dark = "#222a36";
   const winW = 18, winH = 23, gx = (96 - cols * winW) / (cols + 1);
   for (let s = 0; s < stories; s++) {
@@ -2079,6 +2096,37 @@ function facadeTex(kind, stories, wallHex) {
   }
   const t = new THREE.CanvasTexture(c);
   _facadeCache[key] = t;
+  return t;
+}
+let _stoneTileTex = null;
+function stoneTileTex() {
+  if (_stoneTileTex) return _stoneTileTex;
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = "#322e26"; g.fillRect(0, 0, 128, 128);   // grout
+  const tones = ["#605948", "#5a5346", "#665e4d", "#564f42", "#6c6354",
+    "#544c40"];
+  const ts = 22;
+  for (let y = -4; y < 128; y += ts) {
+    const off = (((y + 32) / ts) | 0) % 2 === 0 ? 0 : 11;
+    for (let x = -ts; x < 128 + ts; x += ts) {
+      const tx = x + off + rand(-2, 2), ty = y + rand(-2, 2);
+      const tw = ts + rand(-3, 3) - 3, th = ts + rand(-3, 3) - 3;
+      g.fillStyle = pick(tones);
+      g.fillRect(tx, ty, tw, th);
+      g.fillStyle = "rgba(0,0,0,0.18)";
+      g.fillRect(tx, ty + th - 2, tw, 2);
+      g.fillRect(tx + tw - 2, ty, 2, th);
+    }
+  }
+  for (let i = 0; i < 220; i++) {                       // surface grit
+    g.fillStyle = "rgba(0,0,0," + (Math.random() * 0.1).toFixed(3) + ")";
+    g.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(3, 3);
+  _stoneTileTex = t;
   return t;
 }
 function addTownBuilding(x, z, w, dp, stories, rot, kind) {
@@ -2117,6 +2165,7 @@ function addTownBuilding(x, z, w, dp, stories, rot, kind) {
   scene.add(g);
   glowSprite(x, y + h * 0.45, z, Math.max(w, dp) * 0.72, 0xffd27a, 0.13);
   boxCollider(x, z, w, dp, rot);
+  registerOccluder(g, x, z, Math.max(w, dp) * 0.55 + 1);
 }
 function buildTown() {
   const BC = [-112, -56, 0, 56, 112];
@@ -2144,7 +2193,8 @@ function buildTown() {
   }
   addLaneMarks(0, -SPAN, 0, SPAN);
   addLaneMarks(-SPAN, 0, SPAN, 0);
-  const swMat = mat(0x565249, 1);
+  const swMat = new THREE.MeshStandardMaterial({ map: stoneTileTex(),
+    roughness: 1, metalness: 0 });
   function townGreen(cx, cz, r) {
     for (let i = 0; i < 7; i++) {
       const a = rand(0, TAU), d = rand(4, r);
@@ -2802,58 +2852,114 @@ function buildZombie(type, rare) {
     : pick([0x394231, 0x3a3328, 0x2f3a30, 0x3d352a, 0x33372e]);
   const flesh = mat(skinHex, 0.97);
   const cloth = mat(pick([0x141210, 0x171512, 0x121316]), 1);
-  const bone = mat(0xb0a585, 0.8);
-  const gore = mat(0x5a0c08, 0.85);
+  const bone = mat(0xc4b89a, 0.7);
+  const skull = mat(0xd4c8a8, 0.62);
+  const gore = mat(0x5a0c08, 0.92);
+  const splatMat = new THREE.MeshStandardMaterial({ color: 0x3a0606,
+    roughness: 0.6, emissive: 0x180202, emissiveIntensity: 0.6 });
   const h = d.h, r = d.r;
-  // hunched torso, slumped forward
+  // gore variants — randomised per shambler/runner
+  const canCrawl = type === "shambler" || type === "runner";
+  const crawler = canCrawl && !rare && Math.random() < 0.18;
+  const missingArm = !rare && type !== "boss" && Math.random() < 0.22
+    ? (Math.random() < 0.5 ? 0 : 1) : -1;
+  // ── torsos: bare flesh underneath, tattered cloth on top ──
+  const fleshT = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 0.46, r * 0.62, h * 0.46, 8), flesh);
+  fleshT.position.set(0, h * 0.5, 0); fleshT.rotation.x = 0.52;
+  g.add(fleshT);
   const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(r * 0.5, r * 0.7, h * 0.44, 7), cloth);
+    new THREE.CylinderGeometry(r * 0.5, r * 0.66, h * 0.42, 8), cloth);
   torso.position.set(0, h * 0.5, 0); torso.rotation.x = 0.52;
   torso.castShadow = true; g.add(torso);
-  // a blood-soaked gash torn across the chest
-  const gash = new THREE.Mesh(
-    new THREE.BoxGeometry(r * 0.66, h * 0.16, 0.07), gore);
-  gash.position.set(0, h * 0.54, r * 0.42); gash.rotation.x = 0.52;
-  gash.rotation.z = rand(-0.4, 0.4); g.add(gash);
-  // exposed ribcage
+  // cloth tatters dangling off the body
   for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU + rand(-0.3, 0.3);
+    const tat = new THREE.Mesh(
+      new THREE.BoxGeometry(rand(0.1, 0.18), rand(0.45, 0.75), 0.04), cloth);
+    tat.position.set(Math.cos(a) * r * 0.5, h * 0.3, Math.sin(a) * r * 0.5);
+    tat.rotation.set(rand(-0.2, 0.2), a, rand(-0.15, 0.15));
+    g.add(tat);
+  }
+  // a gaping chest gash + a smaller side wound
+  const gash = new THREE.Mesh(
+    new THREE.BoxGeometry(r * 0.82, h * 0.22, 0.1), gore);
+  gash.position.set(0, h * 0.52, r * 0.44); gash.rotation.x = 0.52;
+  gash.rotation.z = rand(-0.3, 0.3); g.add(gash);
+  const sideGash = new THREE.Mesh(
+    new THREE.BoxGeometry(r * 0.52, h * 0.16, 0.09), gore);
+  sideGash.position.set(rand(-1, 1) > 0 ? r * 0.4 : -r * 0.4,
+    h * 0.42, r * 0.18); sideGash.rotation.set(0.4, 0.6, 0);
+  g.add(sideGash);
+  // exposed ribcage — more visible
+  for (let i = 0; i < 4; i++) {
     const rib = new THREE.Mesh(
-      new THREE.TorusGeometry(r * (0.34 - i * 0.03), 0.05, 4, 8, Math.PI),
+      new THREE.TorusGeometry(r * (0.38 - i * 0.027), 0.06, 4, 9, Math.PI),
       bone);
-    rib.position.set(0, h * (0.42 + i * 0.085), r * 0.26);
+    rib.position.set(0, h * (0.36 + i * 0.075), r * 0.3);
     rib.rotation.set(Math.PI / 2 + 0.5, 0, 0); g.add(rib);
   }
-  // jutting spine down the back
+  // jutting spine
   for (let i = 0; i < 4; i++) {
-    const vert = new THREE.Mesh(new THREE.SphereGeometry(r * 0.1, 5, 4), bone);
-    vert.position.set(0, h * (0.4 + i * 0.082), -r * 0.18 - i * r * 0.03);
+    const vert = new THREE.Mesh(
+      new THREE.SphereGeometry(r * 0.11, 6, 5), bone);
+    vert.position.set(rand(-0.04, 0.04), h * (0.34 + i * 0.082),
+      -r * 0.18 - i * r * 0.03);
     g.add(vert);
   }
-  // dangling entrails
+  // long, dripping entrails
   for (let i = 0; i < 3; i++) {
-    const gut = new THREE.Mesh(new THREE.SphereGeometry(r * 0.12, 5, 4),
-      gore);
-    gut.position.set(rand(-r * 0.18, r * 0.18), h * 0.34 - i * r * 0.12,
-      r * 0.34);
+    const gut = new THREE.Mesh(
+      new THREE.CylinderGeometry(r * 0.08, r * 0.05, r * 0.78, 5), gore);
+    gut.position.set(rand(-r * 0.22, r * 0.22), h * 0.22, r * 0.36);
+    gut.rotation.set(rand(-0.2, 0.2), 0, rand(-0.35, 0.35));
     g.add(gut);
   }
-  // gaunt head + slack, hanging jaw with teeth
-  const head = new THREE.Mesh(new THREE.SphereGeometry(r * 0.4, 9, 8), flesh);
+  // blood splatter — flat dark patches over the torso
+  for (let i = 0; i < 3; i++) {
+    const a = rand(-1.4, 1.4);
+    const sp = new THREE.Mesh(
+      new THREE.PlaneGeometry(rand(0.3, 0.6), rand(0.25, 0.5)), splatMat);
+    sp.position.set(Math.sin(a) * r * 0.52,
+      h * (0.42 + rand(-0.16, 0.16)), Math.cos(a) * r * 0.52);
+    sp.rotation.y = a; sp.rotation.x = rand(-0.3, 0.3);
+    g.add(sp);
+  }
+  // ── head — gaunt flesh with the scalp ripped open over the skull ──
+  const head = new THREE.Mesh(new THREE.SphereGeometry(r * 0.4, 10, 8),
+    flesh);
   head.position.set(0, h * 0.79, r * 0.36); head.scale.set(1, 1.16, 1.05);
   head.castShadow = true; g.add(head);
+  const skullCap = new THREE.Mesh(
+    new THREE.SphereGeometry(r * 0.38, 9, 7, 0, TAU, 0, Math.PI * 0.42),
+    skull);
+  skullCap.position.set(rand(-0.04, 0.04), h * 0.87, r * 0.34);
+  skullCap.rotation.x = rand(-0.3, 0.3); skullCap.rotation.z = rand(-0.2, 0.2);
+  g.add(skullCap);
+  // jaw left half-hanging, with a sinew strand keeping it attached
   const jaw = new THREE.Mesh(
-    new THREE.BoxGeometry(r * 0.32, r * 0.26, r * 0.3), flesh);
-  jaw.position.set(0, h * 0.65, r * 0.55); jaw.rotation.x = 0.42; g.add(jaw);
-  for (let t = -1; t <= 1; t++) {
+    new THREE.BoxGeometry(r * 0.34, r * 0.28, r * 0.32), flesh);
+  jaw.position.set(0, h * 0.6, r * 0.6); jaw.rotation.x = 1.0; g.add(jaw);
+  const sinew = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 0.04, r * 0.04, r * 0.3, 4), gore);
+  sinew.position.set(0, h * 0.68, r * 0.6); sinew.rotation.x = -0.42;
+  g.add(sinew);
+  // jagged teeth in the upper jaw
+  for (let t = -1.5; t <= 1.5; t++) {
     const tooth = new THREE.Mesh(
-      new THREE.ConeGeometry(r * 0.04, r * 0.17, 4), bone);
-    tooth.position.set(t * r * 0.12, h * 0.73, r * 0.62); g.add(tooth);
+      new THREE.ConeGeometry(r * 0.04, r * 0.18, 4), bone);
+    tooth.position.set(t * r * 0.09, h * 0.71, r * 0.66);
+    g.add(tooth);
   }
+  // a long blood drip from the jaw down the chest
+  const drip = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 0.04, r * 0.02, r * 0.55, 4), gore);
+  drip.position.set(0, h * 0.36, r * 0.55); g.add(drip);
   // sunken, smouldering eyes
   const eyeCol = rare ? 0xff2a2a : 0xff8a1e;
   const eyeMat = new THREE.MeshBasicMaterial({ color: eyeCol });
   const eyes = [];
-  for (const sx of [-r * 0.15, r * 0.15]) {
+  for (const sx of [-r * 0.14, r * 0.14]) {
     const e = new THREE.Mesh(new THREE.SphereGeometry(r * 0.085, 6, 6),
       eyeMat);
     e.position.set(sx, h * 0.81, r * 0.66); g.add(e); eyes.push(e);
@@ -2863,29 +2969,53 @@ function buildZombie(type, rare) {
     eg.position.set(sx, h * 0.81, r * 0.72); eg.scale.setScalar(r * 0.62);
     g.add(eg);
   }
-  // uneven legs
+  // ── legs (skipped for crawlers; the groups still exist for poseZombie) ──
   const legs = [];
   for (const sx of [-r * 0.3, r * 0.3]) {
     const leg = new THREE.Group(); leg.position.set(sx, h * 0.42, 0);
-    const ll = new THREE.Mesh(
-      new THREE.BoxGeometry(r * 0.32, h * 0.46, r * 0.36), cloth);
-    ll.position.y = -h * 0.23; ll.castShadow = true; leg.add(ll);
+    if (!crawler) {
+      const ll = new THREE.Mesh(
+        new THREE.BoxGeometry(r * 0.32, h * 0.46, r * 0.36), cloth);
+      ll.position.y = -h * 0.23; ll.castShadow = true; leg.add(ll);
+      if (Math.random() < 0.35) {                  // a snapped shin-bone
+        const shinBone = new THREE.Mesh(
+          new THREE.CylinderGeometry(r * 0.08, r * 0.07, h * 0.22, 5), bone);
+        shinBone.position.y = -h * 0.36; leg.add(shinBone);
+      }
+    } else {
+      leg.visible = false;                          // crawler: no legs
+    }
     g.add(leg); legs.push(leg);
   }
-  // asymmetric clawed arms — one hangs longer
+  // ── arms — one may be a stump, the other may have bone showing ──
   const arms = [];
   let ai = 0;
   for (const sx of [-r * 0.56, r * 0.56]) {
     const a = new THREE.Group(); a.position.set(sx, h * 0.66, 0);
-    const len = h * (ai === 0 ? 0.52 : 0.42);
-    const am = new THREE.Mesh(
-      new THREE.BoxGeometry(r * 0.22, r * 0.22, len), flesh);
-    am.position.z = len * 0.5; am.castShadow = true; a.add(am);
-    for (let c = -1; c <= 1; c++) {
-      const claw = new THREE.Mesh(
-        new THREE.ConeGeometry(r * 0.07, r * 0.46, 4), bone);
-      claw.position.set(c * r * 0.1, 0, len + r * 0.18);
-      claw.rotation.x = Math.PI / 2; a.add(claw);
+    if (missingArm === ai) {
+      const stub = new THREE.Mesh(
+        new THREE.CylinderGeometry(r * 0.1, r * 0.13, r * 0.22, 5), bone);
+      stub.position.z = r * 0.12; a.add(stub);
+      const stubBlood = new THREE.Mesh(
+        new THREE.SphereGeometry(r * 0.13, 5, 4), gore);
+      stubBlood.position.z = r * 0.22; a.add(stubBlood);
+    } else {
+      const len = h * (ai === 0 ? 0.52 : 0.42);
+      const am = new THREE.Mesh(
+        new THREE.BoxGeometry(r * 0.22, r * 0.22, len), flesh);
+      am.position.z = len * 0.5; am.castShadow = true; a.add(am);
+      if (Math.random() < 0.35) {                  // bone protruding through
+        const armBone = new THREE.Mesh(
+          new THREE.CylinderGeometry(r * 0.08, r * 0.08, len * 0.7, 5), bone);
+        armBone.position.set(0, 0, len * 0.6);
+        armBone.rotation.x = Math.PI / 2; a.add(armBone);
+      }
+      for (let c = -1; c <= 1; c++) {
+        const claw = new THREE.Mesh(
+          new THREE.ConeGeometry(r * 0.07, r * 0.46, 4), bone);
+        claw.position.set(c * r * 0.1, 0, len + r * 0.18);
+        claw.rotation.x = Math.PI / 2; a.add(claw);
+      }
     }
     a.rotation.x = -1.05; g.add(a); arms.push(a); ai++;
   }
@@ -2926,10 +3056,10 @@ function buildZombie(type, rare) {
       color: rare ? 0x3affc0 : type === "giant" ? 0xc8881f : 0x9c241a }));
   fill.position.z = 0.02;
   hp.add(bg, fill);
-  hp.position.y = h + 0.8; hp.visible = false;
+  hp.position.y = (crawler ? h * 0.55 : h) + 0.8; hp.visible = false;
   g.add(hp);
   g.userData = { mats: [flesh, cloth], legs, arms, torso, head, eyes,
-    hp, hpFill: fill, hpW };
+    hp, hpFill: fill, hpW, crawler };
   return g;
 }
 
@@ -4653,10 +4783,12 @@ function spawnZombie(type, rare) {
     ? 1 + Math.max(0, wave - 5) * 0.3
     : 1 + (wave - 1) * 0.20;
   const hp = d.hp * hpScale;
+  const crawler = !!obj.userData.crawler;
   zombies.push({
     obj, mound, type, rare: !!rare, boss: type === "boss", x, z, y: gy,
-    hp: hp, maxHp: hp, sizeMul: sizeMul,
-    speed: d.speed * (1 + Math.min(wave, 26) * 0.016), r: d.r * sizeMul,
+    hp: hp, maxHp: hp, sizeMul: sizeMul, crawler,
+    speed: d.speed * (1 + Math.min(wave, 26) * 0.016) * (crawler ? 0.5 : 1),
+    r: d.r * sizeMul,
     state: "rising", riseT: 0, walkP: rand(0, TAU), t: rand(0, 9),
     flash: 0, atkCd: rand(0.3, 1.2), stagger: 0, kx: 0, kz: 0,
     groanT: rand(2, 9), dieT: 0,
@@ -6136,13 +6268,24 @@ function poseZombie(z, d, chillMul) {
   o.rotation.y = Math.atan2(player.x - z.x, player.z - z.z);
   const moving = (z.state === "chase" || z.dodgeT > 0) && chillMul > 0;
   const amp = moving ? 0.82 : 0.12;
-  u.legs[0].rotation.x = Math.sin(z.walkP) * amp;
-  u.legs[1].rotation.x = Math.sin(z.walkP + Math.PI) * amp;
-  o.position.set(z.x, gy + (moving ? Math.abs(Math.sin(z.walkP)) * 0.18 : 0)
+  if (!z.crawler) {
+    u.legs[0].rotation.x = Math.sin(z.walkP) * amp;
+    u.legs[1].rotation.x = Math.sin(z.walkP + Math.PI) * amp;
+  }
+  const dragY = z.crawler ? -d.h * z.sizeMul * 0.35 : 0;
+  o.position.set(z.x,
+    gy + dragY + (moving ? Math.abs(Math.sin(z.walkP)) *
+      (z.crawler ? 0.04 : 0.18) : 0)
     + (z.spH || 0) + Math.sin(z.t * 2) * 0.05, z.z);
   const lunge = z.state === "attack" ? Math.max(0, Math.sin(z.t * 13)) : 0;
-  u.arms[0].rotation.x = -1.0 - lunge * 0.75 + Math.sin(z.walkP) * 0.2;
-  u.arms[1].rotation.x = -1.0 - lunge * 0.75 - Math.sin(z.walkP) * 0.2;
+  if (z.crawler) {
+    // dragging — arms claw forward in alternation
+    u.arms[0].rotation.x = -0.55 + Math.sin(z.walkP * 1.5) * 0.55;
+    u.arms[1].rotation.x = -0.55 + Math.sin(z.walkP * 1.5 + Math.PI) * 0.55;
+  } else {
+    u.arms[0].rotation.x = -1.0 - lunge * 0.75 + Math.sin(z.walkP) * 0.2;
+    u.arms[1].rotation.x = -1.0 - lunge * 0.75 - Math.sin(z.walkP) * 0.2;
+  }
   // damage flash + status tints
   let er = 0, eg = 0, eb = 0;
   if (z.flash > 0) { const f = clamp(z.flash * 7, 0, 1);
@@ -6178,6 +6321,39 @@ function updateCamera(dt) {
   }
   camera.lookAt(player.x, player.y + 2.4, player.z);
   _camQ.copy(camera.quaternion);
+}
+/* ─── camera occlusion — fade buildings that hide the hero ────────────────── */
+function updateOcclusion() {
+  if (!player) return;
+  const cx = camera.position.x, cz = camera.position.z;
+  const px = player.x, pz = player.z;
+  const dx = px - cx, dz = pz - cz;
+  const L2 = dx * dx + dz * dz;
+  if (L2 < 4) return;
+  for (let i = 0; i < occluders.length; i++) {
+    const oc = occluders[i];
+    const ox = oc.x - cx, oz = oc.z - cz;
+    const t = (ox * dx + oz * dz) / L2;
+    let isOccluding = false;
+    if (t > 0.04 && t < 0.96) {
+      const pxp = cx + dx * t, pzp = cz + dz * t;
+      const perp = Math.hypot(oc.x - pxp, oc.z - pzp);
+      if (perp < oc.r) isOccluding = true;
+    }
+    if (isOccluding && !oc.faded) {
+      for (let m = 0; m < oc.meshes.length; m++) {
+        const mat = oc.meshes[m].material;
+        mat.transparent = true; mat.opacity = 0.22; mat.depthWrite = false;
+      }
+      oc.faded = true;
+    } else if (!isOccluding && oc.faded) {
+      for (let m = 0; m < oc.meshes.length; m++) {
+        const mat = oc.meshes[m].material;
+        mat.transparent = false; mat.opacity = 1.0; mat.depthWrite = true;
+      }
+      oc.faded = false;
+    }
+  }
 }
 /* ─── interactive props: hits, chain-reaction explosions, loot ────────────── */
 function hitInteractable(it, dmg) {
@@ -6442,7 +6618,7 @@ function update(dt) {
   updateFlares(dt); updateGibs(dt); updateScorch(dt); updateCracks(dt);
   updateScreenFlash(dt); updateFireflies(dt, clock);
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
-  updateCamera(dt);
+  updateCamera(dt); updateOcclusion();
   updateGrass(dt, clock);
   updateAmbient(dt, clock);
   updateDmgNums(dt);
@@ -6463,7 +6639,7 @@ function idleTick(dt) {
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
   updateGrass(dt, clock);
   updateAmbient(dt, clock);
-  updateCamera(dt);
+  updateCamera(dt); updateOcclusion();
   updateDmgNums(dt);
   Ambience.update(dt);
   Music.update(dt);
