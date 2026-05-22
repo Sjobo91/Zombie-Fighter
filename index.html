@@ -25,8 +25,22 @@
   #score .slab { font-size: 11px; color: #8b8478; letter-spacing: 2px;
     font-weight: 700; }
 
+  /* ---- boss health bar ---- */
+  #bossbar { position: absolute; left: 50%; top: 48px;
+    transform: translateX(-50%); width: 470px; display: none; }
+  #bossbar.show { display: block; }
+  #bossbar .bn { text-align: center; font-size: 14px; font-weight: 800;
+    letter-spacing: 3px; color: #ff6a4a; text-shadow: 0 0 14px #000;
+    margin-bottom: 3px; }
+  #bossbar .bbar { height: 17px; background: #1a0606;
+    border: 2px solid #5a1a18; border-radius: 4px; overflow: hidden;
+    box-shadow: 0 0 20px rgba(180,30,20,.6); }
+  #bossbar .bfill { height: 100%;
+    background: linear-gradient(90deg, #7a0e0a, #ff3a22);
+    transition: width .12s; }
+
   /* ---- combo multiplier ---- */
-  #combo { position: absolute; left: 50%; top: 72px;
+  #combo { position: absolute; left: 50%; top: 106px;
     transform: translateX(-50%); text-align: center; opacity: 0;
     transition: opacity .2s; }
   #combo .cmul { font-size: 46px; font-weight: 800; color: #ffd23a;
@@ -66,6 +80,8 @@
     border: 2px solid #2c2c33; border-radius: 9px; position: relative;
     overflow: hidden; transition: transform .1s, box-shadow .1s; }
   .abil.pulse { transform: scale(1.2); box-shadow: 0 0 24px currentColor; }
+  .abil.active { box-shadow: 0 0 26px currentColor;
+    border-color: currentColor; }
   .abil .dot { position: absolute; left: 50%; top: 24px;
     transform: translateX(-50%); width: 30px; height: 30px;
     border-radius: 50%; }
@@ -85,8 +101,19 @@
   #hint .hot { color: #d8b75a; }
   #hint .glow { color: #e3bd57; animation: blink 1.1s infinite; }
 
+  /* ---- active buff chips ---- */
+  #buffs { position: absolute; left: 26px; bottom: 104px; display: flex;
+    gap: 7px; }
+  .buffchip { width: 42px; height: 48px; background: rgba(8,8,12,.86);
+    border: 2px solid #3a3640; border-radius: 7px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 23px; box-shadow: 0 0 12px currentColor; }
+  .buffchip .bt { position: absolute; left: 3px; right: 3px; bottom: 3px;
+    height: 4px; background: #2a2a36; border-radius: 2px; overflow: hidden; }
+  .buffchip .btf { height: 100%; background: currentColor; }
+
   #crosshair { position: absolute; width: 26px; height: 26px; margin: -13px;
-    pointer-events: none; display: none; }
+    left: 50%; top: 50%; pointer-events: none; display: none; }
   #crosshair::before, #crosshair::after { content: ''; position: absolute;
     background: rgba(200,80,62,.9); }
   #crosshair::before { left: 12px; top: 0; width: 2px; height: 26px; }
@@ -293,22 +320,29 @@
   </div>
 
   <div id="hint"></div>
+  <div id="buffs"></div>
 
   <div id="abilities">
     <div class="abil" id="ab-atk"><div class="dot" style="background:#9298a1"></div>
       <div class="cd"></div><div class="key">LMB</div></div>
     <div class="abil" id="ab-smash"><div class="dot" style="background:#caa24a"></div>
       <div class="cd" id="cd-smash"></div>
-      <div class="cdnum" id="cdn-smash"></div><div class="key">Q / RMB</div></div>
+      <div class="cdnum" id="cdn-smash"></div><div class="key">RMB SMASH</div></div>
     <div class="abil" id="ab-dash"><div class="dot" style="background:#e0843a"></div>
       <div class="cd" id="cd-dash"></div>
       <div class="cdnum" id="cdn-dash"></div><div class="key">SPACE LEAP</div></div>
+    <div class="abil" id="ab-ult"><div class="glyph"
+      style="color:#5a5660">&#9733;</div>
+      <div class="cd" id="cd-ult"></div>
+      <div class="cdnum" id="cdn-ult"></div><div class="key">Q ULT</div></div>
   </div>
 
   <div id="xpbar"><div id="xpfill"></div></div>
   <div id="banner"><div class="big"></div><div class="sub"></div></div>
   <div id="toast"></div>
   <div id="combo"><div class="cmul"></div><div class="clab">COMBO</div></div>
+  <div id="bossbar"><div class="bn">BOSS</div>
+    <div class="bbar"><div class="bfill"></div></div></div>
   <canvas id="minimap" width="190" height="190"></canvas>
   <div id="crosshair"></div>
 
@@ -405,16 +439,21 @@ const ATK_SLOW_DUR = 0.5, ATK_SLOW_AMT = 0.26;
 const RISE_DUR = 1.45;
 // stat-point yields — simple, readable metrics
 const PWR_DMG = 3, DEF_HP = 18, SPD_PCT = 0.04;
-const PTS_PER_LEVEL = 1, PTS_START = 6;
+const PTS_PER_LEVEL = 1, PTS_START = 0;   // exactly 1 point per level
 
-// archetypes — far tougher than before; the horde is a real threat
+// archetypes — the horde compounds in strength every wave
 const ETYPES = {
-  shambler: { hp: 38,  speed: 4.3,  dmg: 12, r: 1.25, h: 3.6, xp: 11 },
-  runner:   { hp: 26,  speed: 10.0, dmg: 9,  r: 1.05, h: 3.1, xp: 15 },
-  brute:    { hp: 150, speed: 4.1,  dmg: 28, r: 2.1,  h: 5.0, xp: 46 },
-  giant:    { hp: 540, speed: 3.2,  dmg: 52, r: 3.5,  h: 7.6, xp: 190 },
-  revenant: { hp: 360, speed: 6.6,  dmg: 32, r: 1.85, h: 4.7, xp: 150 },
+  shambler: { hp: 38,   speed: 4.3,  dmg: 12, r: 1.25, h: 3.6,  xp: 11 },
+  runner:   { hp: 26,   speed: 10.4, dmg: 9,  r: 1.05, h: 3.1,  xp: 15 },
+  charger:  { hp: 82,   speed: 5.0,  dmg: 26, r: 1.45, h: 4.0,  xp: 32 },
+  lunger:   { hp: 48,   speed: 8.4,  dmg: 20, r: 1.15, h: 3.3,  xp: 27 },
+  brute:    { hp: 160,  speed: 4.2,  dmg: 30, r: 2.1,  h: 5.0,  xp: 48 },
+  giant:    { hp: 560,  speed: 3.2,  dmg: 54, r: 3.5,  h: 7.6,  xp: 200 },
+  revenant: { hp: 380,  speed: 6.8,  dmg: 34, r: 1.85, h: 4.7,  xp: 160 },
+  boss:     { hp: 2600, speed: 3.0,  dmg: 96, r: 5.4,  h: 12.5, xp: 950 },
 };
+// per-wave compounding — late waves become a true test
+const HP_SCALE = 1.28, DMG_SCALE = 1.13, BOSS_HP_SCALE = 1.17;
 const DISTRICTS = ["THE BONEYARD", "THE IRON GATE", "THE OLD STREETS",
                    "THE MARKET SQUARE", "THE OUTER WARD", "THE BLACK CATHEDRAL"];
 
@@ -1688,7 +1727,7 @@ function buildSurvivor() {
 /* ─── zombie builder — gaunt, gored, glowing-eyed horrors ─────────────────── */
 function buildZombie(type, rare) {
   const d = ETYPES[type], g = new THREE.Group();
-  const skinHex = rare ? 0x243630
+  const skinHex = type === "boss" ? 0x2c1210 : rare ? 0x243630
     : pick([0x394231, 0x3a3328, 0x2f3a30, 0x3d352a, 0x33372e]);
   const flesh = mat(skinHex, 0.97);
   const cloth = mat(pick([0x141210, 0x171512, 0x121316]), 1);
@@ -1791,6 +1830,21 @@ function buildZombie(type, rare) {
       color: 0xff3a3a, transparent: true, opacity: 0.5, depthWrite: false,
       blending: THREE.AdditiveBlending }));
     halo.position.y = h * 0.6; halo.scale.setScalar(h * 0.9); g.add(halo);
+  }
+  if (type === "boss") {
+    for (const sx of [-1, 1]) {                  // jagged horns
+      const horn = new THREE.Mesh(
+        new THREE.ConeGeometry(r * 0.13, r * 0.7, 5),
+        new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 1 }));
+      horn.position.set(sx * r * 0.26, h * 0.96, r * 0.3);
+      horn.rotation.z = sx * 0.5; horn.castShadow = true; g.add(horn);
+    }
+    const aura = new THREE.PointLight(0xff2a1e, 4.0, 44, 2);
+    aura.position.y = h * 0.55; g.add(aura);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+      color: 0xff2a1e, transparent: true, opacity: 0.55, depthWrite: false,
+      blending: THREE.AdditiveBlending }));
+    halo.position.y = h * 0.5; halo.scale.setScalar(h * 1.35); g.add(halo);
   }
   const hpW = r * 2.6;
   const hp = new THREE.Group();
@@ -2356,6 +2410,10 @@ function makePlayer() {
     smashCd: 0, dashCd: 0, moveAng: 0, iframes: 0, hurt: 0, dashTrailT: 0,
     leaping: false, leapT: 0, leapH: 0, leapSlowT: 0,
     leapSX: 0, leapSZ: 0, leapTX: 0, leapTZ: 0,
+    ultId: null, ultChosen: false, ultActive: false, ultT: 0, ultCd: 0,
+    ultImmune: false, ultHitT: 0,
+    buffs: [], perma: { dmg: 0, hp: 0, spd: 0, crit: 0, life: 0 },
+    lifesteal: 0, dmgTakenMul: 1, sizeMul: 1,
     alive: true,
   };
 }
@@ -2364,12 +2422,34 @@ function hasA(id) { return player.abil.has(id); }
 /* recompute every derived number from base + stats + gear */
 function recalc() {
   const before = player.maxHp;
-  player.maxHp = P.baseHp + player.stat.defense * DEF_HP +
-    (player.gear.armor ? player.gear.armor.value : 0);
-  player.dmg = P.baseDmg + player.stat.power * PWR_DMG +
-    (player.gear.weapon ? player.gear.weapon.value : 0);
-  player.moveMul = 1 + player.stat.speed * SPD_PCT;
-  player.atkSpeed = 1 + player.stat.speed * SPD_PCT;
+  const pm = player.perma;
+  const armorVal = player.gear.armor ? player.gear.armor.value : 0;
+  const weaponVal = player.gear.weapon ? player.gear.weapon.value : 0;
+  player.maxHp = Math.round(P.baseHp + player.stat.defense * DEF_HP +
+    armorVal + pm.hp);
+  player.dmg = P.baseDmg + player.stat.power * PWR_DMG + weaponVal + pm.dmg;
+  let moveMul = 1 + player.stat.speed * SPD_PCT + pm.spd;
+  let atkSpeed = 1 + player.stat.speed * SPD_PCT;
+  let dmgMul = 1, dmgTakenMul = 1, sizeMul = 1;
+  let lifesteal = pm.life, critC = P.baseCrit + pm.crit;
+  let critMul = P.baseCritMul;
+  // active temporary buffs stack on top
+  for (const b of player.buffs) {
+    const m = b.def.mod;
+    if (m.dmgMul) dmgMul += m.dmgMul;
+    if (m.atkSpeed) atkSpeed *= m.atkSpeed;
+    if (m.moveMul) moveMul *= m.moveMul;
+    if (m.dmgTakenMul) dmgTakenMul *= m.dmgTakenMul;
+    if (m.lifesteal) lifesteal += m.lifesteal;
+    if (m.critC) critC += m.critC;
+    if (m.critMul) critMul += m.critMul;
+    if (m.size) sizeMul *= m.size;
+  }
+  if (featherOn()) { atkSpeed *= 4; dmgMul *= 1.5; }
+  player.moveMul = moveMul; player.atkSpeed = atkSpeed;
+  player.dmgMul = dmgMul; player.dmgTakenMul = dmgTakenMul;
+  player.lifesteal = lifesteal; player.sizeMul = sizeMul;
+  player.critChance = critC; player.critMul = critMul;
   if (player.maxHp > before) player.hp += player.maxHp - before;
   player.hp = clamp(player.hp, 1, player.maxHp);
 }
@@ -2479,6 +2559,142 @@ function updateLoot(dt) {
       scene.remove(o.obj); loot.splice(i, 1);
     }
   }
+}
+
+/* ─── buff drops — 20 ability powers; gold-ringed ones are permanent ──────── */
+const BUFFS = [
+  { id:"berserk", n:"BERSERK", glyph:"⚔", col:0xff5a3a, hex:"#ff6a4a",
+    perma:false, mod:{ dmgMul:0.6 } },
+  { id:"swift", n:"SWIFTNESS", glyph:"\u{1F4A8}", col:0x8ad0ff, hex:"#8ad0ff",
+    perma:false, mod:{ moveMul:1.45 } },
+  { id:"frenzy", n:"FRENZY", glyph:"⚡", col:0xffe04a, hex:"#ffe04a",
+    perma:false, mod:{ atkSpeed:1.75 } },
+  { id:"ironhide", n:"IRONHIDE", glyph:"\u{1F6E1}", col:0x9aa6b4,
+    hex:"#9aa6b4", perma:false, mod:{ dmgTakenMul:0.45 } },
+  { id:"bloodthirst", n:"BLOODTHIRST", glyph:"\u{1FA78}", col:0xc8201a,
+    hex:"#e0382a", perma:false, mod:{ lifesteal:11 } },
+  { id:"colossus", n:"COLOSSUS", glyph:"\u{1F5FF}", col:0xc0a060,
+    hex:"#c0a060", perma:false, mod:{ size:1.6, dmgMul:0.7 } },
+  { id:"hawkeye", n:"HAWKEYE", glyph:"\u{1F3AF}", col:0x6ad07a, hex:"#6ad07a",
+    perma:false, mod:{ critC:0.45 } },
+  { id:"execaxe", n:"EXECUTIONER", glyph:"\u{1FA93}", col:0xff8a3a,
+    hex:"#ff8a3a", perma:false, mod:{ critMul:2.0 } },
+  { id:"juggernaut", n:"JUGGERNAUT", glyph:"\u{1F417}", col:0xb88a4a,
+    hex:"#b88a4a", perma:false, mod:{ dmgTakenMul:0.55, dmgMul:0.35 } },
+  { id:"bloodrage", n:"BLOODRAGE", glyph:"\u{1F621}", col:0xff3a2a,
+    hex:"#ff4a3a", perma:false, mod:{ dmgMul:0.45, atkSpeed:1.35 } },
+  { id:"quicksilver", n:"QUICKSILVER", glyph:"\u{1F4AB}", col:0xcfe0ff,
+    hex:"#cfe0ff", perma:false, mod:{ moveMul:1.35, atkSpeed:1.35 } },
+  { id:"brutality", n:"BRUTALITY", glyph:"\u{1F44A}", col:0xff5a2a,
+    hex:"#ff6a3a", perma:false, mod:{ dmgMul:0.95 } },
+  { id:"wraithskin", n:"WRAITHSKIN", glyph:"\u{1F47B}", col:0xb0c8e0,
+    hex:"#b0c8e0", perma:false, mod:{ dmgTakenMul:0.35 } },
+  { id:"stormcaller", n:"STORMCALLER", glyph:"\u{1F329}", col:0x8ac8ff,
+    hex:"#8ac8ff", perma:false, mod:{ atkSpeed:1.55, critC:0.25 } },
+  { id:"vanguard", n:"VANGUARD", glyph:"\u{1F9BE}", col:0xd0c090,
+    hex:"#d0c090", perma:false, mod:{ dmgMul:0.4, dmgTakenMul:0.6,
+    moveMul:1.2 } },
+  { id:"e_might", n:"ETERNAL MIGHT", glyph:"\u{1F48E}", col:0xf0c040,
+    hex:"#f0c040", perma:true, mod:{ dmg:12 } },
+  { id:"e_vigor", n:"ETERNAL VIGOR", glyph:"❤", col:0xf0c040,
+    hex:"#f0c040", perma:true, mod:{ hp:70 } },
+  { id:"e_haste", n:"ETERNAL HASTE", glyph:"\u{1FAB6}", col:0xf0c040,
+    hex:"#f0c040", perma:true, mod:{ spd:0.1 } },
+  { id:"e_wrath", n:"ETERNAL WRATH", glyph:"☄", col:0xf0c040,
+    hex:"#f0c040", perma:true, mod:{ crit:0.07 } },
+  { id:"e_hunger", n:"ETERNAL HUNGER", glyph:"\u{1F9B7}", col:0xf0c040,
+    hex:"#f0c040", perma:true, mod:{ life:3 } },
+];
+const buffTexCache = {};
+function buffTex(buff) {
+  if (buffTexCache[buff.id]) return buffTexCache[buff.id];
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d");
+  g.font = "86px Arial"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(buff.glyph, 64, 72);
+  const t = new THREE.CanvasTexture(c);
+  buffTexCache[buff.id] = t;
+  return t;
+}
+let buffDrops = [];
+function spawnBuffDrop(x, z, elite) {
+  const golden = Math.random() < (elite ? 0.34 : 0.085);
+  const buff = pick(BUFFS.filter(b => b.perma === golden));
+  const col = golden ? 0xf0c040 : buff.col;
+  const g = new THREE.Group();
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+    color: col, transparent: true, opacity: 0.72, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  glow.scale.setScalar(golden ? 5.6 : 4.4); glow.position.y = 2.5;
+  const icon = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: buffTex(buff), transparent: true, depthWrite: false }));
+  icon.scale.setScalar(2.9); icon.position.y = 2.5;
+  g.add(glow, icon);
+  if (golden) {                       // a golden ring = a permanent power
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.95, 0.17, 8, 24),
+      new THREE.MeshStandardMaterial({ color: 0xf0c040, emissive: 0xf0c040,
+        emissiveIntensity: 1.3, metalness: 0.6, roughness: 0.3 }));
+    ring.position.y = 2.5; g.add(ring);
+  }
+  const beacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 0.85, 44, 7, 1, true),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true,
+      opacity: golden ? 0.42 : 0.25, depthWrite: false,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+  beacon.position.y = 22; g.add(beacon);
+  const light = new THREE.PointLight(col, 2.2, 17, 2);
+  light.position.y = 2.5; g.add(light);
+  g.position.set(x, groundHeight(x, z), z);
+  scene.add(g);
+  buffDrops.push({ obj: g, x, z, buff, golden, t: rand(0, TAU) });
+}
+function updateBuffDrops(dt) {
+  for (let i = buffDrops.length - 1; i >= 0; i--) {
+    const o = buffDrops[i]; o.t += dt;
+    o.obj.position.y = groundHeight(o.x, o.z) + Math.sin(o.t * 2.5) * 0.3;
+    o.obj.rotation.y += dt * 1.6;
+    if (Math.hypot(player.x - o.x, player.z - o.z) < 3.3) {
+      applyBuff(o.buff);
+      const c = o.golden ? 0xf0c040 : o.buff.col;
+      spawnParts(o.x, groundHeight(o.x, o.z) + 2.5, o.z, 26,
+        { color: c, speed: 12, up: 5 });
+      flare(o.x, groundHeight(o.x, o.z) + 2.5, o.z, 8, c, 0.5);
+      scene.remove(o.obj); buffDrops.splice(i, 1);
+    }
+  }
+}
+function clearBuffDrops() {
+  for (const o of buffDrops) scene.remove(o.obj);
+  buffDrops = [];
+}
+function applyBuff(buff) {
+  if (buff.perma) {
+    const m = buff.mod, pm = player.perma;
+    if (m.dmg) pm.dmg += m.dmg;
+    if (m.hp) pm.hp += m.hp;
+    if (m.spd) pm.spd += m.spd;
+    if (m.crit) pm.crit += m.crit;
+    if (m.life) pm.life += m.life;
+    recalc();
+    achievement({ hex: buff.hex, glyph: buff.glyph, n: buff.n });
+    Sound.levelup();
+    showToast("PERMANENT POWER  —  " + buff.n, "#f0c040");
+  } else {
+    const ex = player.buffs.find(b => b.def.id === buff.id);
+    if (ex) ex.t = 30;
+    else player.buffs.push({ def: buff, t: 30 });
+    recalc();
+    Sound.loot(); pulseAbil("atk");
+    showToast("BUFF  —  " + buff.n + "  (30s)", buff.hex);
+  }
+}
+function updateBuffs(dt) {
+  let changed = false;
+  for (let i = player.buffs.length - 1; i >= 0; i--) {
+    player.buffs[i].t -= dt;
+    if (player.buffs[i].t <= 0) { player.buffs.splice(i, 1); changed = true; }
+  }
+  if (changed) recalc();
 }
 
 
@@ -2616,6 +2832,150 @@ function grantAbility(id) {
   Sound.ability();
 }
 
+/* ─── ULTIMATE — Q, unlocked at level 10, one of three, kept all run ──────── */
+const ULT_DUR = 30, ULT_CD = 180;
+let pendingUlt = false, tornadoes = [];
+const ULTIMATES = [
+  { id: "whirlwind", n: "WHIRLWIND", glyph: "\u{1F300}", col: 0xff8a4a,
+    hex: "#ff8a4a",
+    d: "Spin like a berserker for 30s — immune to all harm while you " +
+       "carve 3x your attack damage into everything around you." },
+  { id: "feather", n: "FEATHERWEIGHT", glyph: "\u{1FAB6}", col: 0x9fe4ff,
+    hex: "#9fe4ff",
+    d: "For 30s your weapon weighs nothing: +300% attack speed, +50% " +
+       "damage, immune to all harm." },
+  { id: "storm", n: "ELEMENTAL STORM", glyph: "\u{1F329}", col: 0xc06bff,
+    hex: "#c06bff",
+    d: "For 30s, thunder hammers nearby foes and roaming fire tornadoes " +
+       "scour the field — and you keep full control." },
+];
+function ultDef(id) { return ULTIMATES.find(u => u.id === id); }
+function featherOn() { return player.ultActive && player.ultId === "feather"; }
+function tryUltimate() {
+  const e = player;
+  if (!e.ultId || e.ultActive || e.ultCd > 0 || !e.alive) return;
+  e.ultActive = true; e.ultT = ULT_DUR; e.ultCd = ULT_CD; e.ultHitT = 0;
+  const u = ultDef(e.ultId);
+  if (e.ultId === "whirlwind" || e.ultId === "feather") e.ultImmune = true;
+  if (e.ultId === "storm") spawnTornadoes();
+  recalc();
+  Sound.ability(); shake(1.4); screenFlash(u.hex, 0.5);
+  flashLight(e.x, e.y + 2, e.z, 0.7, u.col);
+  for (let i = 0; i < 14; i++)
+    flare(e.x + rand(-4, 4), e.y + rand(0, 5), e.z + rand(-4, 4),
+      rand(5, 11), u.col, rand(0.4, 0.8));
+  banner("ULTIMATE UNLEASHED", u.n);
+  pulseAbil("ult");
+}
+function endUltimate() {
+  player.ultActive = false; player.ultImmune = false;
+  clearTornadoes();
+  recalc();
+  banner("the power fades", "ULTIMATE SPENT");
+}
+function updateUltimate(dt) {
+  const e = player;
+  if (e.ultCd > 0) e.ultCd -= dt;
+  if (!e.ultActive) return;
+  e.ultT -= dt;
+  if (e.ultT <= 0) { endUltimate(); return; }
+  if (e.ultId === "whirlwind") {
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.22;
+      const dmg = e.dmg * e.dmgMul * 3;
+      for (const z of zombies) {
+        if (z.state === "die" || z.state === "rising") continue;
+        if (Math.hypot(z.x - e.x, z.z - e.z) < 9.5 + z.r)
+          hitZombie(z, dmg, Math.random() < 0.3,
+            Math.atan2(z.x - e.x, z.z - e.z), 2.2);
+      }
+      windRing.setColor(0xff8a4a);
+      windRing.show(e.x, e.y + 0.2, e.z, 12, 0.3);
+    }
+    if (Math.random() < dt * 26)
+      flare(e.x + rand(-4, 4), e.y + rand(1, 3.4), e.z + rand(-4, 4),
+        rand(3, 6), 0xff8a4a, 0.3);
+  } else if (e.ultId === "storm") {
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.85;
+      const sd = e.dmg * e.dmgMul * 2.6;
+      let n = 0;
+      for (const z of zombies) {
+        if (n >= 5) break;
+        if (z.state === "die" || z.state === "rising") continue;
+        if (Math.hypot(z.x - e.x, z.z - e.z) < 36) {
+          drawLightning(z.x, z.y + 22, z.z,
+            z.x, z.y + ETYPES[z.type].h * 0.5, z.z);
+          flashLight(z.x, z.y + 2, z.z, 0.2, 0x9fe4ff);
+          hitZombie(z, sd, true, 0, 1.6, true);
+          n++;
+        }
+      }
+      if (n) { Sound.zap(); screenFlash("#bfeaff", 0.2); }
+    }
+    updateTornadoes(dt);
+  }
+}
+function spawnTornadoes() {
+  for (let i = 0; i < 3; i++) {
+    const g = new THREE.Group();
+    for (let j = 0; j < 4; j++) {
+      const c = new THREE.Mesh(
+        new THREE.ConeGeometry(0.7 + j * 0.7, 3, 7, 1, true),
+        new THREE.MeshBasicMaterial({
+          color: pick([0xff6a2a, 0xffae3a, 0xff3a1e]), transparent: true,
+          opacity: 0.42, side: THREE.DoubleSide, depthWrite: false,
+          blending: THREE.AdditiveBlending }));
+      c.position.y = 2 + j * 2.4; g.add(c);
+    }
+    scene.add(g);
+    tornadoes.push({ g, a: (i / 3) * TAU, x: player.x, z: player.z,
+      hitT: 0, drift: rand(0.6, 1.1) });
+  }
+}
+function updateTornadoes(dt) {
+  const dmg = player.dmg * player.dmgMul * 1.7;
+  for (const t of tornadoes) {
+    t.a += t.drift * dt;
+    t.x = lerp(t.x, player.x + Math.cos(t.a) * 17, dt * 2.4);
+    t.z = lerp(t.z, player.z + Math.sin(t.a) * 17, dt * 2.4);
+    const gy = groundHeight(t.x, t.z);
+    t.g.position.set(t.x, gy, t.z);
+    t.g.children.forEach((c, i) => { c.rotation.y += dt * (7 + i * 3); });
+    spawnParts(t.x, gy + rand(1, 6.5), t.z, 1,
+      { color: 0xff7a2a, speed: 4, up: 7, life: 0.6, grav: -0.3 });
+    t.hitT -= dt;
+    if (t.hitT <= 0) {
+      t.hitT = 0.3;
+      for (const z of zombies) {
+        if (z.state === "die" || z.state === "rising") continue;
+        if (Math.hypot(z.x - t.x, z.z - t.z) < 5.6 + z.r) {
+          hitZombie(z, dmg, false, Math.atan2(z.x - t.x, z.z - t.z), 1.4);
+          if (z.state !== "die") { z.burn = 3; z.burnDps = 8 + player.level; }
+        }
+      }
+    }
+  }
+}
+function clearTornadoes() {
+  for (const t of tornadoes) scene.remove(t.g);
+  tornadoes = [];
+}
+function grantUltimate(id) {
+  player.ultId = id; player.ultChosen = true;
+  const u = ultDef(id);
+  const slot = document.getElementById("ab-ult");
+  if (slot) {
+    const gl = slot.querySelector(".glyph");
+    if (gl) { gl.textContent = u.glyph; gl.style.color = u.hex; }
+    slot.style.borderColor = u.hex; slot.style.color = u.hex;
+  }
+  achievement({ hex: u.hex, glyph: u.glyph, n: u.n });
+  Sound.ability();
+}
+
 /* ─── combat ──────────────────────────────────────────────────────────────── */
 function tryAttack() {
   if (player.atk || player.smash || player.leaping || !player.alive) return;
@@ -2720,12 +3080,8 @@ function quakeImpact(x, y, z, dmg) {
 function tryDash() {
   if (player.dashCd > 0 || player.leaping || !player.alive) return;
   player.atk = false; player.smash = false;
-  let mx = 0, mz = 0;
-  if (keys["KeyW"] || keys["ArrowUp"]) mz -= 1;
-  if (keys["KeyS"] || keys["ArrowDown"]) mz += 1;
-  if (keys["KeyA"] || keys["ArrowLeft"]) mx -= 1;
-  if (keys["KeyD"] || keys["ArrowRight"]) mx += 1;
-  const ang = (mx === 0 && mz === 0) ? player.aim : Math.atan2(mx, mz);
+  const mv = moveVec();
+  const ang = mv ? Math.atan2(mv.x, mv.z) : player.aim;
   player.moveAng = ang;
   player.leapSX = player.x; player.leapSZ = player.z;
   player.leapTX = clamp(player.x + Math.sin(ang) * P.leapDist,
@@ -2880,6 +3236,8 @@ function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
   registerCombat();                            // keep the combo alive
   dmg = Math.max(1, Math.round(dmg));
   z.hp -= dmg; z.flash = 0.14;
+  if (player.lifesteal && !isChain && player.alive)
+    player.hp = Math.min(player.maxHp, player.hp + player.lifesteal);
   const kb = 9 * (knockMul || 1) / Math.max(0.4, z.r * 0.5);
   z.kx += Math.sin(ang) * kb; z.kz += Math.cos(ang) * kb;
   z.stagger = Math.max(z.stagger, 0.15);
@@ -2950,16 +3308,16 @@ function killZombie(z) {
     }
     pulseAbil("soul");
   }
-  // loot drops — rare elites & bosses always; everything else just 1.5%
-  let dropChance, minR, maxR;
-  if (z.rare) { dropChance = 1; minR = 2; maxR = 3; }
-  else if (z.type === "giant") { dropChance = 1; minR = 2; maxR = 3; }
-  else { dropChance = 0.015; minR = 0; maxR = 2; }
-  if (Math.random() < dropChance)
+  // elites & bosses drop gear + a buff; the common dead rarely drop a buff
+  if (z.rare || z.boss || z.type === "giant") {
     spawnLoot(z.x, z.z, makeItem(Math.random() < 0.5 ? "weapon" : "armor",
-      minR, maxR));
-  if (Math.random() < (z.type === "giant" || z.rare ? 1 :
-      z.type === "brute" ? 0.45 : 0.12))
+      2, 3));
+    spawnBuffDrop(z.x + rand(-3, 3), z.z + rand(-3, 3), true);
+  } else if (Math.random() < 0.022) {
+    spawnBuffDrop(z.x, z.z, false);
+  }
+  if (Math.random() < (z.boss || z.type === "giant" || z.rare ? 1 :
+      z.type === "brute" ? 0.4 : 0.1))
     spawnOrb(z.x, z.z);
 }
 
@@ -2997,6 +3355,7 @@ function gainXp(n) {
       { color: 0xffe27a, speed: 11, up: 6, life: 0.9, grav: 0.4 });
     banner("+" + PTS_PER_LEVEL + " STAT POINT  (" + player.statPoints +
       " TO SPEND)", "LEVEL " + player.level);
+    if (player.level >= 10 && !player.ultChosen) pendingUlt = true;
   }
 }
 function startWave(n) {
@@ -3009,14 +3368,17 @@ function startWave(n) {
   for (let i = 0; i < count; i++) {
     const r = Math.random();
     let t = "shambler";
-    if (n >= 3 && r < 0.34) t = "runner";
-    if (n >= 5 && r > 0.82) t = "brute";
+    if (n >= 3 && r < 0.30) t = "runner";
+    if (n >= 4 && r >= 0.72 && r < 0.84) t = "charger";
+    if (n >= 5 && r >= 0.84 && r < 0.92) t = "lunger";
+    if (n >= 6 && r >= 0.92) t = "brute";
+    if (n >= 9 && r >= 0.985) t = "giant";
     toSpawn.push(t);
   }
-  if (n % 5 === 0) { toSpawn.push("giant"); if (n >= 15) toSpawn.push("giant");}
+  if (n % 5 === 0) toSpawn.push("boss");        // every 5th wave: a BOSS
   spawnT = 0.7;
   waveState = "fight";
-  banner(n % 5 === 0 ? "Something vast claws upward" : "The dead rise",
+  banner(n % 5 === 0 ? "A monstrous thing stirs below" : "The dead rise",
     "WAVE " + n);
   Sound.wave();
 }
@@ -3065,16 +3427,20 @@ function spawnZombie(type, rare) {
   mound.scale.set(d.r * 1.5, 1, d.r * 1.5);
   mound.receiveShadow = true;
   scene.add(mound);
-  const hpScale = 1 + (wave - 1) * 0.05;
+  const hpScale = Math.pow(type === "boss" ? BOSS_HP_SCALE : HP_SCALE,
+    wave - 1);
+  const hp = d.hp * hpScale;
   zombies.push({
-    obj, mound, type, rare: !!rare, x, z, y: gy,
-    hp: d.hp * hpScale, maxHp: d.hp * hpScale,
-    speed: d.speed * (1 + wave * 0.01), r: d.r,
+    obj, mound, type, rare: !!rare, boss: type === "boss", x, z, y: gy,
+    hp: hp, maxHp: hp,
+    speed: d.speed * (1 + Math.min(wave, 26) * 0.016), r: d.r,
     state: "rising", riseT: 0, walkP: rand(0, TAU), t: rand(0, 9),
     flash: 0, atkCd: rand(0.3, 1.2), stagger: 0, kx: 0, kz: 0,
     groanT: rand(2, 9), dieT: 0,
     burn: 0, burnDps: 0, chill: 0, chillHits: 0, stun: 0, frozen: false,
     quake: 0, dodgeT: 0, dodgeAng: 0,
+    spCd: rand(2.5, 5), spState: 0, spT: 0, spAng: 0, spH: 0,
+    lsx: 0, lsz: 0, ltx: 0, ltz: 0,
   });
   zombiesAlive++;
   spawnParts(x, gy + 0.3, z, 20,
@@ -3084,11 +3450,27 @@ function spawnZombie(type, rare) {
 
 /* ─── damage to the player ────────────────────────────────────────────────── */
 function hurtPlayer(amt) {
-  if (!player.alive || player.iframes > 0) return;
-  amt = Math.round(amt);
+  if (!player.alive || player.iframes > 0 || player.ultImmune) return;
+  amt = Math.round(amt * player.dmgTakenMul);
   player.hp -= amt; player.hurt = 0.4;
   Sound.hurt(); shake(0.5);
   if (player.hp <= 0) { player.hp = 0; player.alive = false; gameOver(); }
+}
+/* the boss rears up and slams the earth — a wide, brutal shockwave */
+function bossSlam(z, dmgScale) {
+  Sound.quake(); shake(1.2);
+  const slamR = z.r + 10;
+  smashRing.setColor(0x9a2230);
+  smashRing.show(z.x, z.y + 0.2, z.z, slamR + 7, 0.56);
+  boomRing.setColor(0x5a1620);
+  boomRing.show(z.x, z.y + 0.2, z.z, slamR + 15, 0.72);
+  spawnParts(z.x, z.y + 0.5, z.z, 80,
+    { color: 0x6a1a14, speed: 23, up: 11, life: 1.0 });
+  scorch(z.x, z.z, slamR);
+  flashLight(z.x, z.y + 2.5, z.z, 0.45, 0xc0303a);
+  const pd = Math.hypot(player.x - z.x, player.z - z.z);
+  if (pd < slamR && !lineBlocked(z.x, z.z, player.x, player.z))
+    hurtPlayer(ETYPES.boss.dmg * dmgScale);
 }
 
 /* ─── input ───────────────────────────────────────────────────────────────── */
@@ -3099,12 +3481,28 @@ const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _hit = new THREE.Vector3();
 let mouseDown = false;
 const crosshairEl = document.getElementById("crosshair");
+// ─── mouse-look ─── turning the mouse swings the camera; WASD steers
+let camYaw = 0, pointerLocked = false;
+const LOOK_SENS = 0.0023;
+function moveVec() {
+  let f = 0, s = 0;
+  if (keys["KeyW"] || keys["ArrowUp"]) f += 1;
+  if (keys["KeyS"] || keys["ArrowDown"]) f -= 1;
+  if (keys["KeyD"] || keys["ArrowRight"]) s += 1;
+  if (keys["KeyA"] || keys["ArrowLeft"]) s -= 1;
+  if (f === 0 && s === 0) return null;
+  const mx = Math.sin(camYaw) * f + Math.cos(camYaw) * s;
+  const mz = Math.cos(camYaw) * f - Math.sin(camYaw) * s;
+  const L = Math.hypot(mx, mz) || 1;
+  return { x: mx / L, z: mz / L };
+}
 
 addEventListener("keydown", (e) => {
   keys[e.code] = true;
   if (state === ST.PLAYING) {
     if (e.code === "Space") { e.preventDefault(); tryDash(); }
-    if (e.code === "KeyQ" || e.code === "KeyE") trySmash();
+    if (e.code === "KeyE") trySmash();
+    if (e.code === "KeyQ") tryUltimate();
     if (e.code === "KeyC") openChar(false);
     if (e.code === "KeyI") openInv();
   } else if (state === ST.CHAR) {
@@ -3117,19 +3515,25 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 addEventListener("mousemove", (e) => {
-  ndc.x = (e.clientX / innerWidth) * 2 - 1;
-  ndc.y = -((e.clientY / innerHeight) * 2 - 1);
-  crosshairEl.style.left = e.clientX + "px";
-  crosshairEl.style.top = e.clientY + "px";
+  if (pointerLocked && state === ST.PLAYING)
+    camYaw += e.movementX * LOOK_SENS;
 });
 addEventListener("mousedown", (e) => {
   if (state === ST.PLAYING) {
+    if (!pointerLocked) {            // re-grab the mouse after a menu
+      canvas.requestPointerLock(); return;
+    }
     if (e.button === 0) { mouseDown = true; tryAttack(); }
     else if (e.button === 2) trySmash();
   }
 });
 addEventListener("mouseup", (e) => { if (e.button === 0) mouseDown = false; });
 addEventListener("contextmenu", (e) => e.preventDefault());
+document.addEventListener("pointerlockchange", () => {
+  pointerLocked = document.pointerLockElement === canvas;
+  if (state === ST.PLAYING)
+    document.body.style.cursor = pointerLocked ? "none" : "default";
+});
 
 /* ─── UI / HUD ────────────────────────────────────────────────────────────── */
 const UI = {
@@ -3158,8 +3562,14 @@ const UI = {
   overAgain: document.getElementById("over-again"),
   cdnSmash: document.getElementById("cdn-smash"),
   cdnDash: document.getElementById("cdn-dash"),
+  cdUlt: document.getElementById("cd-ult"),
+  cdnUlt: document.getElementById("cdn-ult"),
+  abUlt: document.getElementById("ab-ult"),
   combo: document.getElementById("combo"),
   comboMulEl: document.querySelector("#combo .cmul"),
+  buffs: document.getElementById("buffs"),
+  bossbar: document.getElementById("bossbar"),
+  bossFill: document.querySelector("#bossbar .bfill"),
   minimap: document.getElementById("minimap"),
 };
 const miniCtx = UI.minimap.getContext("2d");
@@ -3278,12 +3688,39 @@ function updateHUD() {
   }
   cdb(UI.cdSmash, UI.cdnSmash, player.smashCd, P.smashCd);
   cdb(UI.cdDash, UI.cdnDash, player.dashCd, P.dashCd);
+  if (player.ultActive) {
+    UI.cdUlt.style.top = "100%";
+    UI.cdnUlt.textContent = Math.ceil(player.ultT);
+    UI.abUlt.classList.add("active");
+  } else {
+    UI.abUlt.classList.remove("active");
+    cdb(UI.cdUlt, UI.cdnUlt, player.ultCd, ULT_CD);
+  }
+  // active temporary buffs
+  let bh = "";
+  for (const b of player.buffs) {
+    const k = clamp(b.t / 30, 0, 1);
+    bh += '<div class="buffchip" style="color:' + b.def.hex +
+      ';border-color:' + b.def.hex + '">' + b.def.glyph +
+      '<div class="bt"><div class="btf" style="width:' + (k * 100) +
+      '%"></div></div></div>';
+  }
+  UI.buffs.innerHTML = bh;
   if (comboMul > 1) {
     UI.combo.style.opacity = "1";
     UI.comboMulEl.textContent = "×" + comboMul;
     const sc = 1 + Math.max(0, comboFx) * 0.55;
     UI.combo.style.transform = "translateX(-50%) scale(" + sc + ")";
   } else UI.combo.style.opacity = "0";
+  // boss health bar
+  let boss = null;
+  for (const z of zombies)
+    if (z.boss && z.state !== "die") { boss = z; break; }
+  if (boss) {
+    UI.bossbar.classList.add("show");
+    UI.bossFill.style.width =
+      clamp(boss.hp / boss.maxHp, 0, 1) * 100 + "%";
+  } else UI.bossbar.classList.remove("show");
   drawMinimap();
   let h = '<span class="hot">C</span> CHARACTER';
   if (player.statPoints > 0)
@@ -3365,6 +3802,7 @@ function openChar(auto, flow) {
   charFlow = !!flow;
   charTimer = auto ? 10 : -1;
   document.body.style.cursor = "default";
+  document.exitPointerLock();
   UI.charScreen.classList.remove("hidden");
   initDoll();
   renderChar();
@@ -3455,6 +3893,7 @@ function openInv() {
   invReturn = state;
   state = ST.INVENTORY;
   document.body.style.cursor = "default";
+  document.exitPointerLock();
   renderInv();
   UI.invScreen.classList.remove("hidden");
 }
@@ -3550,6 +3989,7 @@ function pick3Abilities() {
   return out;
 }
 function onWaveCleared() {
+  if (pendingUlt) { pendingUlt = false; openUltimateChoice(); return; }
   if (wave % 5 === 0 && ABILITIES.some(a => !hasA(a.id)))
     openAbilityChoice();
   else
@@ -3558,6 +3998,7 @@ function onWaveCleared() {
 function openAbilityChoice() {
   state = ST.CHOICE;
   document.body.style.cursor = "default";
+  document.exitPointerLock();
   const opts = pick3Abilities();
   UI.choice.querySelector(".ctitle").textContent =
     "WAVE " + wave + " CLEARED";
@@ -3594,6 +4035,44 @@ function openAbilityChoice() {
     ready.textContent = "";
   }, 650);
 }
+function openUltimateChoice() {
+  state = ST.CHOICE;
+  document.body.style.cursor = "default";
+  document.exitPointerLock();
+  UI.choice.querySelector(".ctitle").textContent = "LEVEL 10 — ASCENSION";
+  UI.choice.querySelector(".csub").textContent =
+    "CHOOSE YOUR ULTIMATE — IT IS YOURS FOR THE REST OF THE RUN";
+  const ready = UI.choice.querySelector(".ready");
+  const cards = UI.choice.querySelector(".cards");
+  cards.innerHTML = "";
+  ULTIMATES.forEach(u => {
+    const card = document.createElement("div");
+    card.className = "card locked";
+    card.style.borderColor = u.hex;
+    card.innerHTML =
+      '<div class="emblem" style="background:' + u.hex + ';color:' + u.hex +
+        '">' + u.glyph + '</div>' +
+      '<div class="cn">' + u.n + '</div>' +
+      '<div class="cd2">' + u.d + '</div>' +
+      '<div class="take">CLAIM YOUR ULTIMATE</div>';
+    card.addEventListener("click", () => {
+      if (card.classList.contains("locked")) return;
+      Sound.choose();
+      UI.choice.classList.add("hidden");
+      grantUltimate(u.id);
+      openChar(true, true);
+    });
+    cards.appendChild(card);
+  });
+  UI.choice.classList.remove("hidden");
+  ready.textContent = "STEADY…";
+  if (choiceArmTimer) clearTimeout(choiceArmTimer);
+  choiceArmTimer = setTimeout(() => {
+    cards.querySelectorAll(".card").forEach(
+      el => el.classList.remove("locked"));
+    ready.textContent = "";
+  }, 650);
+}
 
 /* ─── state machine ───────────────────────────────────────────────────────── */
 const ST = { TITLE: 0, PLAYING: 1, CHOICE: 2, CHAR: 3, INVENTORY: 4,
@@ -3608,6 +4087,7 @@ function resetGame() {
   zombies = [];
   for (const o of orbs) scene.remove(o.obj); orbs = [];
   for (const l of loot) scene.remove(l.obj); loot = [];
+  clearBuffDrops();
   for (const p of projectiles) scene.remove(p.obj); projectiles = [];
   for (let i = 0; i < PCOUNT; i++) { pState[i].life = 0; pPos[i*3+1] = -999; }
   pGeo.attributes.position.needsUpdate = true;
@@ -3623,6 +4103,7 @@ function resetGame() {
   camera.position.set(CAM_OFF.x, player.y + CAM_OFF.y, CAM_OFF.z);
   kills = 0; score = 0; zombiesAlive = 0; wave = 0; waveCountPrev = 0;
   comboMul = 1; comboT = 0; comboOut = 99; comboFx = 0;
+  camYaw = 0; pendingUlt = false; clearTornadoes();
   waveState = "fight"; toSpawn = [];
   hitStop = 0; heartT = 0; camShake = 0;
   grassFlatten = null; levelFx = 0;
@@ -3638,6 +4119,7 @@ function startGame() {
   startWave(1);
   state = ST.PLAYING;
   Sound.actx(); Ambience.start(); Music.start();
+  canvas.requestPointerLock();           // grab the mouse for mouse-look
 }
 function gameOver() {
   state = ST.GAMEOVER; gameOverT = 0; shake(1.2);
@@ -3648,6 +4130,7 @@ function gameOver() {
   UI.over.classList.remove("hidden");
   crosshairEl.style.display = "none";
   document.body.style.cursor = "default";
+  document.exitPointerLock();
 }
 UI.title.addEventListener("click", () => {
   if (state === ST.TITLE) startGame();
@@ -3659,10 +4142,7 @@ UI.over.addEventListener("click", () => {
 /* ─── update: player ──────────────────────────────────────────────────────── */
 function updatePlayer(dt) {
   const e = player; e.t += dt;
-  aimPlane.constant = -e.y;
-  raycaster.setFromCamera(ndc, camera);
-  if (raycaster.ray.intersectPlane(aimPlane, _hit))
-    e.aim = Math.atan2(_hit.x - e.x, _hit.z - e.z);
+  e.aim = camYaw;                     // the hero always faces the camera
   if (e.atkSlowT > 0) e.atkSlowT -= dt;
 
   const wantSprint = (keys["ShiftLeft"] || keys["ShiftRight"]) &&
@@ -3686,22 +4166,17 @@ function updatePlayer(dt) {
     }
     if (e.leapT >= P.leapTime) { e.leaping = false; e.leapH = 0; leapLand(); }
   } else {
-    let mx = 0, mz = 0;
-    if (keys["KeyW"] || keys["ArrowUp"]) mz -= 1;
-    if (keys["KeyS"] || keys["ArrowDown"]) mz += 1;
-    if (keys["KeyA"] || keys["ArrowLeft"]) mx -= 1;
-    if (keys["KeyD"] || keys["ArrowRight"]) mx += 1;
-    e.moving = mx !== 0 || mz !== 0;
+    const mv = moveVec();
+    e.moving = !!mv;
     e.sprinting = e.moving && wantSprint && e.leapSlowT <= 0;
-    if (e.moving) {
-      const inv = 1 / Math.hypot(mx, mz);
+    if (mv) {
       const slow = 1 - ATK_SLOW_AMT * clamp(e.atkSlowT / ATK_SLOW_DUR, 0, 1);
       const recover = e.leapSlowT > 0 ? 0.3 : 1;  // staggered after a leap
       const sp = P.speed * e.moveMul * slow * recover *
         (e.sprinting ? P.sprintMul : 1);
-      e.x += mx * inv * sp * dt;
-      e.z += mz * inv * sp * dt;
-      e.moveAng = Math.atan2(mx, mz);
+      e.x += mv.x * sp * dt;
+      e.z += mv.z * sp * dt;
+      e.moveAng = Math.atan2(mv.x, mv.z);
       e.walkP += dt * (e.sprinting ? 19 : e.leapSlowT > 0 ? 6 : 13);
       e.stepT -= dt;
       if (e.stepT <= 0) {
@@ -3756,9 +4231,10 @@ function updatePlayer(dt) {
 }
 function poseSurvivor() {
   const e = player, o = e.obj, u = o.userData;
-  o.rotation.y = e.aim;
+  o.rotation.y = (e.ultActive && e.ultId === "whirlwind")
+    ? e.t * 17 : e.aim;
   // you grow into a larger, older warrior as you gain levels
-  o.scale.setScalar(1 + Math.min(e.level - 1, 24) * 0.014);
+  o.scale.setScalar((1 + Math.min(e.level - 1, 24) * 0.014) * e.sizeMul);
   const bob = (e.moving && !e.leaping) ? Math.abs(Math.sin(e.walkP)) *
     (e.sprinting ? 0.34 : 0.22) : 0;
   o.position.set(e.x, e.y + bob + e.leapH, e.z);
@@ -3803,6 +4279,8 @@ function poseSurvivor() {
     pX = lerp(idleP[0], -2.8, Math.min(1, k * 3));
     pY = lerp(idleP[1], 0, Math.min(1, k * 3));
     pZ = lerp(idleP[2], 0, Math.min(1, k * 3));
+  } else if (e.ultActive && e.ultId === "whirlwind") {
+    pX = 0.05; pY = 0; pZ = 0;            // weapon held out, sweeping wide
   }
   u.arm.rotation.set(pX, pY, pZ);
   for (const eye of u.eyes)
@@ -3884,41 +4362,119 @@ function updateZombies(dt) {
     z.kx *= 0.84; z.kz *= 0.84;
 
     const stunned = z.stun > 0;
+    const dx = player.x - z.x, dz = player.z - z.z;
+    const dist = Math.hypot(dx, dz) || 1;
+    const reach = z.r + P.r + 0.6;
+    const dmgScale = Math.pow(DMG_SCALE, wave - 1);
     if (z.stagger > 0) z.stagger -= dt;
     else if (!stunned) {
-      const dx = player.x - z.x, dz = player.z - z.z;
-      const dist = Math.hypot(dx, dz) || 1;
-      const reach = z.r + P.r + 0.6;
-      // ---- dodge AI: runners juke aside when you wind up a swing ----
-      if ((z.type === "runner" || z.rare) && z.dodgeT <= 0 &&
-          player.atk && dist < 13 && Math.random() < 0.04) {
-        z.dodgeT = 0.45;
-        z.dodgeAng = Math.atan2(dx, dz) +
-          (Math.random() < 0.5 ? 1 : -1) * 1.5;
-      }
-      if (z.dodgeT > 0) {
-        z.dodgeT -= dt;
-        const sp = z.speed * 1.5 * chillMul;
-        z.x += Math.sin(z.dodgeAng) * sp * dt;
-        z.z += Math.cos(z.dodgeAng) * sp * dt;
-        z.walkP += dt * 14;
-      } else if (dist > reach) {
-        z.state = "chase";
-        let ang = Math.atan2(dx, dz);
-        // runners weave instead of charging in a dead-straight line
-        if (z.type === "runner")
-          ang += Math.sin(z.t * 3 + z.walkP) * 0.4;
-        const sp = z.speed * chillMul;
-        z.x += Math.sin(ang) * sp * dt;
-        z.z += Math.cos(ang) * sp * dt;
-        z.walkP += dt * (4 + z.speed * 0.4) * (chillMul > 0 ? 1 : 0.001);
+      if (z.type === "charger") {
+        // winds up, then HURLS itself in a dead-straight charge
+        if (z.spState === 1) {
+          z.spT -= dt;
+          if (z.spT <= 0) { z.spState = 2; z.spT = 1.05;
+            z.spAng = Math.atan2(dx, dz); }
+        } else if (z.spState === 2) {
+          z.spT -= dt;
+          const sp = 32 * chillMul;
+          z.x += Math.sin(z.spAng) * sp * dt;
+          z.z += Math.cos(z.spAng) * sp * dt;
+          z.walkP += dt * 24; z.state = "chase";
+          if (dist < reach + 1.6) {
+            if (!lineBlocked(z.x, z.z, player.x, player.z))
+              hurtPlayer(d.dmg * 1.7 * dmgScale);
+            shake(0.5); z.spState = 3; z.spT = 0.85;
+          }
+          if (z.spT <= 0) { z.spState = 3; z.spT = 0.7; }
+        } else if (z.spState === 3) {
+          z.spT -= dt;
+          if (z.spT <= 0) { z.spState = 0; z.spCd = rand(2.8, 4.6); }
+        } else {
+          z.spCd -= dt;
+          if (z.spCd <= 0 && dist > 11 && dist < 50) {
+            z.spState = 1; z.spT = 0.6; Sound.groan();
+          } else if (dist > reach) {
+            const sp = z.speed * chillMul;
+            z.x += dx / dist * sp * dt; z.z += dz / dist * sp * dt;
+            z.walkP += dt * 6; z.state = "chase";
+          } else { z.state = "attack"; z.atkCd -= dt;
+            if (z.atkCd <= 0) { z.atkCd = 1.2;
+              if (!lineBlocked(z.x, z.z, player.x, player.z))
+                hurtPlayer(d.dmg * dmgScale); } }
+        }
+      } else if (z.type === "lunger") {
+        // hurls its whole body at you in a low, fast arc
+        if (z.spState === 2) {
+          z.spT -= dt;
+          const k = clamp(1 - z.spT / 0.5, 0, 1);
+          z.x = lerp(z.lsx, z.ltx, k); z.z = lerp(z.lsz, z.ltz, k);
+          z.spH = Math.sin(k * Math.PI) * 5.5; z.state = "chase";
+          if (z.spT <= 0) {
+            z.spH = 0; z.spState = 3; z.spT = 0.45;
+            if (Math.hypot(player.x - z.x, player.z - z.z) < reach + 2.4 &&
+                !lineBlocked(z.x, z.z, player.x, player.z))
+              hurtPlayer(d.dmg * 1.5 * dmgScale);
+          }
+        } else if (z.spState === 3) {
+          z.spT -= dt;
+          if (z.spT <= 0) { z.spState = 0; z.spCd = rand(2.2, 3.8); }
+        } else {
+          z.spCd -= dt;
+          if (z.spCd <= 0 && dist > 7 && dist < 32) {
+            z.spState = 2; z.spT = 0.5;
+            z.lsx = z.x; z.lsz = z.z; z.ltx = player.x; z.ltz = player.z;
+            Sound.groan();
+          } else if (dist > reach) {
+            const a = Math.atan2(dx, dz) + Math.sin(z.t * 3) * 0.3;
+            const sp = z.speed * chillMul;
+            z.x += Math.sin(a) * sp * dt; z.z += Math.cos(a) * sp * dt;
+            z.walkP += dt * 9; z.state = "chase";
+          } else { z.state = "attack"; z.atkCd -= dt;
+            if (z.atkCd <= 0) { z.atkCd = 0.9;
+              if (!lineBlocked(z.x, z.z, player.x, player.z))
+                hurtPlayer(d.dmg * dmgScale); } }
+        }
+      } else if (z.type === "boss") {
+        // a slow colossus — closes in, then a ground-shattering slam
+        if (dist > z.r + P.r + 2) {
+          const sp = z.speed * chillMul;
+          z.x += dx / dist * sp * dt; z.z += dz / dist * sp * dt;
+          z.walkP += dt * 4; z.state = "chase";
+        } else {
+          z.state = "attack"; z.atkCd -= dt;
+          if (z.atkCd <= 0) { z.atkCd = 2.2; bossSlam(z, dmgScale); }
+        }
       } else {
-        z.state = "attack";
-        z.atkCd -= dt;
-        if (z.atkCd <= 0) {
-          z.atkCd = z.type === "runner" ? 0.85 : 1.2;
-          if (!lineBlocked(z.x, z.z, player.x, player.z))
-            hurtPlayer(d.dmg * (1 + (wave - 1) * 0.12));
+        // ---- the common dead: dodge AI + chase + strike ----
+        if ((z.type === "runner" || z.rare) && z.dodgeT <= 0 &&
+            player.atk && dist < 13 && Math.random() < 0.04) {
+          z.dodgeT = 0.45;
+          z.dodgeAng = Math.atan2(dx, dz) +
+            (Math.random() < 0.5 ? 1 : -1) * 1.5;
+        }
+        if (z.dodgeT > 0) {
+          z.dodgeT -= dt;
+          const sp = z.speed * 1.5 * chillMul;
+          z.x += Math.sin(z.dodgeAng) * sp * dt;
+          z.z += Math.cos(z.dodgeAng) * sp * dt;
+          z.walkP += dt * 14;
+        } else if (dist > reach) {
+          z.state = "chase";
+          let ang = Math.atan2(dx, dz);
+          if (z.type === "runner")
+            ang += Math.sin(z.t * 3 + z.walkP) * 0.4;
+          const sp = z.speed * chillMul;
+          z.x += Math.sin(ang) * sp * dt;
+          z.z += Math.cos(ang) * sp * dt;
+          z.walkP += dt * (4 + z.speed * 0.4) * (chillMul > 0 ? 1 : 0.001);
+        } else {
+          z.state = "attack";
+          z.atkCd -= dt;
+          if (z.atkCd <= 0) {
+            z.atkCd = z.type === "runner" ? 0.85 : 1.2;
+            if (!lineBlocked(z.x, z.z, player.x, player.z))
+              hurtPlayer(d.dmg * dmgScale);
+          }
         }
       }
     }
@@ -3958,7 +4514,7 @@ function poseZombie(z, d, chillMul) {
   u.legs[0].rotation.x = Math.sin(z.walkP) * amp;
   u.legs[1].rotation.x = Math.sin(z.walkP + Math.PI) * amp;
   o.position.set(z.x, gy + (moving ? Math.abs(Math.sin(z.walkP)) * 0.18 : 0)
-    + z.t * 0 + Math.sin(z.t * 2) * 0.05, z.z);
+    + (z.spH || 0) + Math.sin(z.t * 2) * 0.05, z.z);
   const lunge = z.state === "attack" ? Math.max(0, Math.sin(z.t * 13)) : 0;
   u.arms[0].rotation.x = -1.0 - lunge * 0.75 + Math.sin(z.walkP) * 0.2;
   u.arms[1].rotation.x = -1.0 - lunge * 0.75 - Math.sin(z.walkP) * 0.2;
@@ -3981,15 +4537,18 @@ function poseZombie(z, d, chillMul) {
 
 /* ─── camera + ambient ────────────────────────────────────────────────────── */
 function updateCamera(dt) {
-  camera.position.x = lerp(camera.position.x, player.x + CAM_OFF.x, 0.12);
-  camera.position.y = lerp(camera.position.y, player.y + CAM_OFF.y, 0.12);
-  camera.position.z = lerp(camera.position.z, player.z + CAM_OFF.z, 0.12);
+  // the camera rides behind the hero along the mouse-look yaw
+  const tx = player.x - Math.sin(camYaw) * 30;
+  const tz = player.z - Math.cos(camYaw) * 30;
+  camera.position.x = lerp(camera.position.x, tx, 0.17);
+  camera.position.y = lerp(camera.position.y, player.y + 25, 0.17);
+  camera.position.z = lerp(camera.position.z, tz, 0.17);
   camShake = Math.max(0, camShake - dt * 3.2);
   if (camShake > 0) {
     camera.position.x += rand(-1, 1) * camShake;
     camera.position.y += rand(-1, 1) * camShake;
   }
-  camera.lookAt(player.x, player.y + 1.8, player.z);
+  camera.lookAt(player.x, player.y + 2.4, player.z);
   _camQ.copy(camera.quaternion);
 }
 function updateAmbient(dt, t) {
@@ -4040,9 +4599,12 @@ function update(dt) {
   updateZombies(dt);
   updateWaves(dt);
   updateCombo(dt);
+  updateUltimate(dt);
   updateProjectiles(dt);
   updateOrbs(dt);
   updateLoot(dt);
+  updateBuffDrops(dt);
+  updateBuffs(dt);
   updateParts(dt);
   updateFlashes(dt);
   updateGhosts(dt);
