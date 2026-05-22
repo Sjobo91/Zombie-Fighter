@@ -2035,144 +2035,257 @@ function addPark(cx, cz) {
   addLamp(cx - 2, cz - 2, true);
   addLamp(cx + 24, cz - 22, true);
 }
+/* ─── a proper grid-laid town — streets, blocks & lined buildings ─────────── */
+const _facadeCache = {};
+function facadeTex(kind, stories, wallHex) {
+  const key = kind + "_" + stories + "_" + wallHex;
+  if (_facadeCache[key]) return _facadeCache[key];
+  const cols = 3, c = document.createElement("canvas");
+  c.width = 96; c.height = 40 + stories * 42;
+  const g = c.getContext("2d");
+  g.fillStyle = "#" + wallHex.toString(16).padStart(6, "0");
+  g.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < 110; i++) {                  // concrete mottling
+    g.fillStyle = "rgba(0,0,0," + (Math.random() * 0.07).toFixed(3) + ")";
+    g.fillRect(Math.random() * 96, Math.random() * c.height,
+      rand(3, 13), rand(3, 13));
+  }
+  const lit = ["#ffe6a6", "#ffd482", "#cfe2ff", "#fff2cf"], dark = "#222a36";
+  const winW = 18, winH = 23, gx = (96 - cols * winW) / (cols + 1);
+  for (let s = 0; s < stories; s++) {
+    const wy = c.height - 40 - s * 42 - winH - 6;
+    for (let col = 0; col < cols; col++) {
+      const wx = gx + col * (winW + gx);
+      g.fillStyle = "#15120e";
+      g.fillRect(wx - 2.5, wy - 2.5, winW + 5, winH + 5);
+      g.fillStyle = Math.random() < 0.52 ? pick(lit) : dark;
+      g.fillRect(wx, wy, winW, winH);
+      g.fillStyle = "rgba(0,0,0,0.4)";
+      g.fillRect(wx + winW / 2 - 1, wy, 2, winH);
+      g.fillRect(wx, wy + winH / 2 - 1, winW, 2);
+    }
+  }
+  g.fillStyle = "#14110d";                          // ground floor band
+  g.fillRect(0, c.height - 40, 96, 40);
+  if (kind === "C") {
+    g.fillStyle = pick(lit); g.fillRect(7, c.height - 34, 82, 24);
+    g.fillStyle = pick(["#8a2820", "#286a4a", "#2a4a8a", "#c9a23a"]);
+    g.fillRect(0, c.height - 40, 96, 7);
+  } else {
+    g.fillStyle = "#0a0908"; g.fillRect(40, c.height - 35, 16, 35);
+    g.fillStyle = pick(lit);
+    g.fillRect(11, c.height - 30, 15, 17);
+    g.fillRect(70, c.height - 30, 15, 17);
+  }
+  const t = new THREE.CanvasTexture(c);
+  _facadeCache[key] = t;
+  return t;
+}
+function addTownBuilding(x, z, w, dp, stories, rot, kind) {
+  const y = groundHeight(x, z) + 0.15, g = new THREE.Group();
+  g.position.set(x, y, z); g.rotation.y = rot;
+  const storyH = 4.3, h = stories * storyH;
+  const wallHex = kind === "T" ? pick([0x6e7682, 0x5a626e, 0x76786e])
+    : kind === "C" ? pick([0x7a6a52, 0x6e5a4a, 0x80705a])
+    : pick([0x7a5a48, 0x6a5240, 0x866a52, 0x6e5a52]);
+  const tex = facadeTex(kind === "R" ? "A" : kind, stories, wallHex);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, dp),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
+  body.position.y = h / 2; body.castShadow = body.receiveShadow = true;
+  g.add(body);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(w + 0.7, 1.6, dp + 0.7),
+    mat(0x2e2a26, 1));
+  base.position.y = 0.8; base.castShadow = true; g.add(base);
+  if (kind === "R") {
+    const roof = new THREE.Mesh(
+      new THREE.ConeGeometry(Math.hypot(w, dp) * 0.58, 3.4, 4),
+      mat(pick([0x3a2620, 0x2c2220, 0x402a22]), 1));
+    roof.position.y = h + 1.5; roof.rotation.y = Math.PI / 4;
+    roof.scale.z = dp / w; roof.castShadow = true; g.add(roof);
+  } else {
+    const para = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 1.3, dp + 0.5),
+      mat(0x2a2824, 1));
+    para.position.y = h + 0.45; para.castShadow = true; g.add(para);
+    if (kind === "T") for (let i = 0; i < 2; i++) {
+      const ac = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.2, 3.6),
+        metalMat(0x8a8a92, 0.5));
+      ac.position.set(rand(-w * 0.24, w * 0.24), h + 2.2,
+        rand(-dp * 0.24, dp * 0.24));
+      ac.castShadow = true; g.add(ac);
+    }
+  }
+  scene.add(g);
+  glowSprite(x, y + h * 0.45, z, Math.max(w, dp) * 0.72, 0xffd27a, 0.13);
+  boxCollider(x, z, w, dp, rot);
+}
+function buildTown() {
+  const BC = [-112, -56, 0, 56, 112];
+  const SPAN = 140, ROADW = 13;
+  const lines = [-140, -84, -28, 28, 84, 140];
+  const layout = [
+    ["R", "A", "C", "A", "H"],
+    ["A", "T", "T", "T", "A"],
+    ["C", "T", "S", "T", "C"],
+    ["C", "P", "C", "A", "A"],
+    ["H", "A", "C", "A", "R"],
+  ];
+  const roadMat = mat(0x26221d, 1);
+  for (const sx of lines) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(ROADW, 0.4, SPAN * 2 + ROADW), roadMat);
+    m.position.set(sx, groundHeight(sx, 0) + 0.08, 0);
+    m.receiveShadow = true; scene.add(m);
+  }
+  for (const sz of lines) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(SPAN * 2 + ROADW, 0.4, ROADW), roadMat);
+    m.position.set(0, groundHeight(0, sz) + 0.08, sz);
+    m.receiveShadow = true; scene.add(m);
+  }
+  addLaneMarks(0, -SPAN, 0, SPAN);
+  addLaneMarks(-SPAN, 0, SPAN, 0);
+  const swMat = mat(0x565249, 1);
+  function townGreen(cx, cz, r) {
+    for (let i = 0; i < 7; i++) {
+      const a = rand(0, TAU), d = rand(4, r);
+      const tx = cx + Math.cos(a) * d, tz = cz + Math.sin(a) * d;
+      if (!blocked(tx, tz, 4)) addProp("tree", tx, tz);
+    }
+    for (let i = 0; i < 9; i++) {
+      const a = rand(0, TAU), d = rand(3, r);
+      addBush(cx + Math.cos(a) * d, cz + Math.sin(a) * d);
+    }
+    addBench(cx + rand(-9, 9), cz + rand(-9, 9), rand(0, TAU));
+  }
+  function townSquare(cx, cz) {
+    addFountain(cx + 13, cz + 13);
+    for (const c of [[-16, -16], [16, -16], [-16, 16], [16, 16]]) {
+      addBench(cx + c[0] * 0.7, cz + c[1] * 0.7, Math.atan2(c[0], c[1]));
+      addProp("tree", cx + c[0], cz + c[1]);
+    }
+    addProp("statue", cx - 13, cz - 12);
+    addLamp(cx - 19, cz + 19, true); addLamp(cx + 19, cz - 19, true);
+  }
+  function fillBlock(cx, cz, type) {
+    if (type === "R") {
+      for (const ox of [-10.5, 10.5]) for (const oz of [-10.5, 10.5])
+        addTownBuilding(cx + ox, cz + oz, 16, 16, irand(2, 3),
+          (oz > 0 ? Math.PI : 0) + rand(-0.05, 0.05), "R");
+      return;
+    }
+    const stories = type === "T" ? irand(5, 8)
+      : type === "A" ? irand(3, 5) : irand(2, 3);
+    addTownBuilding(cx, cz, rand(31, 37), rand(31, 37), stories,
+      irand(0, 3) * Math.PI / 2, type);
+  }
+  for (let r = 0; r < 5; r++) for (let cI = 0; cI < 5; cI++) {
+    const cx = BC[cI], cz = BC[r], type = layout[r][cI];
+    if (type === "H") { addHill(cx, cz, 25, 9); townGreen(cx, cz, 19);
+      continue; }
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(44, 0.5, 44), swMat);
+    slab.position.set(cx, groundHeight(cx, cz) + 0.12, cz);
+    slab.receiveShadow = true; scene.add(slab);
+    if (type === "S") townSquare(cx, cz);
+    else if (type === "P") addPark(cx, cz);
+    else fillBlock(cx, cz, type);
+  }
+  // ── street furniture down the avenues ──
+  for (const sx of lines) for (let z = -126; z <= 126; z += 42) {
+    addLamp(sx + (sx < 0 ? 8.5 : -8.5), z, true);
+    if (Math.random() < 0.4) addProp("hydrant", sx + (sx < 0 ? 8.5 : -8.5),
+      z + 14);
+  }
+  // ── abandoned & interactive props strewn along the streets ──
+  function onStreet() {
+    const sx = pick(lines) + rand(-5, 5), sz = rand(-SPAN, SPAN);
+    return Math.random() < 0.5 ? [sx, sz] : [sz, pick(lines) + rand(-5, 5)];
+  }
+  function scatterStreet(n, pad, fn) {
+    let placed = 0, guard = 0;
+    while (placed < n && guard < n * 14) {
+      guard++;
+      const p = onStreet();
+      if (Math.hypot(p[0], p[1]) < 16) continue;
+      if (blocked(p[0], p[1], pad)) continue;
+      fn(p[0], p[1]); placed++;
+    }
+  }
+  scatterStreet(16, 4, (x, z) => addProp("car", x, z));
+  scatterStreet(12, 2.5, (x, z) => addProp("debris", x, z));
+  scatterStreet(8, 3, (x, z) => addProp("dumpster", x, z));
+  scatterStreet(9, 3, (x, z) => addProp("sandbags", x, z));
+  scatterStreet(14, 1, (x, z) => addProp("cone", x, z));
+  scatterStreet(10, 1, (x, z) => addProp("corpse", x, z));
+  scatterStreet(14, 2, (x, z) => addBarrel(x, z, Math.random() < 0.6));
+  scatterStreet(16, 2, (x, z) => addCrate(x, z));
+}
 /* ─── lay out the whole world ─────────────────────────────────────────────── */
 (function buildWorld() {
   addPerimeter();
-  // central plaza — the player begins here
-  addFountain(-15, 8);
-  for (const p of [[-28, -24], [28, -24], [-28, 32], [28, 32]])
-    addLamp(p[0], p[1], true);
-  // roads out to every district
-  addRoad(0, 0, -150, -120, 9);
-  addRoad(0, 0, 130, -70, 9);
-  addRoad(0, 0, -150, 55, 9);
-  addRoad(0, 0, 55, 95, 9);
-  addRoad(0, 0, 0, 170, 10);
-  // ---- graveyard (north-west) ----
-  addMausoleum(-168, -150);
-  addMausoleum(-118, -185);
-  addMausoleum(-208, -98);
-  for (let r = 0; r < 5; r++) for (let c = 0; c < 6; c++) {
-    const gx = -212 + c * 14 + rand(-2.5, 2.5);
-    const gz = -198 + r * 14 + rand(-2.5, 2.5);
+  // ── the town itself — a grid of streets, blocks and buildings ──
+  buildTown();
+  // ---- graveyard (far north-west) ----
+  addMausoleum(-188, -178);
+  addMausoleum(-150, -212);
+  addMausoleum(-218, -150);
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) {
+    const gx = -228 + c * 15 + rand(-2.5, 2.5);
+    const gz = -228 + r * 15 + rand(-2.5, 2.5);
     if (!blocked(gx, gz, 3.5))
       addProp(Math.random() < 0.5 ? "grave" : "cross", gx, gz);
   }
-  for (let i = 0; i < 10; i++) {
-    const px = rand(-225, -68), pz = rand(-225, -56);
+  for (let i = 0; i < 8; i++) {
+    const px = rand(-232, -152), pz = rand(-232, -152);
     if (!blocked(px, pz, 5))
       addProp(pick(["statue", "cross", "rock", "wallchunk"]), px, pz);
   }
   for (let i = 0; i < 5; i++)
-    addBrazier(-150 + rand(-70, 70), -135 + rand(-70, 70));
-  for (let i = 0; i < 7; i++) {
-    const tx = rand(-225, -70), tz = rand(-225, -56);
-    if (!blocked(tx, tz, 5)) addProp("tree", tx, tz);
-  }
-  // ---- town of houses & shops (east) ----
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 5; col++) {
-      const hx = 74 + col * 30 + rand(-3, 3);
-      const hz = -150 + row * 42 + rand(-3, 3);
-      if (blocked(hx, hz, 9)) continue;
-      const rot = (row % 2) * Math.PI;
-      (Math.random() < 0.3 ? addShop : addHouse)(hx, hz, rot);
-    }
-    for (let col = 0; col < 4; col++)
-      addLamp(89 + col * 30, -150 + row * 42 + 21, false);
-  }
-  // ---- church district (west) ----
-  addChurch(-158, 44, true);
-  addChurch(-205, 92, false);
-  addFenceRun(-128, 10, -128, 120);
-  addFenceRun(-128, 120, -228, 120);
+    addBrazier(-190 + rand(-40, 40), -190 + rand(-40, 40));
+  // ---- church (far west) ----
+  addChurch(-196, 20, true);
+  addChurch(-214, 104, false);
+  addFenceRun(-162, -18, -162, 132);
   for (let i = 0; i < 12; i++) {
-    const gx = -220 + rand(0, 80), gz = 14 + rand(0, 100);
+    const gx = -234 + rand(0, 58), gz = -10 + rand(0, 130);
     if (!blocked(gx, gz, 4))
       addProp(Math.random() < 0.5 ? "grave" : "cross", gx, gz);
   }
-  addLamp(-128, 40, true); addLamp(-128, 90, false);
-  // ---- market / mall (south of centre) ----
-  addMarketHall(52, 96);
-  for (let i = 0; i < 11; i++) {
-    const sx2 = 6 + (i % 6) * 16, sz2 = 116 + ((i / 6) | 0) * 12;
-    if (!blocked(sx2, sz2, 3)) addStall(sx2, sz2, rand(0, TAU));
-  }
-  addLamp(20, 112, true); addLamp(86, 112, true);
+  addLamp(-162, 24, true); addLamp(-162, 96, false);
+  // ---- the shopping mall (far east) ----
+  addMall(196, 36);
+  for (const c of [[172, 8], [172, 64], [222, 12], [222, 60]])
+    addLamp(c[0], c[1], true);
   // ---- seaside (south edge) ----
   for (let i = 0; i < 7; i++) {
-    const hx = -190 + i * 56 + rand(-8, 8);
-    addBeachHut(hx, rand(132, 158), rand(0, TAU));
+    const hx = -188 + i * 56 + rand(-8, 8);
+    addBeachHut(hx, rand(160, 184), rand(0, TAU));
   }
-  addPier(-78, 168); addPier(96, 168);
+  addPier(-86, 196); addPier(92, 196);
   for (let i = 0; i < 6; i++)
-    addLamp(-200 + i * 80, rand(150, 168), false);
-  // ---- greenery between the districts ----
-  for (let i = 0; i < 26; i++) {
-    const tx = rand(-ARENA + 20, ARENA - 20), tz = rand(-ARENA + 20, 110);
-    if (Math.hypot(tx, tz) > 26 && !blocked(tx, tz, 5)) addProp("tree", tx, tz);
+    addLamp(-200 + i * 80, rand(172, 188), false);
+  // a stone bridge arches over the gap to the shore
+  addBridge(-40, 150, 40, 150, 7, 9);
+  // ---- the railway (north edge) ----
+  addRails(-130, -224, 224, -224);
+  addTrainStation(70, -210);
+  addTrainCar(44, -224, Math.PI / 2, true);
+  for (let i = 0; i < 3; i++)
+    addTrainCar(64 + i * 19, -224, Math.PI / 2, false);
+  // ── roads linking the town out to the districts ──
+  addRoad(0, -140, 0, -214, 11);   addLaneMarks(0, -140, 0, -214);
+  addRoad(140, 0, 192, 24, 10);    addLaneMarks(140, 0, 192, 24);
+  addRoad(-140, 24, -182, 30, 10);
+  addRoad(0, 140, 0, 188, 10);     addLaneMarks(0, 140, 0, 188);
+  // ── greenery filling the gaps between town and districts ──
+  for (let i = 0; i < 34; i++) {
+    const tx = rand(-ARENA + 18, ARENA - 18), tz = rand(-ARENA + 18, 190);
+    if (Math.hypot(tx, tz) > 152 && !blocked(tx, tz, 5))
+      addProp("tree", tx, tz);
   }
   for (let i = 0; i < 30; i++) {
-    const bx = rand(-ARENA + 20, ARENA - 20), bz = rand(-ARENA + 20, 150);
-    if (Math.hypot(bx, bz) > 22 && !blocked(bx, bz, 3)) addBush(bx, bz);
+    const bx = rand(-ARENA + 18, ARENA - 18), bz = rand(-ARENA + 18, 192);
+    if (Math.hypot(bx, bz) > 150 && !blocked(bx, bz, 3)) addBush(bx, bz);
   }
-  // ════ a real, lived-in open world — streets, mall, park, railway ════
-  addLaneMarks(0, 0, -150, -120);
-  addLaneMarks(0, 0, 130, -70);
-  addLaneMarks(0, 0, -150, 55);
-  addLaneMarks(0, 0, 0, 170);
-  // the shopping mall (east) reached by its own road
-  addRoad(64, 18, 150, 58, 9);
-  addLaneMarks(64, 18, 150, 58);
-  addMall(170, 64);
-  for (const c of [[150, 40], [150, 90], [194, 44], [194, 84]])
-    addLamp(c[0], c[1], true);
-  // a residential & shopping street (east)
-  addRoad(118, 6, 214, 6, 8);
-  addLaneMarks(118, 6, 214, 6);
-  for (let i = 0; i < 6; i++) {
-    const hx = 128 + i * 17, hz = (i % 2) ? 24 : -12;
-    if (!blocked(hx, hz, 10))
-      (i % 3 === 0 ? addShop : addHouse)(hx, hz, hz > 0 ? Math.PI : 0);
-  }
-  // the city park (west of centre) — pond, gazebo, playground, benches
-  addPark(-64, 74);
-  // the railway — a track across the north, a station and a stopped train
-  addRails(-120, -206, 222, -206);
-  addTrainStation(66, -191);
-  addTrainCar(40, -206, Math.PI / 2, true);
-  for (let i = 0; i < 3; i++)
-    addTrainCar(60 + i * 19, -206, Math.PI / 2, false);
-  for (let i = 0; i < 5; i++) addLamp(18 + i * 24, -198, i % 2 === 0);
-  // wrecked cars parked along the new streets
-  for (const c of [[96, 8], [150, 26], [44, -148], [-44, -88], [188, 8]])
-    if (!blocked(c[0], c[1], 4)) addProp("car", c[0], c[1]);
-  // ════ verticality — hills to climb and an arched bridge to cross ════
-  addHill(15, -85, 30, 11);
-  addHill(-35, 35, 24, 8);
-  addBridge(-52, -52, 52, -52, 7, 9);
-  // ---- the lived-in centre: wreckage, barricades, hazards, the dead ----
-  function scatterDetail(n, rMin, rMax, pad, fn) {
-    let placed = 0, guard = 0;
-    while (placed < n && guard < n * 16) {
-      guard++;
-      const a = rand(0, TAU), d = rand(rMin, rMax);
-      const px = Math.cos(a) * d, pz = Math.sin(a) * d;
-      if (Math.abs(px) > ARENA - 16 || pz > ZSHORE - 12) continue;
-      if (Math.hypot(px, pz) < 12) continue;          // keep the spawn clear
-      if (blocked(px, pz, pad)) continue;
-      fn(px, pz); placed++;
-    }
-  }
-  scatterDetail(9, 16, 108, 4, (x, z) => addProp("car", x, z));
-  scatterDetail(24, 14, 135, 2.5, (x, z) => addProp("debris", x, z));
-  scatterDetail(11, 15, 100, 3, (x, z) => addProp("sandbags", x, z));
-  scatterDetail(6, 20, 115, 3, (x, z) => addProp("dumpster", x, z));
-  scatterDetail(18, 12, 125, 1, (x, z) => addProp("corpse", x, z));
-  scatterDetail(22, 12, 115, 1, (x, z) => addProp("cone", x, z));
-  scatterDetail(8, 16, 115, 1, (x, z) => addProp("hydrant", x, z));
-  scatterDetail(17, 14, 118, 2, (x, z) => addBarrel(x, z, Math.random() < 0.6));
-  scatterDetail(20, 13, 118, 2, (x, z) => addCrate(x, z));
 })();
 
 /* ─── dynamic ambient life — crows, distant fires & wind-blown litter ─────── */
