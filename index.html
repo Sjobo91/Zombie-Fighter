@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 <link rel="icon" href="data:," />
 <title>Mortimer's Horde</title>
 <style>
@@ -299,6 +299,52 @@
     border-radius: 7px; color: #d8a05a; font-size: 11px; font-weight: 800;
     letter-spacing: 1px; cursor: pointer; }
   .junkbtn:hover { background: #d05f5f; color: #160a0a; }
+
+  /* ---- mobile touch controls ---- */
+  #game { touch-action: none; }
+  body.touch #hint, body.touch #abilities { display: none; }
+  #touchUI { position: fixed; inset: 0; z-index: 30; display: none;
+    pointer-events: none; }
+  #touchUI.on { display: block; }
+  #touchUI > * { pointer-events: auto; touch-action: none; }
+  #joyBase { position: absolute; left: 40px; bottom: 140px; width: 152px;
+    height: 152px; border-radius: 50%; background: rgba(10,10,16,.3);
+    border: 2px solid rgba(200,180,140,.32); }
+  #joyKnob { position: absolute; left: 50%; top: 50%; width: 68px;
+    height: 68px; margin: -34px 0 0 -34px; border-radius: 50%;
+    background: rgba(212,192,150,.46);
+    border: 2px solid rgba(232,212,172,.66);
+    box-shadow: 0 0 16px rgba(0,0,0,.55); }
+  .tbtn { position: absolute; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; font-weight: 800;
+    font-size: 14px; letter-spacing: 1px; color: #f0e6d2;
+    background: rgba(16,13,20,.6); border: 2px solid rgba(150,140,120,.42);
+    text-shadow: 0 2px 4px #000; }
+  .tbtn.held { background: rgba(150,58,38,.74); border-color: #e8a050; }
+  .tbtn .tcd { position: absolute; inset: -2px; border-radius: 50%;
+    background: rgba(4,4,8,.66); display: none; align-items: center;
+    justify-content: center; font-size: 25px; color: #fff; }
+  .tbtn.cooling .tcd { display: flex; }
+  .tbtn.cooling { color: #6b6660; }
+  #tb-atk { right: 40px; bottom: 72px; width: 120px; height: 120px;
+    font-size: 16px; }
+  #tb-smash { right: 172px; bottom: 100px; width: 92px; height: 92px; }
+  #tb-leap { right: 70px; bottom: 204px; width: 86px; height: 86px; }
+  #tb-ult { right: 186px; bottom: 212px; width: 82px; height: 82px;
+    color: #ffd23a; }
+  #tb-sprint { right: 282px; bottom: 80px; width: 76px; height: 76px;
+    font-size: 13px; }
+  #tb-char, #tb-inv { width: 58px; height: 58px; font-size: 12px; }
+  #tb-char { left: 20px; top: 84px; }
+  #tb-inv { left: 20px; top: 150px; }
+  #qualityBtn { position: absolute; left: 20px; top: 216px; width: 58px;
+    height: 44px; border-radius: 10px; font-size: 12px; }
+  #rotateMsg { position: fixed; inset: 0; z-index: 95; display: none;
+    background: #07060c; color: #d8cdbb; text-align: center;
+    align-items: center; justify-content: center; font-size: 21px;
+    font-weight: 700; letter-spacing: 1px; padding: 30px;
+    box-sizing: border-box; }
+  #rotateMsg.show { display: flex; }
 </style>
 </head>
 <body>
@@ -476,9 +522,13 @@ function segDist(ax, az, bx, bz, px, pz) {
 }
 
 /* ─── renderer / scene / camera ───────────────────────────────────────────── */
+// touch devices get a virtual gamepad + a lighter render path
+const isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+let lowQ = isTouch;
+if (isTouch) document.body.classList.add("touch");
 const canvas = document.getElementById("game");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowQ });
+renderer.setPixelRatio(lowQ ? 1 : Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
@@ -506,7 +556,7 @@ scene.add(new THREE.HemisphereLight(0x3a4060, 0x0a0808, 0.6));
 const moon = new THREE.DirectionalLight(0x9fb0d8, 0.66);
 moon.position.set(62, 100, 44);
 moon.castShadow = true;
-moon.shadow.mapSize.set(2048, 2048);
+moon.shadow.mapSize.set(lowQ ? 1024 : 2048, lowQ ? 1024 : 2048);
 moon.shadow.camera.near = 1; moon.shadow.camera.far = 340;
 // the shadow frustum is small and follows the player for crisp shadows
 moon.shadow.camera.left = -90; moon.shadow.camera.right = 90;
@@ -3739,13 +3789,17 @@ const crosshairEl = document.getElementById("crosshair");
 // ─── mouse-look ─── move the mouse to look freely; WASD steers
 let camYaw = 0, camPitch = 0.69, pointerLocked = false;
 const LOOK_SENS = 0.0023;
+const touchMove = { f: 0, s: 0 };   // fed by the on-screen joystick
 function moveVec() {
   let f = 0, s = 0;
   if (keys["KeyW"] || keys["ArrowUp"]) f += 1;
   if (keys["KeyS"] || keys["ArrowDown"]) f -= 1;
   if (keys["KeyD"] || keys["ArrowRight"]) s += 1;
   if (keys["KeyA"] || keys["ArrowLeft"]) s -= 1;
-  if (f === 0 && s === 0) return null;
+  f += touchMove.f; s += touchMove.s;          // on-screen joystick
+  if (f > 1) f = 1; else if (f < -1) f = -1;
+  if (s > 1) s = 1; else if (s < -1) s = -1;
+  if (Math.abs(f) < 0.001 && Math.abs(s) < 0.001) return null;
   // forward = facing; D strafes screen-right, A screen-left
   const mx = Math.sin(camYaw) * f - Math.cos(camYaw) * s;
   const mz = Math.cos(camYaw) * f + Math.sin(camYaw) * s;
@@ -3793,6 +3847,164 @@ document.addEventListener("pointerlockchange", () => {
   if (state === ST.PLAYING)
     document.body.style.cursor = pointerLocked ? "none" : "default";
 });
+
+/* ─── mobile: virtual joystick, touch-look & on-screen action buttons ─────── */
+let touchAttackHeld = false;
+function tcdBtn(id, cd) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const c = el.querySelector(".tcd");
+  if (cd > 0.05) {
+    el.classList.add("cooling");
+    if (c) c.textContent = Math.ceil(cd);
+  } else el.classList.remove("cooling");
+}
+function syncTouchUI() {
+  if (!isTouch) return;
+  const ui = document.getElementById("touchUI");
+  if (ui) ui.classList.toggle("on", state === ST.PLAYING);
+  const rot = document.getElementById("rotateMsg");
+  if (rot) rot.classList.toggle("show", innerHeight > innerWidth + 40);
+  if (state !== ST.PLAYING || !player) return;
+  tcdBtn("tb-smash", player.smashCd);
+  tcdBtn("tb-leap", player.dashCd);
+  tcdBtn("tb-ult", player.ultActive ? 0 : player.ultCd);
+}
+function setupTouchControls() {
+  if (!isTouch) return;
+  const ui = document.createElement("div");
+  ui.id = "touchUI";
+  ui.innerHTML =
+    '<div id="joyBase"><div id="joyKnob"></div></div>' +
+    '<div class="tbtn" id="tb-atk">ATTACK</div>' +
+    '<div class="tbtn" id="tb-smash">SMASH<div class="tcd"></div></div>' +
+    '<div class="tbtn" id="tb-leap">LEAP<div class="tcd"></div></div>' +
+    '<div class="tbtn" id="tb-ult">ULT<div class="tcd"></div></div>' +
+    '<div class="tbtn" id="tb-sprint">RUN</div>' +
+    '<div class="tbtn" id="tb-char">HERO</div>' +
+    '<div class="tbtn" id="tb-inv">BAG</div>' +
+    '<div class="tbtn" id="qualityBtn">HD</div>';
+  document.body.appendChild(ui);
+  const rot = document.createElement("div");
+  rot.id = "rotateMsg";
+  rot.textContent = "Rotate your device to landscape to play";
+  document.body.appendChild(rot);
+
+  // ---- left thumb: movement joystick ----
+  const base = document.getElementById("joyBase");
+  const knob = document.getElementById("joyKnob");
+  let joyId = null, joyCx = 0, joyCy = 0;
+  const JOY_R = 58;
+  function joyMove(t) {
+    let dx = t.clientX - joyCx, dy = t.clientY - joyCy;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d > JOY_R) { dx = dx / d * JOY_R; dy = dy / d * JOY_R; }
+    knob.style.left = (50 + dx / JOY_R * 46) + "%";
+    knob.style.top = (50 + dy / JOY_R * 46) + "%";
+    touchMove.s = dx / JOY_R;
+    touchMove.f = -dy / JOY_R;
+  }
+  base.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    if (joyId !== null) return;
+    const t = e.changedTouches[0];
+    joyId = t.identifier;
+    const r = base.getBoundingClientRect();
+    joyCx = r.left + r.width / 2; joyCy = r.top + r.height / 2;
+    joyMove(t);
+  }, { passive: false });
+  base.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches)
+      if (t.identifier === joyId) joyMove(t);
+  }, { passive: false });
+  function joyEnd(e) {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyId) {
+        joyId = null; touchMove.f = 0; touchMove.s = 0;
+        knob.style.left = "50%"; knob.style.top = "50%";
+      }
+    }
+  }
+  base.addEventListener("touchend", joyEnd);
+  base.addEventListener("touchcancel", joyEnd);
+
+  // ---- right thumb: drag empty space to look around ----
+  let lookId = null, lookX = 0, lookY = 0;
+  window.addEventListener("touchstart", (e) => {
+    if (state !== ST.PLAYING || lookId !== null) return;
+    for (const t of e.changedTouches) {
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      if (el && el.closest("#touchUI")) continue;
+      lookId = t.identifier; lookX = t.clientX; lookY = t.clientY;
+      break;
+    }
+  }, { passive: true });
+  window.addEventListener("touchmove", (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== lookId) continue;
+      camYaw -= (t.clientX - lookX) * 0.006;
+      camPitch = clamp(camPitch + (t.clientY - lookY) * 0.0045, 0.34, 1.2);
+      lookX = t.clientX; lookY = t.clientY;
+    }
+  }, { passive: true });
+  function lookEnd(e) {
+    for (const t of e.changedTouches)
+      if (t.identifier === lookId) lookId = null;
+  }
+  window.addEventListener("touchend", lookEnd);
+  window.addEventListener("touchcancel", lookEnd);
+
+  // ---- on-screen action buttons ----
+  function btn(id, onDown, onUp) {
+    const el = document.getElementById(id);
+    el.addEventListener("touchstart", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      el.classList.add("held");
+      if (onDown) onDown();
+    }, { passive: false });
+    function up(e) {
+      e.stopPropagation();
+      el.classList.remove("held");
+      if (onUp) onUp();
+    }
+    el.addEventListener("touchend", up);
+    el.addEventListener("touchcancel", up);
+  }
+  btn("tb-atk",
+    () => { touchAttackHeld = true; if (state === ST.PLAYING) tryAttack(); },
+    () => { touchAttackHeld = false; });
+  btn("tb-smash", () => { if (state === ST.PLAYING) trySmash(); });
+  btn("tb-leap", () => { if (state === ST.PLAYING) tryDash(); });
+  btn("tb-ult", () => { if (state === ST.PLAYING) tryUltimate(); });
+  btn("tb-sprint",
+    () => { keys["ShiftLeft"] = true; },
+    () => { keys["ShiftLeft"] = false; });
+  btn("tb-char", () => {
+    if (state === ST.PLAYING) openChar(false);
+    else if (state === ST.CHAR) closeChar();
+  });
+  btn("tb-inv", () => {
+    if (state === ST.PLAYING) openInv();
+    else if (state === ST.INVENTORY) closeInv();
+  });
+  btn("qualityBtn", () => {
+    lowQ = !lowQ;
+    renderer.setPixelRatio(lowQ ? 1 : Math.min(devicePixelRatio, 2));
+    document.getElementById("qualityBtn").textContent = lowQ ? "LOW" : "HD";
+  });
+  document.getElementById("qualityBtn").textContent = lowQ ? "LOW" : "HD";
+
+  // ---- tap the dark backdrop to leave the character / gear screens ----
+  for (const oid of ["charScreen", "invScreen"]) {
+    const ov = document.getElementById(oid);
+    if (ov) ov.addEventListener("click", (e) => {
+      if (e.target !== ov) return;
+      if (oid === "charScreen") closeChar(); else closeInv();
+    });
+  }
+}
+setupTouchControls();
 
 /* ─── UI / HUD ────────────────────────────────────────────────────────────── */
 const UI = {
@@ -4379,7 +4591,7 @@ function startGame() {
   startWave(1);
   state = ST.PLAYING;
   Sound.actx(); Ambience.start(); Music.start();
-  canvas.requestPointerLock();           // grab the mouse for mouse-look
+  if (!isTouch) canvas.requestPointerLock();   // grab the mouse for mouse-look
 }
 function gameOver() {
   state = ST.GAMEOVER; gameOverT = 0; shake(1.2);
@@ -4483,7 +4695,8 @@ function updatePlayer(dt) {
   if (e.iframes > 0) e.iframes -= dt;
   if (e.hurt > 0) e.hurt -= dt;
 
-  if (mouseDown && !e.atk && !e.smash && !e.leaping) tryAttack();
+  if ((mouseDown || touchAttackHeld) && !e.atk && !e.smash && !e.leaping)
+    tryAttack();
   if (e.atk) {
     e.atkT += dt;
     if (e.atkT >= e.atkW && e.atkT < e.atkW + e.atkS) meleeStrike();
@@ -5127,6 +5340,7 @@ function loop(ts) {
     camera.lookAt(0, 3, 0);
     updateAmbient(dt, clock);
   }
+  syncTouchUI();
   renderer.render(scene, camera);
 }
 
