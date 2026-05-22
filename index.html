@@ -550,11 +550,11 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.34;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x07060c);
-scene.fog = new THREE.FogExp2(0x080611, 0.0124);
+scene.background = new THREE.Color(0x2b3040);
+scene.fog = new THREE.FogExp2(0x39404e, 0.0078);
 
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 600);
 // pulled lower + further back so you clearly see your hero's legs and stride
@@ -569,8 +569,8 @@ function resize() {
 addEventListener("resize", resize); resize();
 
 /* ─── lights ──────────────────────────────────────────────────────────────── */
-scene.add(new THREE.HemisphereLight(0x3a4060, 0x0a0808, 0.6));
-const moon = new THREE.DirectionalLight(0x9fb0d8, 0.66);
+scene.add(new THREE.HemisphereLight(0x9badc8, 0x4c4738, 1.2));
+const moon = new THREE.DirectionalLight(0xd8d9e2, 1.05);
 moon.position.set(62, 100, 44);
 moon.castShadow = true;
 moon.shadow.mapSize.set(lowQ ? 1024 : 2048, lowQ ? 1024 : 2048);
@@ -1609,6 +1609,249 @@ function addPerimeter() {
     }
   }
 }
+/* ─── open-world build pieces — streets, mall, park, railway ──────────────── */
+function addLaneMarks(x1, z1, x2, z2) {
+  const len = Math.hypot(x2 - x1, z2 - z1);
+  const ang = Math.atan2(x2 - x1, z2 - z1);
+  const n = Math.max(1, Math.round(len / 8));
+  const mMat = mat(0xc8c2a2, 0.85);
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    const px = lerp(x1, x2, t), pz = lerp(z1, z2, t);
+    const dash = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 3.2), mMat);
+    dash.position.set(px, groundHeight(px, pz) + 0.37, pz);
+    dash.rotation.y = ang; scene.add(dash);
+  }
+}
+function addBench(x, z, rot) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z); g.rotation.y = rot;
+  const wood = mat(pick([0x5a4226, 0x4a3a26, 0x614a2e]), 0.95);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(4, 0.3, 1.2), wood);
+  seat.position.y = 1.1; seat.castShadow = true;
+  const back = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 0.3), wood);
+  back.position.set(0, 1.7, -0.45);
+  g.add(seat, back);
+  for (const sx of [-1.7, 1.7]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.1, 1.1),
+      mat(0x2a2a2e, 1));
+    leg.position.set(sx, 0.55, 0); g.add(leg);
+  }
+  scene.add(g);
+  colliders.push({ x, z, r: 1.7 });
+}
+function addGazebo(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const wood = mat(0x6a5436, 0.95);
+  const floor = new THREE.Mesh(
+    new THREE.CylinderGeometry(5.5, 5.8, 0.6, 8), wood);
+  floor.position.y = 0.3; floor.receiveShadow = true; g.add(floor);
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * TAU;
+    const post = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.22, 4.2, 6), wood);
+    post.position.set(Math.cos(a) * 4.6, 2.4, Math.sin(a) * 4.6);
+    post.castShadow = true; g.add(post);
+  }
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(6.4, 3.2, 8),
+    mat(0x6a2820, 1));
+  roof.position.y = 6.2; roof.castShadow = true; g.add(roof);
+  scene.add(g);
+  colliders.push({ x, z, r: 4.8 });
+}
+function addPlayground(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const frame = metalMat(0xc24a3a, 0.4);
+  for (const sx of [-3, 3]) for (const dz of [-1.4, 1.4]) {
+    const leg = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.16, 5, 6), frame);
+    leg.position.set(sx, 2.4, dz); leg.rotation.x = dz > 0 ? 0.3 : -0.3;
+    g.add(leg);
+  }
+  const bar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.18, 7, 8), frame);
+  bar.rotation.z = Math.PI / 2; bar.position.y = 4.6; g.add(bar);
+  for (const sx of [-1.3, 1.3]) {
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(1, 0.2, 0.5),
+      mat(0x2a2a30, 1));
+    seat.position.set(sx, 1.2, 0); g.add(seat);
+    for (const cz of [-0.2, 0.2]) {
+      const chain = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 3.4, 4),
+        metalMat(0x888890, 0.6));
+      chain.position.set(sx, 2.9, cz); g.add(chain);
+    }
+  }
+  const slide = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.25, 6),
+    metalMat(0x3a7ad0, 0.4));
+  slide.position.set(6.2, 1.9, 0); slide.rotation.x = 0.52; g.add(slide);
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3.6, 2.4),
+    mat(0x4a8a5a, 0.9));
+  tower.position.set(8.6, 1.8, 0); tower.castShadow = true; g.add(tower);
+  scene.add(g);
+  colliders.push({ x, z, r: 4 });
+  colliders.push({ x: x + 8.6, z: z, r: 1.7 });
+}
+function addRails(x1, z1, x2, z2) {
+  const len = Math.hypot(x2 - x1, z2 - z1);
+  const ang = Math.atan2(x2 - x1, z2 - z1);
+  const railMat = metalMat(0x6a6a72, 0.7), tieMat = mat(0x2e2418, 1);
+  const segs = Math.round(len / 3.4);
+  for (let i = 0; i < segs; i++) {
+    const t = (i + 0.5) / segs;
+    const px = lerp(x1, x2, t), pz = lerp(z1, z2, t);
+    const tie = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.4, 1.2), tieMat);
+    tie.position.set(px, groundHeight(px, pz) + 0.2, pz);
+    tie.rotation.y = ang; tie.receiveShadow = true; scene.add(tie);
+  }
+  const mx = (x1 + x2) / 2, mz = (z1 + z2) / 2;
+  const gy = groundHeight(mx, mz) + 0.5;
+  for (const off of [-1.7, 1.7]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, len), railMat);
+    rail.position.set(mx + Math.cos(ang) * off, gy,
+      mz - Math.sin(ang) * off);
+    rail.rotation.y = ang; scene.add(rail);
+  }
+}
+function addTrainCar(x, z, rot, loco) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z); g.rotation.y = rot;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(7.4, 6, 17),
+    metalMat(loco ? 0x7a2c26 : pick([0x2a4a6a, 0x3a5a44, 0x6a6258]), 0.45));
+  body.position.y = 4.2; body.castShadow = body.receiveShadow = true;
+  g.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(7.6, 1, 17),
+    metalMat(0x2a2a30, 0.4));
+  roof.position.y = 7.7; g.add(roof);
+  const winMat = new THREE.MeshStandardMaterial({ color: 0x2a3a44,
+    emissive: 0xffe7b0, emissiveIntensity: 0.7 });
+  for (let i = -2; i <= 2; i++) for (const sx of [-1, 1]) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2, 2.6), winMat);
+    win.position.set(sx * 3.75, 4.8, i * 3.1); g.add(win);
+  }
+  for (const wz of [-5.5, 5.5]) for (const sx of [-1, 1]) {
+    const wheel = new THREE.Mesh(
+      new THREE.CylinderGeometry(1, 1, 0.6, 12), mat(0x18181c, 1));
+    wheel.rotation.z = Math.PI / 2; wheel.position.set(sx * 3, 1, wz);
+    g.add(wheel);
+  }
+  if (loco) {
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(7.4, 2.6, 3.2),
+      metalMat(0x521e1c, 0.45));
+    cab.position.set(0, 8.6, 5); g.add(cab);
+    const stack = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.9, 1.1, 2.4, 10), mat(0x1a1a1e, 1));
+    stack.position.set(0, 9.2, -5.5); g.add(stack);
+  }
+  scene.add(g);
+  const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
+  colliders.push({ x, z, hw: (c * 7.4 + s * 17) / 2 + 0.5,
+    hd: (s * 7.4 + c * 17) / 2 + 0.5, box: true, wall: true });
+}
+function addTrainStation(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const plat = new THREE.Mesh(new THREE.BoxGeometry(46, 1.6, 12),
+    mat(0x6a655c, 1));
+  plat.position.y = 0.8; plat.receiveShadow = true; g.add(plat);
+  const hall = new THREE.Mesh(new THREE.BoxGeometry(16, 8, 9),
+    mat(0x7a4636, 0.9));
+  hall.position.set(-12, 5.6, 1); hall.castShadow = hall.receiveShadow = true;
+  g.add(hall);
+  const hroof = new THREE.Mesh(new THREE.BoxGeometry(17.5, 1, 10.5),
+    mat(0x3a2620, 1));
+  hroof.position.set(-12, 10.1, 1); hroof.castShadow = true; g.add(hroof);
+  for (let i = -2; i <= 2; i++) {
+    const post = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.22, 5, 6), metalMat(0x3a3a40, 0.4));
+    post.position.set(8 + i * 8, 4.1, -3.6); g.add(post);
+  }
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(40, 0.6, 6),
+    mat(0x4a3a2a, 1));
+  canopy.position.set(10, 6.9, -2); canopy.castShadow = true; g.add(canopy);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(8, 2, 0.5),
+    new THREE.MeshStandardMaterial({ color: 0x1a2a3a, emissive: 0x6fd0ff,
+      emissiveIntensity: 0.95 }));
+  sign.position.set(-12, 8.6, 5.7); g.add(sign);
+  scene.add(g);
+  glowSprite(x - 12, y + 8, z + 1, 14, 0xffe7b0, 0.3);
+  colliders.push({ x: x - 12, z: z + 1, hw: 8.4, hd: 4.9, box: true,
+    wall: true });
+}
+function addMall(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const w = 48, dp = 32, wh = 11;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
+    mat(0x847e72, 0.9));
+  body.position.y = wh / 2; body.castShadow = body.receiveShadow = true;
+  g.add(body);
+  const upper = new THREE.Mesh(new THREE.BoxGeometry(w * 0.66, 6, dp * 0.7),
+    mat(0x6e6860, 0.9));
+  upper.position.set(0, wh + 3, 0); upper.castShadow = true; g.add(upper);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 1.6, 1.2, dp + 1.6),
+    mat(0x3a3630, 1));
+  trim.position.y = wh + 0.6; g.add(trim);
+  const glass = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 0.9, wh * 0.55, 0.4),
+    new THREE.MeshStandardMaterial({ color: 0x9fd0e0, emissive: 0xffe7b0,
+      emissiveIntensity: 0.85, metalness: 0.4, roughness: 0.2 }));
+  glass.position.set(0, wh * 0.36, dp / 2 + 0.12); g.add(glass);
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(15, 0.7, 6.5),
+    mat(0x4a4640, 1));
+  canopy.position.set(0, wh * 0.62, dp / 2 + 3.1); canopy.castShadow = true;
+  g.add(canopy);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(22, 4.2, 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a30, emissive: 0xff7a3a,
+      emissiveIntensity: 1.15 }));
+  sign.position.set(0, wh + 4.2, dp / 2 + 0.5); g.add(sign);
+  for (let i = -1; i <= 1; i++) {
+    const ac = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 4),
+      metalMat(0x8a8a92, 0.5));
+    ac.position.set(i * 13, wh + 7, -dp * 0.18); ac.castShadow = true;
+    g.add(ac);
+  }
+  scene.add(g);
+  glowSprite(x, y + wh * 0.5, z + dp / 2, 24, 0xffe7b0, 0.32);
+  glowSprite(x, y + wh + 4.2, z + dp / 2, 15, 0xff7a3a, 0.42);
+  colliders.push({ x, z, hw: w / 2 + 0.6, hd: dp / 2 + 0.6, box: true,
+    wall: true });
+}
+function addPark(cx, cz) {
+  const gy = groundHeight(cx, cz);
+  const pathMat = mat(0x6e6248, 1);
+  for (const s of [[-30, 0, 30, 0], [0, -26, 0, 26]]) {
+    const len = Math.hypot(s[2] - s[0], s[3] - s[1]);
+    const p = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.4, len), pathMat);
+    p.position.set(cx + (s[0] + s[2]) / 2, gy + 0.12,
+      cz + (s[1] + s[3]) / 2);
+    p.rotation.y = Math.atan2(s[2] - s[0], s[3] - s[1]);
+    p.receiveShadow = true; scene.add(p);
+  }
+  const px = cx + 16, pz = cz - 12, pr = 11;
+  const rim = new THREE.Mesh(
+    new THREE.CylinderGeometry(pr + 1, pr + 1.4, 1, 22), mat(0x6a6660, 1));
+  rim.position.set(px, gy + 0.3, pz); rim.receiveShadow = true;
+  scene.add(rim);
+  const water = new THREE.Mesh(
+    new THREE.CylinderGeometry(pr, pr, 0.5, 22),
+    new THREE.MeshStandardMaterial({ color: 0x3a6e88, roughness: 0.15,
+      metalness: 0.6, emissive: 0x12303e, emissiveIntensity: 0.55 }));
+  water.position.set(px, gy + 0.7, pz); scene.add(water);
+  colliders.push({ x: px, z: pz, r: pr + 1 });
+  addGazebo(cx - 18, cz + 14);
+  for (const b of [[-8, -14], [12, 17], [-22, -4], [9, -21]])
+    addBench(cx + b[0], cz + b[1], rand(0, TAU));
+  for (let i = 0; i < 11; i++) {
+    const tx = cx + rand(-33, 33), tz = cz + rand(-30, 30);
+    if (!blocked(tx, tz, 5)) addProp("tree", tx, tz);
+  }
+  for (let i = 0; i < 16; i++) {
+    const bx = cx + rand(-35, 35), bz = cz + rand(-32, 32);
+    if (!blocked(bx, bz, 2.5)) addBush(bx, bz);
+  }
+  addPlayground(cx + 21, cz + 17);
+  addLamp(cx - 2, cz - 2, true);
+  addLamp(cx + 24, cz - 22, true);
+}
 /* ─── lay out the whole world ─────────────────────────────────────────────── */
 (function buildWorld() {
   addPerimeter();
@@ -1690,6 +1933,37 @@ function addPerimeter() {
     const bx = rand(-ARENA + 20, ARENA - 20), bz = rand(-ARENA + 20, 150);
     if (Math.hypot(bx, bz) > 22 && !blocked(bx, bz, 3)) addBush(bx, bz);
   }
+  // ════ a real, lived-in open world — streets, mall, park, railway ════
+  addLaneMarks(0, 0, -150, -120);
+  addLaneMarks(0, 0, 130, -70);
+  addLaneMarks(0, 0, -150, 55);
+  addLaneMarks(0, 0, 0, 170);
+  // the shopping mall (east) reached by its own road
+  addRoad(64, 18, 150, 58, 9);
+  addLaneMarks(64, 18, 150, 58);
+  addMall(170, 64);
+  for (const c of [[150, 40], [150, 90], [194, 44], [194, 84]])
+    addLamp(c[0], c[1], true);
+  // a residential & shopping street (east)
+  addRoad(118, 6, 214, 6, 8);
+  addLaneMarks(118, 6, 214, 6);
+  for (let i = 0; i < 6; i++) {
+    const hx = 128 + i * 17, hz = (i % 2) ? 24 : -12;
+    if (!blocked(hx, hz, 10))
+      (i % 3 === 0 ? addShop : addHouse)(hx, hz, hz > 0 ? Math.PI : 0);
+  }
+  // the city park (west of centre) — pond, gazebo, playground, benches
+  addPark(-64, 74);
+  // the railway — a track across the north, a station and a stopped train
+  addRails(-120, -206, 222, -206);
+  addTrainStation(66, -191);
+  addTrainCar(40, -206, Math.PI / 2, true);
+  for (let i = 0; i < 3; i++)
+    addTrainCar(60 + i * 19, -206, Math.PI / 2, false);
+  for (let i = 0; i < 5; i++) addLamp(18 + i * 24, -198, i % 2 === 0);
+  // wrecked cars parked along the new streets
+  for (const c of [[96, 8], [150, 26], [44, -148], [-44, -88], [188, 8]])
+    if (!blocked(c[0], c[1], 4)) addProp("car", c[0], c[1]);
   // ---- the lived-in centre: wreckage, barricades, hazards, the dead ----
   function scatterDetail(n, rMin, rMax, pad, fn) {
     let placed = 0, guard = 0;
@@ -1773,6 +2047,71 @@ const litter = [];
       spin: rand(-7, 7), tum: rand(0, TAU) });
   }
 })();
+/* ─── townsfolk — survivors who wander the streets and flee danger ────────── */
+const people = [];
+(function buildPeople() {
+  const legGeo = new THREE.BoxGeometry(0.46, 1.7, 0.5);
+  legGeo.translate(0, -0.85, 0);
+  const armGeo = new THREE.BoxGeometry(0.38, 1.5, 0.42);
+  armGeo.translate(0, -0.75, 0);
+  const torsoGeo = new THREE.BoxGeometry(1.2, 1.7, 0.72);
+  const headGeo = new THREE.SphereGeometry(0.5, 8, 7);
+  const skin = [0xc8a078, 0x9a6a44, 0xd8b088, 0x7a5436];
+  const cloth = [0x6a4a5a, 0x3a5a6a, 0x5a6a3a, 0x8a4a3a, 0x4a4a6a,
+    0x7a6a4a, 0x9a9aa2];
+  for (let i = 0; i < 16; i++) {
+    const g = new THREE.Group();
+    const cl = mat(pick(cloth), 0.9), sk = mat(pick(skin), 0.8);
+    const legc = mat(pick([0x2e2a30, 0x3a3038, 0x26323a]), 0.95);
+    const torso = new THREE.Mesh(torsoGeo, cl);
+    torso.position.y = 2.35; torso.castShadow = true;
+    const head = new THREE.Mesh(headGeo, sk);
+    head.position.y = 3.55; head.castShadow = true;
+    const legL = new THREE.Mesh(legGeo, legc);
+    const legR = new THREE.Mesh(legGeo, legc);
+    legL.position.set(-0.3, 1.7, 0); legR.position.set(0.3, 1.7, 0);
+    const armL = new THREE.Mesh(armGeo, cl);
+    const armR = new THREE.Mesh(armGeo, cl);
+    armL.position.set(-0.78, 3.05, 0); armR.position.set(0.78, 3.05, 0);
+    g.add(torso, head, legL, legR, armL, armR);
+    scene.add(g);
+    people.push({ g, legs: [legL, legR], arms: [armL, armR],
+      x: rand(-130, 130), z: rand(-150, 60),
+      ang: rand(0, TAU), spd: rand(3.4, 5.6), walkP: rand(0, TAU),
+      retarget: rand(0, 3), flee: 0 });
+  }
+})();
+function updatePeople(dt) {
+  for (const p of people) {
+    let danger = false;
+    if (player) {
+      const dx = p.x - player.x, dz = p.z - player.z;
+      if (dx * dx + dz * dz < 900) {            // the player scares them off
+        p.ang = Math.atan2(dx, dz); p.flee = 1.6; danger = true;
+      }
+    }
+    p.flee = Math.max(0, p.flee - dt);
+    if (!danger) {
+      p.retarget -= dt;
+      if (p.retarget <= 0 && p.flee <= 0) {
+        p.ang += rand(-1.5, 1.5); p.retarget = rand(1.6, 5);
+      }
+    }
+    const sp = p.spd * (p.flee > 0 ? 2.5 : 1);
+    const nx = p.x + Math.sin(p.ang) * sp * dt;
+    const nz = p.z + Math.cos(p.ang) * sp * dt;
+    if (Math.abs(nx) > ARENA - 20 || nz < -ARENA + 20 || nz > ZSHORE - 16
+        || blocked(nx, nz, 1.4)) {
+      p.ang += 2.4; p.retarget = rand(0.6, 1.6);
+    } else { p.x = nx; p.z = nz; }
+    p.walkP += dt * sp * 1.7;
+    p.g.position.set(p.x, groundHeight(p.x, p.z), p.z);
+    p.g.rotation.y = p.ang;
+    const sw = Math.sin(p.walkP) * (p.flee > 0 ? 1.0 : 0.6);
+    p.legs[0].rotation.x = sw; p.legs[1].rotation.x = -sw;
+    p.arms[0].rotation.x = -sw; p.arms[1].rotation.x = sw;
+  }
+}
 
 /* ─── weapon factory — six distinct archetypes + God's Hammer ─────────────── */
 const WEAPON_KINDS = ["greatsword", "cleaver", "axe", "saber", "halberd",
@@ -3447,26 +3786,27 @@ function leapLand() {
     + e.level * 4;
   const dmg = smashBase * 5;                     // 5x a right-click SMASH
   Sound.quake(); Sound.boom(); Sound.smash();
-  shake(2.9); hitStop = 0.18; screenFlash("#f4c850", 0.74);
+  shake(2.4); hitStop = 0.1; screenFlash("#f4c850", 0.6);
   smashRing.setColor(0xf4c850); smashRing.show(e.x, e.y + 0.2, e.z, 44, 0.74);
-  boomRing.setColor(0xc89030); boomRing.show(e.x, e.y + 0.2, e.z, 66, 1.05);
-  windRing.setColor(0x8a6c44); windRing.show(e.x, e.y + 0.26, e.z, 33, 0.62);
-  spawnParts(e.x, e.y + 0.5, e.z, 220,
-    { color: 0x6a5236, speed: 42, up: 24, life: 1.7 });
-  spawnParts(e.x, e.y + 0.5, e.z, 92,
-    { color: 0x2c2418, speed: 24, up: 36, life: 2.3 });
-  spawnGibs(e.x, e.y + 0.5, e.z, 24, 0x4a3a26);
-  for (let i = 0; i < 18; i++)
-    flare(e.x + rand(-9, 9), e.y + rand(0, 9), e.z + rand(-9, 9),
-      rand(7, 17), pick([0xf4c850, 0xffe7a0, 0xffffff]), rand(0.5, 1.0));
-  flashLight(e.x, e.y + 3.4, e.z, 0.95, 0xf4c850);
+  boomRing.setColor(0xc89030); boomRing.show(e.x, e.y + 0.2, e.z, 60, 0.95);
+  windRing.setColor(0x8a6c44); windRing.show(e.x, e.y + 0.26, e.z, 32, 0.6);
+  // a single, lighter VFX burst — keeps the impact without the frame hitch
+  spawnParts(e.x, e.y + 0.5, e.z, 80,
+    { color: 0x6a5236, speed: 38, up: 22, life: 1.3 });
+  spawnParts(e.x, e.y + 0.5, e.z, 34,
+    { color: 0x2c2418, speed: 22, up: 30, life: 1.7 });
+  spawnGibs(e.x, e.y + 0.5, e.z, 9, 0x4a3a26);
+  for (let i = 0; i < 7; i++)
+    flare(e.x + rand(-7, 7), e.y + rand(0, 6), e.z + rand(-7, 7),
+      rand(5, 9), pick([0xf4c850, 0xffe7a0, 0xffffff]), rand(0.4, 0.7));
+  flashLight(e.x, e.y + 3.4, e.z, 0.6, 0xf4c850);
   grassFlatten = { x: e.x, z: e.z, r: 42, t: 0 };
-  // the quake tears a path — scorch & dust along the whole arc
-  for (let i = 0; i <= 6; i++) {
-    const sx = lerp(e.leapSX, e.x, i / 6), sz = lerp(e.leapSZ, e.z, i / 6);
-    scorch(sx, sz, rand(11, 19));
-    if (i % 2 === 0) spawnParts(sx, groundHeight(sx, sz) + 0.5, sz, 26,
-      { color: 0x6a5236, speed: 20, up: 12, life: 1.1 });
+  // the quake tears a path — scorch & dust along the arc
+  for (let i = 0; i <= 4; i++) {
+    const sx = lerp(e.leapSX, e.x, i / 4), sz = lerp(e.leapSZ, e.z, i / 4);
+    scorch(sx, sz, rand(10, 16));
+    if (i % 2 === 0) spawnParts(sx, groundHeight(sx, sz) + 0.5, sz, 12,
+      { color: 0x6a5236, speed: 18, up: 10, life: 0.9 });
   }
   // damage — a wide crater at the landing, plus the corridor it carved
   for (const z of zombies) {
@@ -5209,6 +5549,7 @@ function resetInteractables() {
 }
 /* ─── dynamic ambient — crows wheel, fires smoke, litter blows past ───────── */
 function updateDynAmbient(dt, t) {
+  updatePeople(dt);
   for (const c of crows) {
     c.ang += c.sp * dt;
     c.flap += dt * c.flapSp;
@@ -5286,7 +5627,7 @@ function updateAmbient(dt, t) {
     moon.target.position.set(player.x, 0, player.z);
     moon.position.set(player.x + 62, 100, player.z + 44);
   }
-  moon.intensity = 0.66 + (lightFlashT > 0 ? lightFlashT * 8 : 0);
+  moon.intensity = 1.05 + (lightFlashT > 0 ? lightFlashT * 8 : 0);
   updateSea(t);
   updateRain(dt);
   updateBats(dt, t);
