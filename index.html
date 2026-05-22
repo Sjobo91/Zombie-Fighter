@@ -538,14 +538,15 @@ const P = {
   baseHp: 140, baseDmg: 14, baseCrit: 0.13, baseCritMul: 2.1,
   atkRange: 8.4, atkArc: 1.2,
   atkWindup: 0.11, atkStrike: 0.13, atkRecover: 0.18,
-  smashRange: 12, smashDmg: 44, smashCd: 2.6,
+  smashRange: 12, smashDmg: 44, smashCd: 3.6,
   dashCd: 30, leapTime: 0.56, leapDist: 32, leapIframes: 0.82,
   staminaMax: 100, staminaDrain: 30, staminaRegen: 22,
 };
 const ATK_SLOW_DUR = 0.5, ATK_SLOW_AMT = 0.26;
 const RISE_DUR = 1.45;
-// stat-point yields — simple, readable metrics
-const PWR_DMG = 3, DEF_HP = 18, SPD_PCT = 0.04;
+// stat-point yields — deliberately small. Your real power comes from the
+// weapons and ability powers you find; placed points are gentle increments.
+const PWR_DMG = 1, DEF_HP = 6, SPD_PCT = 0.018;
 const PTS_PER_LEVEL = 1, PTS_START = 0;   // exactly 1 point per level
 // rage — charges on every hit, spent to fuel the ultimate
 const RAGE_BASE = 100;          // base maximum rage
@@ -4195,11 +4196,10 @@ function spawnZombie(type, rare) {
   mound.scale.set(d.r * 1.5 * sizeMul, 1, d.r * 1.5 * sizeMul);
   mound.receiveShadow = true;
   scene.add(mound);
-  // gentle, mostly-linear scaling — the horde stays a hack-and-slash romp,
-  // never an unkillable sponge wall
+  // wave 1 stays a 2-hit warm-up; the horde toughens noticeably each wave
   const hpScale = type === "boss"
     ? 1 + Math.max(0, wave - 5) * 0.3
-    : 1 + (wave - 1) * 0.16;
+    : 1 + (wave - 1) * 0.20;
   const hp = d.hp * hpScale;
   zombies.push({
     obj, mound, type, rare: !!rare, boss: type === "boss", x, z, y: gy,
@@ -4212,6 +4212,7 @@ function spawnZombie(type, rare) {
     quake: 0, dodgeT: 0, dodgeAng: 0,
     spCd: rand(2.5, 5), spState: 0, spT: 0, spAng: 0, spH: 0,
     lsx: 0, lsz: 0, ltx: 0, ltz: 0,
+    steerBias: Math.random() < 0.5 ? 1 : -1,
   });
   zombiesAlive++;
   spawnParts(x, gy + 0.3, z, 20,
@@ -5435,6 +5436,24 @@ function poseSurvivor() {
   } else swingArc.visible = false;
 }
 
+/* ─── obstacle avoidance — the dead steer around walls, cars and rubble
+   instead of grinding into them. Probe ahead; if blocked, fan out to either
+   side and take the nearest clear heading toward the player. ──────────────── */
+function pathClear(z, ang, probe) {
+  return !blocked(z.x + Math.sin(ang) * probe,
+                  z.z + Math.cos(ang) * probe, z.r * 0.7);
+}
+function steerAround(z, ang) {
+  const probe = z.r + 4.5;
+  if (pathClear(z, ang, probe)) return ang;     // open road — go straight
+  const b = z.steerBias;                        // each corpse favours one side
+  for (let s = 1; s <= 6; s++) {
+    const off = s * 0.42;
+    if (pathClear(z, ang + b * off, probe)) return ang + b * off;
+    if (pathClear(z, ang - b * off, probe)) return ang - b * off;
+  }
+  return ang;                                   // boxed in — colliders resolve
+}
 /* ─── update: horde (tougher, with dodge AI + status effects) ─────────────── */
 function updateZombies(dt) {
   for (let i = zombies.length - 1; i >= 0; i--) {
@@ -5528,7 +5547,8 @@ function updateZombies(dt) {
             z.spState = 1; z.spT = 0.6; Sound.groan();
           } else if (dist > reach) {
             const sp = z.speed * chillMul;
-            z.x += dx / dist * sp * dt; z.z += dz / dist * sp * dt;
+            const ca = steerAround(z, Math.atan2(dx, dz));
+            z.x += Math.sin(ca) * sp * dt; z.z += Math.cos(ca) * sp * dt;
             z.walkP += dt * 6; z.state = "chase";
           } else { z.state = "attack"; z.atkCd -= dt;
             if (z.atkCd <= 0) { z.atkCd = 1.2;
@@ -5558,7 +5578,8 @@ function updateZombies(dt) {
             z.lsx = z.x; z.lsz = z.z; z.ltx = player.x; z.ltz = player.z;
             Sound.groan();
           } else if (dist > reach) {
-            const a = Math.atan2(dx, dz) + Math.sin(z.t * 3) * 0.3;
+            const a = steerAround(z,
+              Math.atan2(dx, dz) + Math.sin(z.t * 3) * 0.3);
             const sp = z.speed * chillMul;
             z.x += Math.sin(a) * sp * dt; z.z += Math.cos(a) * sp * dt;
             z.walkP += dt * 9; z.state = "chase";
@@ -5571,7 +5592,8 @@ function updateZombies(dt) {
         // a slow colossus — closes in, then a ground-shattering slam
         if (dist > z.r + P.r + 2) {
           const sp = z.speed * chillMul;
-          z.x += dx / dist * sp * dt; z.z += dz / dist * sp * dt;
+          const ba = steerAround(z, Math.atan2(dx, dz));
+          z.x += Math.sin(ba) * sp * dt; z.z += Math.cos(ba) * sp * dt;
           z.walkP += dt * 4; z.state = "chase";
         } else {
           z.state = "attack"; z.atkCd -= dt;
@@ -5596,6 +5618,7 @@ function updateZombies(dt) {
           let ang = Math.atan2(dx, dz);
           if (z.type === "runner")
             ang += Math.sin(z.t * 3 + z.walkP) * 0.4;
+          ang = steerAround(z, ang);
           const sp = z.speed * chillMul;
           z.x += Math.sin(ang) * sp * dt;
           z.z += Math.cos(ang) * sp * dt;
