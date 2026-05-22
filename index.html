@@ -910,6 +910,11 @@ function glowSprite(x, y, z, size, color, opacity) {
 /* ─── colliders ───────────────────────────────────────────────────────────────
    Solid map features push the player and the horde — clear, blocking geometry */
 const colliders = [];
+const interactables = [];   // explosive barrels & breakable crates — destructible
+function removeCollider(c) {
+  const i = colliders.indexOf(c);
+  if (i >= 0) colliders.splice(i, 1);
+}
 function resolveColliders(p, R) {
   for (const c of colliders) {
     if (c.box) {
@@ -1056,6 +1061,117 @@ function addProp(kind, x, z) {
     const ang = g.rotation.y;
     colliders.push({ x, z, hw: Math.abs(Math.cos(ang)) * w / 2 + 0.8,
       hd: Math.abs(Math.sin(ang)) * w / 2 + 0.8, box: true, wall: true });
+  } else if (kind === "car") {
+    const rusted = mat(pick([0x6e3a2a, 0x4a4e44, 0x70582e, 0x39434e,
+      0x5a3640]), 0.78);
+    const dark = mat(0x100d0b, 1);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(5.0, 1.5, 2.5), rusted);
+    body.position.y = 1.25;
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.7, 1.4, 2.2), rusted);
+    cabin.position.set(-0.3, 2.5, 0); cabin.rotation.z = rand(-0.1, 0.1);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 2.4), rusted);
+    hood.position.set(2.0, 1.7, 0); hood.rotation.z = rand(-0.18, 0.05);
+    body.castShadow = body.receiveShadow = cabin.castShadow = true;
+    g.add(body, cabin, hood);
+    for (const wx of [-1.6, 1.6]) for (const wz of [-1.15, 1.15]) {
+      const wheel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.72, 0.72, 0.5, 10), dark);
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.set(wx, 0.66, wz); g.add(wheel);
+    }
+    g.rotation.z = rand(-0.04, 0.04);
+    colliders.push({ x, z, r: 2.65 });
+  } else if (kind === "debris") {
+    const tone = () => mat(pick([0x4a4640, 0x3c3a36, 0x55524a, 0x423e3a]), 1);
+    for (let i = 0; i < 8; i++) {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(
+        rand(0.6, 1.9), rand(0.4, 1.3), rand(0.6, 1.7)), tone());
+      c.position.set(rand(-1.8, 1.8), rand(0.15, 1.0), rand(-1.8, 1.8));
+      c.rotation.set(rand(0, TAU), rand(0, TAU), rand(0, TAU));
+      c.castShadow = c.receiveShadow = true; g.add(c);
+    }
+    for (let i = 0; i < 3; i++) {
+      const r = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.07, 0.07, rand(1.6, 3.2), 5),
+        mat(0x2a1d14, 0.8));
+      r.position.set(rand(-1.2, 1.2), rand(0.6, 1.4), rand(-1.2, 1.2));
+      r.rotation.set(rand(-1.2, 1.2), rand(0, TAU), rand(-1.2, 1.2));
+      g.add(r);
+    }
+    colliders.push({ x, z, r: 1.6 });
+  } else if (kind === "sandbags") {
+    for (let row = 0; row < 3; row++) {
+      const n = 4 - row;
+      const bagMat = mat(pick([0x6a5e3e, 0x5e5236, 0x70634a]), 1);
+      for (let i = 0; i < n; i++) {
+        const bag = new THREE.Mesh(new THREE.SphereGeometry(0.66, 7, 5),
+          bagMat);
+        bag.scale.set(1.35, 0.72, 0.92);
+        bag.position.set((i - (n - 1) / 2) * 1.2,
+          0.42 + row * 0.66, rand(-0.12, 0.12));
+        bag.castShadow = bag.receiveShadow = true; g.add(bag);
+      }
+    }
+    colliders.push({ x, z, r: 2.3 });
+  } else if (kind === "dumpster") {
+    const shell = metalMat(pick([0x2e4a36, 0x5a3a26, 0x39414a]), 0.35);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.3, 2.4), shell);
+    body.position.y = 1.25; body.castShadow = body.receiveShadow = true;
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.34, 2.5),
+      metalMat(0x18181a, 0.4));
+    lid.position.set(0, 2.5, rand(-0.3, 0.1));
+    lid.rotation.x = rand(-0.32, 0.04); lid.castShadow = true;
+    g.add(body, lid);
+    colliders.push({ x, z, r: 2.5 });
+  } else if (kind === "cone") {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.52, 1.35, 12),
+      new THREE.MeshStandardMaterial({ color: 0xc8521e, roughness: 0.7,
+        emissive: 0x401204, emissiveIntensity: 0.5 }));
+    cone.position.y = 0.67;
+    const stripe = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.4, 0.5, 0.3, 12), mat(0xd8d2c4, 0.7));
+    stripe.position.y = 0.6;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.14, 1.1),
+      mat(0x18181a, 1));
+    base.position.y = 0.07;
+    cone.castShadow = true; g.add(base, cone, stripe);
+    g.rotation.z = Math.random() < 0.3 ? rand(0.7, 1.5) : rand(-0.12, 0.12);
+  } else if (kind === "hydrant") {
+    const red = mat(0x8e2a1c, 0.55);
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.5, 1.5, 10), red);
+    body.position.y = 0.75;
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.44, 10, 7), red);
+    dome.position.y = 1.5;
+    for (const sx of [-1, 1]) {
+      const nub = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 0.55, 8), red);
+      nub.rotation.z = Math.PI / 2; nub.position.set(sx * 0.52, 0.95, 0);
+      g.add(nub);
+    }
+    body.castShadow = dome.castShadow = true; g.add(body, dome);
+    colliders.push({ x, z, r: 0.55 });
+  } else if (kind === "corpse") {
+    const pale = mat(pick([0x3c4838, 0x4c4434, 0x403c38]), 1);
+    const torso = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.42, 2.0, 7), pale);
+    torso.rotation.z = Math.PI / 2; torso.position.y = 0.5;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.44, 9, 7), pale);
+    head.position.set(1.35, 0.46, rand(-0.2, 0.2));
+    torso.castShadow = true; g.add(torso, head);
+    for (let i = 0; i < 3; i++) {
+      const limb = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.19, 0.16, rand(1.1, 1.5), 6), pale);
+      limb.position.set(rand(-0.7, 0.6), 0.26, rand(-0.9, 0.9));
+      limb.rotation.set(rand(-0.6, 0.6), rand(0, TAU),
+        Math.PI / 2 + rand(-0.7, 0.7));
+      g.add(limb);
+    }
+    const stain = new THREE.Mesh(
+      new THREE.CircleGeometry(rand(1.6, 2.3), 12),
+      new THREE.MeshBasicMaterial({ color: 0x2a0c08, transparent: true,
+        opacity: 0.5 }));
+    stain.rotation.x = -Math.PI / 2; stain.position.y = 0.06; g.add(stain);
   }
   scene.add(g);
 }
@@ -1142,6 +1258,57 @@ function boxCollider(x, z, w, dp, rot) {
   const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
   colliders.push({ x, z, hw: (c * w + s * dp) / 2 + 0.3,
     hd: (s * w + c * dp) / 2 + 0.3, box: true, wall: true });
+}
+/* ─── interactive props — explosive barrels & breakable crates ────────────── */
+function addBarrel(x, z, explosive) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z); g.rotation.y = rand(0, TAU);
+  const shell = metalMat(explosive ? 0xb53a1c
+    : pick([0x3a4a3a, 0x4a3a2a, 0x39414a]), 0.35);
+  const drum = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.85, 0.85, 2.3, 14), shell);
+  drum.position.y = 1.15; drum.castShadow = drum.receiveShadow = true;
+  g.add(drum);
+  for (const ry of [0.55, 1.75]) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.86, 0.1, 6, 16), metalMat(0x18181a, 0.4));
+    ring.rotation.x = Math.PI / 2; ring.position.y = ry; g.add(ring);
+  }
+  let glow = null;
+  if (explosive) {
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.87, 0.87, 0.22, 14),
+      new THREE.MeshStandardMaterial({ color: 0xffb024,
+        emissive: 0xff5a10, emissiveIntensity: 0.7 }));
+    cap.position.y = 2.32; g.add(cap);
+    glow = glowSprite(x, y + 1.5, z, 4.2, 0xff5a1e, 0);
+  }
+  scene.add(g);
+  const collider = { x, z, r: 0.95 };
+  colliders.push(collider);
+  interactables.push({ type: "barrel", explosive: !!explosive, x, z,
+    r: 1.5, hp: explosive ? 1 : 46, obj: g, glow, collider,
+    fuse: 0, dead: false });
+}
+function addCrate(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z); g.rotation.y = rand(0, TAU);
+  const s = rand(1.7, 2.3);
+  const wood = mat(pick([0x6a4e2e, 0x5a4226, 0x6e5436]), 0.95);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), wood);
+  box.position.y = s / 2; box.castShadow = box.receiveShadow = true;
+  g.add(box);
+  const frame = mat(0x3a2a18, 1);
+  for (const e of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const post = new THREE.Mesh(
+      new THREE.BoxGeometry(0.17, s + 0.08, 0.17), frame);
+    post.position.set(e[0] * s / 2, s / 2, e[1] * s / 2); g.add(post);
+  }
+  scene.add(g);
+  const collider = { x, z, r: s * 0.58 };
+  colliders.push(collider);
+  interactables.push({ type: "crate", x, z, r: s * 0.72, hp: 24,
+    obj: g, glow: null, collider, fuse: 0, dead: false, s });
 }
 function addHouse(x, z, rot) {
   const y = groundHeight(x, z), g = new THREE.Group();
@@ -1455,6 +1622,88 @@ function addPerimeter() {
   for (let i = 0; i < 30; i++) {
     const bx = rand(-ARENA + 20, ARENA - 20), bz = rand(-ARENA + 20, 150);
     if (Math.hypot(bx, bz) > 22 && !blocked(bx, bz, 3)) addBush(bx, bz);
+  }
+  // ---- the lived-in centre: wreckage, barricades, hazards, the dead ----
+  function scatterDetail(n, rMin, rMax, pad, fn) {
+    let placed = 0, guard = 0;
+    while (placed < n && guard < n * 16) {
+      guard++;
+      const a = rand(0, TAU), d = rand(rMin, rMax);
+      const px = Math.cos(a) * d, pz = Math.sin(a) * d;
+      if (Math.abs(px) > ARENA - 16 || pz > ZSHORE - 12) continue;
+      if (Math.hypot(px, pz) < 12) continue;          // keep the spawn clear
+      if (blocked(px, pz, pad)) continue;
+      fn(px, pz); placed++;
+    }
+  }
+  scatterDetail(9, 16, 108, 4, (x, z) => addProp("car", x, z));
+  scatterDetail(24, 14, 135, 2.5, (x, z) => addProp("debris", x, z));
+  scatterDetail(11, 15, 100, 3, (x, z) => addProp("sandbags", x, z));
+  scatterDetail(6, 20, 115, 3, (x, z) => addProp("dumpster", x, z));
+  scatterDetail(18, 12, 125, 1, (x, z) => addProp("corpse", x, z));
+  scatterDetail(22, 12, 115, 1, (x, z) => addProp("cone", x, z));
+  scatterDetail(8, 16, 115, 1, (x, z) => addProp("hydrant", x, z));
+  scatterDetail(17, 14, 118, 2, (x, z) => addBarrel(x, z, Math.random() < 0.6));
+  scatterDetail(20, 13, 118, 2, (x, z) => addCrate(x, z));
+})();
+
+/* ─── dynamic ambient life — crows, distant fires & wind-blown litter ─────── */
+const crows = [];
+(function buildCrows() {
+  for (let i = 0; i < 8; i++) {
+    const g = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.9, 5),
+      new THREE.MeshBasicMaterial({ color: 0x09090b }));
+    torso.rotation.x = -Math.PI / 2;
+    g.add(torso);
+    const wings = [];
+    for (const sx of [-1, 1]) {
+      const pivot = new THREE.Group();
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.95),
+        new THREE.MeshBasicMaterial({ color: 0x0c0c0e,
+          side: THREE.DoubleSide }));
+      w.position.x = sx * 1.25;
+      pivot.add(w); g.add(pivot); wings.push(pivot);
+    }
+    scene.add(g);
+    crows.push({ g, wings,
+      cx: rand(-110, 110), cz: rand(-120, 70),
+      rad: rand(26, 64), ang: rand(0, TAU), h: rand(22, 40),
+      sp: rand(0.16, 0.32) * (Math.random() < 0.5 ? -1 : 1),
+      flap: rand(0, TAU), flapSp: rand(7, 11) });
+  }
+})();
+const smokeCols = [];
+(function buildDistantFires() {
+  const spots = [[-198, -196], [182, -176], [-206, 118], [198, 86],
+    [44, -208]];
+  for (const sp of spots) {
+    const x = sp[0], z = sp[1], y = groundHeight(x, z);
+    addProp("debris", x, z);
+    const light = new THREE.PointLight(0xff6a24, 3.2, 78, 2);
+    light.position.set(x, y + 4, z); scene.add(light);
+    glowSprite(x, y + 3, z, 17, 0xff6a24, 0.5);
+    const puffs = [];
+    for (let i = 0; i < 6; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+        color: 0x14110f, transparent: true, opacity: 0.3,
+        depthWrite: false }));
+      scene.add(s);
+      puffs.push({ s, off: i * 8 });
+    }
+    smokeCols.push({ x, z, base: y + 4, puffs, light, phase: rand(0, TAU) });
+  }
+})();
+const litter = [];
+(function buildLitter() {
+  for (let i = 0; i < 18; i++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.9),
+      new THREE.MeshBasicMaterial({
+        color: pick([0xb8ad94, 0x8a8270, 0x6a5a3a, 0x9a8a64]),
+        side: THREE.DoubleSide, transparent: true, opacity: 0.92 }));
+    scene.add(m);
+    litter.push({ m, x: rand(-150, 150), z: rand(-150, 110),
+      spin: rand(-7, 7), tum: rand(0, TAU) });
   }
 })();
 
@@ -3040,6 +3289,7 @@ function smashStrike() {
         rand(4, 9), 0xfff2dc, 0.42);
     flashLight(fx, e.y + 1.6, fz, 0.42, 0xffe7c0);
     grassFlatten = { x: e.x, z: e.z, r: range, t: 0 };
+    damageInteractables(e.x, e.z, range, dmg);
   }
 }
 /* GOD'S HAMMER impact — flattens what's close, quakes the wider horde */
@@ -3074,6 +3324,7 @@ function quakeImpact(x, y, z, dmg) {
       zb.stagger = Math.max(zb.stagger, 0.3);
     }
   }
+  damageInteractables(x, z, 15, dmg);
   pulseAbil("hammer");
 }
 /* SPACE — the LEAP SMASH: arc into the air, crash down, tear an earthquake */
@@ -3158,6 +3409,7 @@ function leapLand() {
       z.stagger = Math.max(z.stagger, 0.4);
     }
   }
+  damageInteractables(e.x, e.z, 20, dmg);
   banner("STAGGERED — RECOVER YOUR FOOTING", "EARTHSHATTER");
 }
 function meleeStrike() {
@@ -3183,6 +3435,9 @@ function meleeStrike() {
     }
     hits++;
   }
+  damageInteractables(player.x + Math.sin(player.aim) * range * 0.7,
+    player.z + Math.cos(player.aim) * range * 0.7, range * 0.6,
+    player.dmg * player.dmgMul);
   if (hits) {
     hitStop = 0.05; shake(0.16 + hits * 0.05);
     const fx = player.x + Math.sin(player.aim) * range * 0.62;
@@ -4108,6 +4363,7 @@ function resetGame() {
   kills = 0; score = 0; zombiesAlive = 0; wave = 0; waveCountPrev = 0;
   comboMul = 1; comboT = 0; comboOut = 99; comboFx = 0;
   camYaw = 0; camPitch = 0.69; pendingUlt = false; clearTornadoes();
+  resetInteractables();
   waveState = "fight"; toSpawn = [];
   hitStop = 0; heartT = 0; camShake = 0;
   grassFlatten = null; levelFx = 0;
@@ -4571,7 +4827,187 @@ function updateCamera(dt) {
   camera.lookAt(player.x, player.y + 2.4, player.z);
   _camQ.copy(camera.quaternion);
 }
+/* ─── interactive props: hits, chain-reaction explosions, loot ────────────── */
+function hitInteractable(it, dmg) {
+  if (it.dead || it.fuse > 0) return;
+  if (it.type === "barrel" && it.explosive) { primeBarrel(it); return; }
+  it.hp -= dmg;
+  const gy = groundHeight(it.x, it.z);
+  if (it.type === "crate") {
+    spawnParts(it.x, gy + it.s * 0.6, it.z, 5,
+      { color: 0x6a4e2e, speed: 9, up: 4, life: 0.4, grav: 1.3 });
+    if (it.hp <= 0) breakCrate(it);
+  } else {
+    spawnParts(it.x, gy + 1.3, it.z, 5,
+      { color: 0x7a7a7e, speed: 9, up: 3, life: 0.4 });
+    if (it.hp <= 0) breakBarrel(it);
+  }
+}
+function damageInteractables(x, z, radius, dmg) {
+  for (let i = interactables.length - 1; i >= 0; i--) {
+    const it = interactables[i];
+    if (it.dead || it.fuse > 0) continue;
+    if (Math.hypot(it.x - x, it.z - z) <= radius + it.r)
+      hitInteractable(it, dmg);
+  }
+}
+function primeBarrel(b) {
+  if (b.dead || b.fuse > 0) return;
+  b.fuse = rand(0.06, 0.22);
+}
+function breakBarrel(b) {
+  if (b.dead) return;
+  b.dead = true; b.obj.visible = false; removeCollider(b.collider);
+  const y = groundHeight(b.x, b.z);
+  Sound.hit();
+  spawnParts(b.x, y + 1.2, b.z, 16,
+    { color: 0x5a5a5e, speed: 13, up: 6, life: 0.7 });
+  spawnGibs(b.x, y + 0.8, b.z, 6, 0x4a4a4e);
+}
+function breakCrate(c) {
+  if (c.dead) return;
+  c.dead = true; c.obj.visible = false; removeCollider(c.collider);
+  const y = groundHeight(c.x, c.z);
+  Sound.smash(); shake(0.28);
+  spawnParts(c.x, y + c.s * 0.6, c.z, 26,
+    { color: 0x6a4e2e, speed: 16, up: 9, life: 0.8, grav: 1.4 });
+  spawnGibs(c.x, y + 0.8, c.z, 10, 0x5a4226);
+  const roll = Math.random();
+  if (roll < 0.34)
+    spawnLoot(c.x + rand(-1.2, 1.2), c.z + rand(-1.2, 1.2),
+      makeItem(Math.random() < 0.5 ? "weapon" : "armor", 0, 2));
+  else if (roll < 0.40)
+    spawnBuffDrop(c.x, c.z, false);
+  else {
+    const bonus = 55 + wave * 12;
+    score += bonus;
+    damageNum(c.x, y + 1.8, c.z, bonus, false, "#ffd23a");
+  }
+}
+function explodeBarrel(b) {
+  if (b.dead) return;
+  b.dead = true; b.obj.visible = false; removeCollider(b.collider);
+  if (b.glow) b.glow.material.opacity = 0;
+  const x = b.x, z = b.z, y = groundHeight(x, z);
+  Sound.boom(); Sound.smash();
+  shake(1.35); hitStop = Math.max(hitStop, 0.07);
+  screenFlash("#ffb060", 0.4);
+  scorch(x, z, 15);
+  smashRing.setColor(0xff7a2e); smashRing.show(x, y + 0.2, z, 24, 0.5);
+  boomRing.setColor(0xffd24a); boomRing.show(x, y + 0.2, z, 17, 0.34);
+  spawnParts(x, y + 1.4, z, 78,
+    { color: 0xff8a2a, speed: 27, up: 11, life: 0.7 });
+  spawnParts(x, y + 1.4, z, 46,
+    { color: 0x2a2a2a, speed: 13, up: 22, life: 1.7, grav: -0.32 });
+  spawnGibs(x, y + 1, z, 9, 0x3a3a3e);
+  for (let i = 0; i < 8; i++)
+    flare(x + rand(-4.5, 4.5), y + rand(0.4, 5.5), z + rand(-4.5, 4.5),
+      rand(5, 12), pick([0xff8a2a, 0xffd24a, 0xffffff]), rand(0.4, 0.85));
+  flashLight(x, y + 2.6, z, 0.72, 0xff8a2a);
+  grassFlatten = { x, z, r: 16, t: 0 };
+  const R = 14;
+  for (const zb of zombies) {
+    if (zb.state === "die" || zb.state === "rising") continue;
+    const dd = Math.hypot(zb.x - x, zb.z - z);
+    if (dd < R + zb.r) {
+      const fall = clamp(1 - dd / (R + 5), 0.32, 1);
+      hitZombie(zb, (95 + wave * 9) * fall, true,
+        Math.atan2(zb.x - x, zb.z - z), 8);
+      if (zb.state !== "die") {
+        zb.burn = 3.2; zb.burnDps = 11 + wave;
+        zb.stagger = Math.max(zb.stagger, 0.35);
+      }
+    }
+  }
+  if (player && player.alive) {
+    const pd = Math.hypot(player.x - x, player.z - z);
+    if (pd < R) hurtPlayer(Math.round(20 * clamp(1 - pd / R, 0.25, 1)));
+  }
+  for (const it of interactables) {       // chain reaction
+    if (it.dead || it === b) continue;
+    const d2 = Math.hypot(it.x - x, it.z - z);
+    if (it.type === "barrel" && it.explosive) {
+      if (d2 < R + 4) primeBarrel(it);
+    } else if (d2 < R - 1) hitInteractable(it, 999);
+  }
+}
+function updateInteractables(dt) {
+  for (const it of interactables) {
+    if (it.dead || it.fuse <= 0) continue;
+    it.fuse -= dt;
+    if (it.glow)
+      it.glow.material.opacity = 0.45 + Math.sin(clock * 42) * 0.4;
+    it.obj.position.y = groundHeight(it.x, it.z) +
+      Math.sin(clock * 40) * 0.13;
+    if (it.fuse <= 0) explodeBarrel(it);
+  }
+}
+function resetInteractables() {
+  for (const it of interactables) {
+    if (it.dead) {
+      it.dead = false; it.obj.visible = true;
+      if (colliders.indexOf(it.collider) < 0) colliders.push(it.collider);
+    }
+    it.fuse = 0;
+    it.hp = it.type === "crate" ? 24 : (it.explosive ? 1 : 46);
+    if (it.glow) it.glow.material.opacity = 0;
+    it.obj.position.y = groundHeight(it.x, it.z);
+  }
+}
+/* ─── dynamic ambient — crows wheel, fires smoke, litter blows past ───────── */
+function updateDynAmbient(dt, t) {
+  for (const c of crows) {
+    c.ang += c.sp * dt;
+    c.flap += dt * c.flapSp;
+    const x = c.cx + Math.cos(c.ang) * c.rad;
+    const z = c.cz + Math.sin(c.ang) * c.rad;
+    c.g.position.set(x, c.h + Math.sin(c.flap * 0.5) * 1.6, z);
+    c.g.rotation.y = -c.ang + (c.sp > 0 ? 0 : Math.PI);
+    const fl = Math.sin(c.flap) * 0.85;
+    c.wings[0].rotation.z = fl;
+    c.wings[1].rotation.z = -fl;
+    c.g.rotation.z = Math.sin(c.flap) * 0.1;
+  }
+  for (const col of smokeCols) {
+    col.light.intensity = 2.8 + Math.sin(t * 8 + col.phase) * 1.0
+      + Math.sin(t * 21 + col.phase) * 0.5;
+    for (const p of col.puffs) {
+      p.off += dt * 4.6;
+      if (p.off > 48) p.off -= 48;
+      const k = p.off / 48;
+      p.s.position.set(
+        col.x + Math.sin((p.off + col.phase) * 0.4) * 3.6,
+        col.base + p.off,
+        col.z + Math.cos((p.off + col.phase) * 0.5) * 3.0);
+      p.s.material.opacity = 0.4 * Math.sin(k * Math.PI);
+      p.s.scale.setScalar(9 + k * 28);
+    }
+  }
+  const wx = Math.cos(t * 0.13) * 10 + 6, wz = Math.sin(t * 0.17) * 9 + 3;
+  const cx = player ? player.x : 0, cz = player ? player.z : 0;
+  for (const L of litter) {
+    L.x += wx * dt; L.z += wz * dt; L.tum += L.spin * dt;
+    if (L.x - cx > 95) L.x -= 190; else if (L.x - cx < -95) L.x += 190;
+    if (L.z - cz > 95) L.z -= 190; else if (L.z - cz < -95) L.z += 190;
+    const gy = groundHeight(L.x, L.z);
+    L.m.position.set(L.x, gy + 0.5 + Math.abs(Math.sin(L.tum)) * 1.3, L.z);
+    L.m.rotation.set(L.tum, L.tum * 0.7, L.tum * 1.3);
+  }
+  if (player) {
+    if (Math.random() < dt * 7)
+      spawnParts(player.x + rand(-58, 58), rand(3, 26),
+        player.z + rand(-58, 58), 1,
+        { color: pick([0x6a6660, 0x4a4642, 0x57514a]),
+          speed: 0.5, up: -0.8, grav: 0.04, life: rand(3, 6) });
+    if (Math.random() < dt * 3.5)
+      spawnParts(player.x + rand(-46, 46), rand(0.5, 3),
+        player.z + rand(-46, 46), 1,
+        { color: pick([0xff7a2a, 0xffa23a]),
+          speed: 0.7, up: 2.2, grav: -0.45, life: rand(2, 3.6) });
+  }
+}
 function updateAmbient(dt, t) {
+  updateDynAmbient(dt, t);
   for (const b of braziers) {
     const fl = 1 + Math.sin(t * 9 + b.phase) * 0.22
       + Math.sin(t * 23 + b.phase) * 0.12;
@@ -4624,6 +5060,7 @@ function update(dt) {
   updateOrbs(dt);
   updateLoot(dt);
   updateBuffDrops(dt);
+  updateInteractables(dt);
   updateBuffs(dt);
   updateParts(dt);
   updateFlashes(dt);
