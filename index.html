@@ -2569,126 +2569,214 @@ function buildWeapon(kind) {
 /* ─── survivor — a hulking warrior; armour pieces are outfit-swappable ────── */
 function buildSurvivor() {
   const g = new THREE.Group();
-  const skin = mat(0xa9764a, 0.66), gold = metalMat(0xc9a23a, 0.6);
-  const dark = mat(0x1a1518, 0.9);
+  const skin = mat(0xa9764a, 0.66), gold = metalMat(0xc9a23a, 0.55);
+  const dark = mat(0x14110d, 0.95);
+  const chain = mat(0x252128, 1);    // chainmail under-layer at joints
   // outfit-driven materials — applyOutfit() recolours these
-  const aChest = metalMat(0x6a7079, 0.55);
-  const aPauld = metalMat(0x595f68, 0.5);
-  const aHelm  = metalMat(0x3a3d44, 0.5);
+  const aChest = metalMat(0x7a818b, 0.55);
+  const aPauld = metalMat(0x646b75, 0.5);
+  const aHelm  = metalMat(0x474a52, 0.5);
   const aTrim  = mat(0x8a2018, 0.7);
   const aTorso = mat(0x2c2832);
   const capeMat = new THREE.MeshStandardMaterial({ color: 0x5a1518,
     roughness: 1, side: THREE.DoubleSide });
-  // ---- legs — long and lean, angular plate, planted ----
+  // ══ legs — full plate from foot to hip ══
   const legs = [];
   for (const sx of [-0.44, 0.44]) {
     const leg = new THREE.Group(); leg.position.set(sx, 1.92, 0);
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.56, 1.08, 0.62),
-      mat(0x322b2f));
-    thigh.position.y = -0.54; leg.add(thigh);
-    const knee = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.34, 0.58),
-      aPauld);
-    knee.position.y = -1.12; knee.rotation.x = 0.2; leg.add(knee);
-    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.46, 1.0, 0.5),
-      mat(0x241a1c));
-    shin.position.y = -1.66; leg.add(shin);
-    const greave = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.78, 0.16),
-      aPauld);
-    greave.position.set(0, -1.6, 0.3); leg.add(greave);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.44, 1.04),
-      dark);
-    boot.position.set(0, -1.98, 0.22); leg.add(boot);
+    const chainHip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.56),
+      chain);
+    chainHip.position.y = -0.08; leg.add(chainHip);
+    const cuisse = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.04, 0.66),
+      aChest);
+    cuisse.position.y = -0.6; leg.add(cuisse);                 // thigh plate
+    const poleyn = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.36, 0.68),
+      aChest);
+    poleyn.position.y = -1.18; poleyn.rotation.x = 0.18; leg.add(poleyn);
+    const poleynStud = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.16),
+      aChest);
+    poleynStud.position.set(0, -1.15, 0.36); leg.add(poleynStud);
+    const greave = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.98, 0.52),
+      aChest);
+    greave.position.y = -1.72; leg.add(greave);                // shin armour
+    const greaveBack = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.92, 0.18),
+      aHelm);
+    greaveBack.position.set(0, -1.72, -0.22); leg.add(greaveBack);
+    const sabaton = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.38, 0.86),
+      aChest);
+    sabaton.position.set(0, -2.2, 0.18); leg.add(sabaton);
+    const toe = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.34),
+      aChest);
+    toe.position.set(0, -2.26, 0.6); leg.add(toe);             // pointed toe
     leg.traverse(o => { if (o.isMesh) o.castShadow = true; });
     g.add(leg); legs.push(leg);
   }
-  // ---- upper body — broad chest tapering to a hard waist ----
+  // ══ upper body ══
   const upper = new THREE.Group(); upper.position.y = 1.92; g.add(upper);
-  const waist = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.66, 0.76), aTorso);
-  waist.position.y = 0.4; upper.add(waist);
-  const midTorso = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.74, 0.82),
+  const waist = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.62, 0.76), aTorso);
+  waist.position.y = 0.42; upper.add(waist);
+  const midTorso = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.72, 0.8),
     aTorso);
-  midTorso.position.y = 0.92; upper.add(midTorso);
-  // an angular sculpted cuirass — no bubble pecs
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(1.62, 1.16, 0.9), aChest);
-  chest.position.y = 1.46; upper.add(chest);
-  const collar = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.3, 0.82),
+  midTorso.position.y = 0.94; upper.add(midTorso);
+  // sculpted cuirass (front + back plates)
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(1.68, 1.18, 0.92),
     aChest);
-  collar.position.set(0, 2.0, -0.02); collar.rotation.x = -0.22;
+  chest.position.y = 1.46; upper.add(chest);
+  const backplate = new THREE.Mesh(new THREE.BoxGeometry(1.52, 1.14, 0.16),
+    aChest);
+  backplate.position.set(0, 1.46, -0.5); upper.add(backplate);
+  for (const sx of [-1, 1]) {                  // angled pectoral plates
+    const pec = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.22),
+      aChest);
+    pec.position.set(sx * 0.38, 1.6, 0.48);
+    pec.rotation.set(0.18, sx * 0.32, 0); upper.add(pec);
+  }
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.1, 0.2), aTrim);
+  ridge.position.set(0, 1.42, 0.5); upper.add(ridge);
+  // golden rivets along the cuirass
+  for (const c of [[-0.72, 1.95, 0.42], [0.72, 1.95, 0.42],
+                   [-0.78, 1.0, 0.44], [0.78, 1.0, 0.44]]) {
+    const r = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), gold);
+    r.position.set(c[0], c[1], c[2]); upper.add(r);
+  }
+  const collar = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.32, 0.88),
+    aChest);
+  collar.position.set(0, 2.04, -0.02); collar.rotation.x = -0.22;
   upper.add(collar);
-  for (const sx of [-1, 1]) {                  // flat, angled pectoral plates
-    const pec = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.62, 0.2), aChest);
-    pec.position.set(sx * 0.38, 1.58, 0.46);
-    pec.rotation.set(0.22, sx * 0.34, 0); upper.add(pec);
+  // GORGET — plated neck piece
+  const gorget = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 0.5, 0.5, 8), aChest);
+  gorget.position.y = 2.22; upper.add(gorget);
+  // belt + buckle
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.32, 0.84), dark);
+  belt.position.y = 0.7; upper.add(belt);
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.18),
+    gold);
+  buckle.position.set(0, 0.7, 0.46); upper.add(buckle);
+  // FAULDS — overlapping skirt of plate around the hip
+  for (let i = 0; i < 5; i++) {
+    const a = (i - 2) * 0.32;
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.66, 0.18),
+      aChest);
+    plate.position.set(Math.sin(a) * 0.48, 0.18, Math.cos(a) * 0.48);
+    plate.rotation.y = a; plate.rotation.x = 0.16;
+    upper.add(plate);
   }
-  const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.05, 0.18), aTrim);
-  ridge.position.set(0, 1.42, 0.48); upper.add(ridge);
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.32, 0.84), dark);
-  belt.position.y = 0.66; upper.add(belt);
-  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.3, 0.16), gold);
-  buckle.position.set(0, 0.66, 0.46); upper.add(buckle);
-  for (const sx of [-1, 1]) {                  // hip tassets, not a skirt
-    const tasset = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.66, 0.32),
-      aPauld);
-    tasset.position.set(sx * 0.4, 0.14, 0.32);
-    tasset.rotation.x = 0.18; upper.add(tasset);
+  for (let i = 0; i < 3; i++) {                              // back faulds
+    const a = Math.PI + (i - 1) * 0.34;
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.16),
+      aChest);
+    plate.position.set(Math.sin(a) * 0.46, 0.2, Math.cos(a) * 0.46);
+    plate.rotation.y = a; plate.rotation.x = -0.1;
+    upper.add(plate);
   }
-  // ---- a narrow cloak hanging straight down the back ----
+  // ══ cloak ══
   const cloak = new THREE.Mesh(
     new THREE.ConeGeometry(0.74, 3.0, 4, 1, true), capeMat);
-  cloak.position.set(0, 0.72, -0.5);
+  cloak.position.set(0, 0.72, -0.55);
   cloak.rotation.x = 0.12; cloak.rotation.y = Math.PI / 4; upper.add(cloak);
-  // ---- angular, layered pauldrons ----
+  // ══ layered pauldrons + spikes ══
   const pauldrons = [], pSpikes = [];
   for (const sx of [-1, 1]) {
     const pauld = new THREE.Group();
     pauld.position.set(sx * 1.0, 1.78, 0);
-    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.4, 0.98), aPauld);
-    p1.position.y = 0.06; p1.rotation.z = -sx * 0.3; pauld.add(p1);
-    const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.34, 0.84), aPauld);
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.42, 1.02),
+      aPauld);
+    p1.position.y = 0.08; p1.rotation.z = -sx * 0.3; pauld.add(p1);
+    const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.36, 0.88),
+      aPauld);
     p2.position.set(sx * 0.06, -0.3, 0); p2.rotation.z = -sx * 0.34;
     pauld.add(p2);
-    const p3 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.66), aPauld);
-    p3.position.set(sx * 0.12, -0.58, 0); p3.rotation.z = -sx * 0.38;
+    const p3 = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.32, 0.7),
+      aPauld);
+    p3.position.set(sx * 0.12, -0.6, 0); p3.rotation.z = -sx * 0.38;
     pauld.add(p3);
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.1, 0.22),
+      aTrim);
+    rim.position.set(0, 0.3, 0); rim.rotation.z = -sx * 0.3;
+    pauld.add(rim);
     upper.add(pauld); pauldrons.push(pauld);
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.72, 4), aTrim);
-    spike.position.set(sx * 1.3, 2.06, 0); spike.rotation.z = -sx * 0.62;
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.78, 4),
+      aTrim);
+    spike.position.set(sx * 1.32, 2.06, 0); spike.rotation.z = -sx * 0.62;
     upper.add(spike); pSpikes.push(spike);
   }
-  // ---- neck, head, faceted war-helm ----
-  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), skin);
-  neck.position.y = 2.16; upper.add(neck);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.8, 0.74), skin);
+  // ══ HEAD & a faceted bascinet HELM ══
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.78, 0.7), skin);
   head.position.y = 2.6; upper.add(head);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.26, 0.5), skin);
-  jaw.position.set(0, 2.28, 0.16); upper.add(jaw);
-  const helm = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.56, 0.86), aHelm);
-  helm.position.y = 2.84; upper.add(helm);
-  const helmTop = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.3, 0.64),
+  // hexagonal helm dome — stacked tapering segments
+  const helmBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.46, 0.4, 6), aHelm);
+  helmBase.position.y = 2.78; upper.add(helmBase);
+  const helmDome = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.46, 0.4, 0.38, 6), aHelm);
+  helmDome.position.y = 3.16; upper.add(helmDome);
+  const helmCap = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.46, 6),
     aHelm);
-  helmTop.position.y = 3.2; upper.add(helmTop);
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.44, 0.3), aHelm);
-  visor.position.set(0, 2.58, 0.34); upper.add(visor);
-  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.15, 0.92), aTrim);
-  brow.position.y = 2.82; upper.add(brow);
-  const crest = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 1.04), aTrim);
-  crest.position.y = 3.46; upper.add(crest);
+  helmCap.position.y = 3.5; upper.add(helmCap);
+  const finial = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.32, 5),
+    aTrim);
+  finial.position.y = 3.84; upper.add(finial);
+  // brow trim band
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.18, 0.94),
+    aTrim);
+  brow.position.y = 2.92; upper.add(brow);
+  // VISOR — covers the face, with a horizontal eye slit
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.5, 0.32),
+    aHelm);
+  visor.position.set(0, 2.6, 0.34); upper.add(visor);
+  const visorBevel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.82, 0.2, 0.32), aHelm);
+  visorBevel.position.set(0, 2.86, 0.32); visorBevel.rotation.x = -0.24;
+  upper.add(visorBevel);
+  // a dark slit cutout for the eyes
+  const slit = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.07, 0.02),
+    new THREE.MeshBasicMaterial({ color: 0x070504 }));
+  slit.position.set(0, 2.66, 0.52); upper.add(slit);
+  // chin / lower-face plate, angled
+  const chinG = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.24, 0.3),
+    aHelm);
+  chinG.position.set(0, 2.36, 0.32); chinG.rotation.x = 0.28;
+  upper.add(chinG);
+  // crest fin running back over the helm
+  const crest = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 1.04),
+    aTrim);
+  crest.position.y = 3.6; upper.add(crest);
+  // glowing eyes in the slit
   const eyes = [];
-  for (const sx of [-0.17, 0.17]) {
-    const e = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.07, 0.05),
+  for (const sx of [-0.16, 0.16]) {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.04),
       new THREE.MeshBasicMaterial({ color: 0xffd06a }));
-    e.position.set(sx, 2.6, 0.5); upper.add(e); eyes.push(e);
+    e.position.set(sx, 2.66, 0.54); upper.add(e); eyes.push(e);
   }
-  // ---- arms — one group that swings with the weapon ----
+  // chainmail peeking out at the shoulder joints under the pauldrons
+  for (const sx of [-1, 1]) {
+    const cm = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), chain);
+    cm.position.set(sx * 0.84, 0.32, 0.04); upper.add(cm);
+  }
+  // ══ arms — full plate, no exposed skin ══
   const arm = new THREE.Group(); arm.position.set(0, 1.52, 0.16); upper.add(arm);
   for (const sx of [-1, 1]) {
-    const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.6), skin);
-    bicep.position.set(sx * 0.78, 0.06, 0.14); arm.add(bicep);
-    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 1.14), aChest);
-    fore.position.set(sx * 0.5, -0.12, 0.66); fore.rotation.y = -sx * 0.42;
-    arm.add(fore);
-    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.46, 0.5), dark);
-    fist.position.set(sx * 0.2, -0.14, 1.2); arm.add(fist);
+    // rerebrace (upper-arm plate)
+    const rere = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.7, 0.52),
+      aChest);
+    rere.position.set(sx * 0.78, 0.04, 0.12); arm.add(rere);
+    // couter (elbow joint plate)
+    const couter = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 0.42),
+      aChest);
+    couter.position.set(sx * 0.64, -0.3, 0.32); arm.add(couter);
+    // vambrace (forearm plate)
+    const vamb = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 1.1),
+      aChest);
+    vamb.position.set(sx * 0.5, -0.18, 0.74); vamb.rotation.y = -sx * 0.4;
+    arm.add(vamb);
+    // gauntlet — steel glove
+    const gaunt = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 0.46),
+      aChest);
+    gaunt.position.set(sx * 0.22, -0.18, 1.22); arm.add(gaunt);
+    const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.34),
+      aHelm);
+    knuckle.position.set(sx * 0.22, -0.02, 1.3); arm.add(knuckle);
   }
   const weaponMount = new THREE.Group();
   weaponMount.position.set(0, -0.14, 1.34);
