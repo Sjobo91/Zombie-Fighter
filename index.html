@@ -4955,7 +4955,7 @@ addEventListener("mousemove", (e) => {
   if (pointerLocked && state === ST.PLAYING) {
     // move the mouse right → look right; move it down → look down (WoW-style)
     camYaw -= e.movementX * LOOK_SENS;
-    camPitch = clamp(camPitch + e.movementY * LOOK_SENS * 0.7, 0.34, 1.2);
+    camPitch = clamp(camPitch + e.movementY * LOOK_SENS * 0.7, 0.12, 1.2);
   }
 });
 addEventListener("mousedown", (e) => {
@@ -5075,7 +5075,7 @@ function setupTouchControls() {
     for (const t of e.changedTouches) {
       if (t.identifier !== lookId) continue;
       camYaw -= (t.clientX - lookX) * 0.006;
-      camPitch = clamp(camPitch + (t.clientY - lookY) * 0.0045, 0.34, 1.2);
+      camPitch = clamp(camPitch + (t.clientY - lookY) * 0.0045, 0.12, 1.2);
       lookX = t.clientX; lookY = t.clientY;
     }
   }, { passive: true });
@@ -6500,7 +6500,10 @@ function updateCamera(dt) {
     camera.position.x += rand(-1, 1) * camShake;
     camera.position.y += rand(-1, 1) * camShake;
   }
-  camera.lookAt(player.x, player.y + 2.4, player.z);
+  // when the player tilts the camera low (to look up at rooftops), aim the
+  // look-target higher so the view sweeps up to the skyline
+  const lookY = player.y + 2.4 + Math.max(0, 0.5 - camPitch) * 16;
+  camera.lookAt(player.x, lookY, player.z);
   _camQ.copy(camera.quaternion);
 }
 /* ─── camera occlusion — fade buildings that hide the hero ────────────────── */
