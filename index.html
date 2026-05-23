@@ -227,6 +227,69 @@
   .fell { font-size: 80px; font-weight: 800; color: #7c1b12;
     text-shadow: 0 0 22px rgba(0,0,0,.9); margin: 0; }
 
+  /* ---- class selection screen ---- */
+  #classSelect { z-index: 12; }
+  #classSelect .csTitle { font-size: 38px; font-weight: 800; color: #d8b75a;
+    letter-spacing: 6px; margin: 0 0 8px;
+    text-shadow: 0 0 30px rgba(216,150,30,.5), 0 2px 5px #000; }
+  #classSelect .csSub { font-size: 11px; letter-spacing: 4px; color: #7d7668;
+    margin-bottom: 26px; }
+  #classSelect .classCards { display: flex; gap: 18px; flex-wrap: wrap;
+    justify-content: center; max-width: 1180px; padding: 0 20px; }
+  .classCard { width: 210px; height: 360px;
+    background: linear-gradient(180deg, #16131e, #0b0910);
+    border: 2px solid #3a3440; border-radius: 10px;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 22px 14px 14px; cursor: pointer; box-sizing: border-box;
+    transition: border-color .15s, transform .15s, box-shadow .15s,
+      background .15s; position: relative; overflow: hidden; }
+  .classCard:hover { background: linear-gradient(180deg, #221c2e, #110d18);
+    transform: translateY(-6px); }
+  .classCard.knight:hover { border-color: #d8b75a;
+    box-shadow: 0 0 28px rgba(216,150,30,.45); }
+  .classCard.wizard:hover { border-color: #5a8fff;
+    box-shadow: 0 0 28px rgba(90,130,255,.55); }
+  .classCard.gunslinger:hover { border-color: #c97a30;
+    box-shadow: 0 0 28px rgba(200,120,30,.55); }
+  .classCard.hunter:hover { border-color: #6abe5f;
+    box-shadow: 0 0 28px rgba(90,200,80,.55); }
+  .classCard.rogue:hover { border-color: #c850a8;
+    box-shadow: 0 0 28px rgba(200,60,160,.55); }
+  .classCard .cIcon { width: 78px; height: 78px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px; font-weight: 800; margin-bottom: 12px;
+    box-shadow: 0 0 26px currentColor, 0 2px 8px rgba(0,0,0,.6); }
+  .classCard.knight .cIcon { background: linear-gradient(180deg, #f0cf72, #8c6a26);
+    color: #1a120a; }
+  .classCard.wizard .cIcon { background: linear-gradient(180deg, #6a9bff, #1a3aaa);
+    color: #e4f0ff; }
+  .classCard.gunslinger .cIcon { background: linear-gradient(180deg, #d49150, #6a3818);
+    color: #1a0e06; }
+  .classCard.hunter .cIcon { background: linear-gradient(180deg, #8ad080, #2a6020);
+    color: #0e2008; }
+  .classCard.rogue .cIcon { background: linear-gradient(180deg, #e070c0, #6a1a58);
+    color: #1a050f; }
+  .classCard .cName { font-size: 20px; font-weight: 800;
+    color: #efe2c6; letter-spacing: 2px; margin-bottom: 4px;
+    text-shadow: 0 0 12px rgba(0,0,0,.8); }
+  .classCard .cRole { font-size: 10px; letter-spacing: 3px; color: #8a8378;
+    margin-bottom: 12px; }
+  .classCard .cDesc { font-size: 12px; color: #b3a98f; line-height: 1.45;
+    text-align: center; padding: 0 4px; margin-bottom: 10px; flex: 1; }
+  .classCard .cStats { display: flex; gap: 8px; flex-wrap: wrap;
+    justify-content: center; }
+  .classCard .cStat { font-size: 10px; letter-spacing: 2px;
+    color: #d4c89a; padding: 3px 7px;
+    background: rgba(216,183,90,.12); border-radius: 9px;
+    border: 1px solid rgba(216,183,90,.25); }
+  .classCard .cPick { margin-top: 10px; font-size: 11px; letter-spacing: 3px;
+    font-weight: 800; color: #f0cf72; }
+  body.touch .classCard { width: 152px; height: 290px; padding: 16px 10px 10px; }
+  body.touch .classCard .cIcon { width: 56px; height: 56px; font-size: 28px;
+    margin-bottom: 8px; }
+  body.touch .classCard .cName { font-size: 15px; }
+  body.touch .classCard .cDesc { font-size: 10px; }
+
   /* ---- choice / ability cards ---- */
   #choice .ctitle { font-size: 29px; font-weight: 800; color: #d8b75a;
     letter-spacing: 1px; margin-bottom: 8px; }
@@ -497,9 +560,81 @@
     <div class="rule"></div>
     <div class="muted">A GOTHIC ARPG — RISE THROUGH THE GRAVEYARD, GROW IN POWER</div>
     <div class="controls">WASD MOVE &middot; SHIFT SPRINT &middot; MOUSE AIM &middot;
-      CLICK CLEAVE &middot; Q / RMB SMASH &middot; SPACE DASH<br>
+      CLICK ATTACK &middot; Q / RMB POWER &middot; SPACE DASH<br>
       C CHARACTER SHEET &middot; I GEAR &amp; INVENTORY</div>
-    <div class="blink">CLICK TO BEGIN</div>
+    <div class="blink">CLICK TO CHOOSE YOUR HERO</div>
+  </div>
+
+  <div id="classSelect" class="overlay hidden">
+    <h1 class="csTitle">CHOOSE YOUR HERO</h1>
+    <div class="csSub">FIVE PATHS THROUGH THE HORDE &mdash; PICK ONE</div>
+    <div class="classCards">
+      <div class="classCard knight" data-cls="knight">
+        <div class="cIcon">&#9876;</div>
+        <div class="cName">KNIGHT</div>
+        <div class="cRole">MELEE &middot; TANK</div>
+        <div class="cDesc">A wall of steel with a greatsword.
+          Cleaves through swarms and shrugs off blows.</div>
+        <div class="cStats">
+          <span class="cStat">HP 160</span>
+          <span class="cStat">DMG 14</span>
+          <span class="cStat">MELEE</span>
+        </div>
+        <div class="cPick">CLICK TO SELECT</div>
+      </div>
+      <div class="classCard wizard" data-cls="wizard">
+        <div class="cIcon">&#10047;</div>
+        <div class="cName">WIZARD</div>
+        <div class="cRole">RANGED &middot; AOE</div>
+        <div class="cDesc">A robed sorcerer hurling
+          arcane bolts. Frail but devastating from range.</div>
+        <div class="cStats">
+          <span class="cStat">HP 105</span>
+          <span class="cStat">DMG 19</span>
+          <span class="cStat">BOLTS</span>
+        </div>
+        <div class="cPick">CLICK TO SELECT</div>
+      </div>
+      <div class="classCard gunslinger" data-cls="gunslinger">
+        <div class="cIcon">&#10070;</div>
+        <div class="cName">GUNSLINGER</div>
+        <div class="cRole">RANGED &middot; BURST</div>
+        <div class="cDesc">A pistolero of the wasteland.
+          Quickfire bullets, scattering revolver fan.</div>
+        <div class="cStats">
+          <span class="cStat">HP 125</span>
+          <span class="cStat">DMG 17</span>
+          <span class="cStat">PISTOL</span>
+        </div>
+        <div class="cPick">CLICK TO SELECT</div>
+      </div>
+      <div class="classCard hunter" data-cls="hunter">
+        <div class="cIcon">&#10148;</div>
+        <div class="cName">HUNTER</div>
+        <div class="cRole">RANGED &middot; PRECISION</div>
+        <div class="cDesc">A silent archer. Piercing
+          arrows that punch through whole rows of dead.</div>
+        <div class="cStats">
+          <span class="cStat">HP 120</span>
+          <span class="cStat">DMG 16</span>
+          <span class="cStat">BOW</span>
+        </div>
+        <div class="cPick">CLICK TO SELECT</div>
+      </div>
+      <div class="classCard rogue" data-cls="rogue">
+        <div class="cIcon">&#9876;</div>
+        <div class="cName">ROGUE</div>
+        <div class="cRole">MELEE &middot; AGILE</div>
+        <div class="cDesc">A shadow with twin daggers.
+          Lightning attacks, deadly crits, evasive dashes.</div>
+        <div class="cStats">
+          <span class="cStat">HP 115</span>
+          <span class="cStat">DMG 12</span>
+          <span class="cStat">DAGGERS</span>
+        </div>
+        <div class="cPick">CLICK TO SELECT</div>
+      </div>
+    </div>
   </div>
 
   <div id="choice" class="overlay hidden">
@@ -557,6 +692,10 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<!-- GLTFLoader from r137 — uses the global THREE namespace, so it attaches
+     directly to window.THREE.GLTFLoader without a separate Three.js copy.
+     The .glb format hasn't changed; r137's loader reads r149 just fine. -->
+<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r137/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 "use strict";
 /* =========================================================================
@@ -564,6 +703,56 @@
    ========================================================================= */
 (function () {
 const THREE = window.THREE;
+
+/* ─── asset loader (Path 3 — GLTFLoader infrastructure) ────────────────────
+   Models live in ./assets/models/{class}.glb. When a .glb exists the
+   procedural primitive is *replaced* by the imported scene; when it
+   doesn't, the procedural fallback stays. This means the game runs out
+   of the box with primitives, and any class can be upgraded to a real
+   3D model by simply dropping a .glb into assets/models/.
+
+   Each builder (buildKnight, buildWizard, …) calls AssetLoader.load()
+   to kick off an async load and immediately returns the primitive. When
+   (and if) the .glb arrives, the primitive is swapped for the loaded
+   scene at the same anchor so positions / animations are seamless.
+*/
+const AssetLoader = (function () {
+  const loader = (window.THREE && window.THREE.GLTFLoader)
+    ? new window.THREE.GLTFLoader() : null;
+  const cache = Object.create(null);
+  const pending = Object.create(null);     // path → array of callbacks
+  function load(path, onReady) {
+    if (!loader) return;                   // GLTFLoader script not available
+    if (cache[path]) { onReady(cache[path].clone(true)); return; }
+    if (pending[path]) { pending[path].push(onReady); return; }
+    pending[path] = [onReady];
+    loader.load(path,
+      (gltf) => {
+        cache[path] = gltf.scene;
+        for (const cb of pending[path]) cb(gltf.scene.clone(true));
+        delete pending[path];
+      },
+      undefined,
+      () => { delete pending[path]; });   // 404 / parse fail — silent fallback
+  }
+  return { load };
+})();
+/* swap a primitive Group's first child-set out for a loaded .glb scene.
+   Keeps the userData (animation hooks, weaponMount, etc.) intact — the
+   imported scene becomes a child anchored at the primitive's origin. */
+function tryImport(group, path, scale) {
+  AssetLoader.load(path, (scene) => {
+    scene.scale.setScalar(scale || 1);
+    scene.traverse(o => {
+      if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; }
+    });
+    // hide the primitive children — keep them as a fallback if disabled
+    for (const c of group.children) { if (!c.isImported) c.visible = false; }
+    scene.isImported = true;
+    group.add(scene);
+    if (group.userData) group.userData.importedScene = scene;
+  });
+}
 
 /* ─── tuning ──────────────────────────────────────────────────────────────── */
 const ARENA = 240;          // half-extent of the square world
@@ -2611,14 +2800,147 @@ function buildWeapon(kind) {
     }
     const top = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 5), bladeMat);
     top.position.y = 5.3; g.add(top);
+
+  } else if (kind === "staff") {
+    // long arcane staff — wood haft, gold collar, glowing crystal orb
+    const haft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.13, 0.13, 6.0, 8),
+      mat(0x4a2e1a, 0.95));
+    haft.position.y = 3.0; g.add(haft);
+    for (let i = 0; i < 3; i++) {
+      const wrap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.16, 0.16, 0.18, 8), gold);
+      wrap.position.y = 1.4 + i * 1.4; g.add(wrap);
+    }
+    // crystal claw — three prongs cradling the orb
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU;
+      const claw = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.7, 0.08), gold);
+      claw.position.set(Math.cos(a) * 0.32, 6.18, Math.sin(a) * 0.32);
+      claw.rotation.z = -Math.cos(a) * 0.5;
+      claw.rotation.x =  Math.sin(a) * 0.5; g.add(claw);
+    }
+    const orbMat = new THREE.MeshStandardMaterial({
+      color: 0x6aaaff, emissive: 0x4a8aff, emissiveIntensity: 1.6,
+      roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.85 });
+    glowMats.push(orbMat);
+    const orb = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.52, 1), orbMat);
+    orb.position.y = 6.4; g.add(orb);
+    // soft halo sprite
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: flareTex, color: 0x6aaaff, transparent: true,
+      opacity: 0.8, depthWrite: false }));
+    halo.scale.set(2.4, 2.4, 1); halo.position.y = 6.4; g.add(halo);
+
+  } else if (kind === "pistol") {
+    // chunky revolver — barrel, cylinder, grip, hammer
+    const grip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.8, 0.4), mat(0x1a0e08, 0.95));
+    grip.position.y = 0.3; grip.rotation.z = -0.2; g.add(grip);
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(0.46, 0.42, 1.0), metalMat(0x303038, 0.7));
+    frame.position.set(0.06, 0.86, 0.36); g.add(frame);
+    const cyl = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.27, 0.27, 0.4, 8),
+      metalMat(0x404048, 0.7));
+    cyl.position.set(0.06, 0.86, 0.16); cyl.rotation.z = Math.PI / 2; g.add(cyl);
+    const barrelMat = new THREE.MeshStandardMaterial({
+      color: 0x202028, roughness: 0.4, metalness: 0.85,
+      emissive: 0xff8030, emissiveIntensity: 0.0 });
+    glowMats.push(barrelMat);
+    const barrel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.13, 0.13, 1.4, 8), barrelMat);
+    barrel.position.set(0.06, 0.94, 1.0); barrel.rotation.x = Math.PI / 2;
+    g.add(barrel);
+    const sight = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, 0.1, 0.16), gold);
+    sight.position.set(0.06, 1.1, 1.5); g.add(sight);
+
+  } else if (kind === "bow") {
+    // recurve longbow — two curved limbs + tight string
+    const woodMat = mat(0x6a3a1a, 0.92);
+    // upper limb
+    const up1 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 1.4, 0.18), woodMat);
+    up1.position.y = 0.9; up1.rotation.z = -0.4; g.add(up1);
+    const up2 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.8, 0.14), woodMat);
+    up2.position.set(-0.45, 1.85, 0); up2.rotation.z = -0.9; g.add(up2);
+    // lower limb (mirrored)
+    const dn1 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 1.4, 0.18), woodMat);
+    dn1.position.y = -0.9; dn1.rotation.z = 0.4; g.add(dn1);
+    const dn2 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.8, 0.14), woodMat);
+    dn2.position.set(-0.45, -1.85, 0); dn2.rotation.z = 0.9; g.add(dn2);
+    // central grip
+    const gripM = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.7, 0.24),
+      mat(0x2a1a10, 0.95));
+    gripM.position.y = 0; g.add(gripM);
+    // string — taut white line
+    const strMat = new THREE.MeshStandardMaterial({
+      color: 0xe6e2d0, emissive: 0x9af0c0, emissiveIntensity: 0.4,
+      roughness: 0.6 });
+    glowMats.push(strMat);
+    const string = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.02, 3.7, 4), strMat);
+    string.position.set(0.18, 0, 0); g.add(string);
+    // a nocked arrow ready to fire
+    const arrow = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 1.6, 5),
+      mat(0x8a6a3a, 0.9));
+    arrow.position.set(0.32, 0, 0); arrow.rotation.x = Math.PI / 2;
+    g.add(arrow);
+    const head = new THREE.Mesh(
+      new THREE.ConeGeometry(0.1, 0.26, 4), bladeMat);
+    head.position.set(0.32, 0, 0.95); head.rotation.x = Math.PI / 2;
+    g.add(head);
+
+  } else if (kind === "daggers") {
+    // twin daggers — short, lethal, paired
+    for (const off of [-0.5, 0.5]) {
+      const gripD = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, 0.7, 0.14),
+        mat(0x1a0e0c, 0.95));
+      gripD.position.set(off, 0.35, 0); g.add(gripD);
+      const guard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.46, 0.1, 0.18), gold);
+      guard.position.set(off, 0.7, 0); g.add(guard);
+      const blade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 1.4, 0.06), bladeMat);
+      blade.position.set(off, 1.4, 0); g.add(blade);
+      const tip = new THREE.Mesh(
+        new THREE.ConeGeometry(0.12, 0.4, 4), bladeMat);
+      tip.position.set(off, 2.2, 0); g.add(tip);
+      const pom = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 5), gold);
+      pom.position.set(off, 0.0, 0); g.add(pom);
+    }
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   g.userData = { kind, bladeMat, glowMats };
   return g;
 }
 
-/* ─── survivor — a hulking warrior; armour pieces are outfit-swappable ────── */
+/* ─── survivor — dispatch to the picked class. Knight is the historical
+   default; the four newcomers (wizard, gunslinger, hunter, rogue) get their
+   own builders, each producing the same userData contract so the rest of
+   the engine (animation, gear swap, ability glow) just works.  ───────────── */
 function buildSurvivor() {
+  const cls = (typeof window !== "undefined" && window.__heroClass) || "knight";
+  let g;
+  if (cls === "wizard")          g = buildWizard();
+  else if (cls === "gunslinger") g = buildGunslinger();
+  else if (cls === "hunter")     g = buildHunter();
+  else if (cls === "rogue")      g = buildRogue();
+  else                           g = buildKnight();
+  // Path 3 — try to upgrade to a real .glb model if the user has dropped one
+  tryImport(g, "assets/models/" + cls + ".glb", 1);
+  return g;
+}
+function buildKnight() {
   const g = new THREE.Group();
   const skin = mat(0xa9764a, 0.66), gold = metalMat(0xc9a23a, 0.55);
   const dark = mat(0x14110d, 0.95);
@@ -2840,9 +3162,515 @@ function buildSurvivor() {
   upper.traverse(o => { if (o.isMesh) o.castShadow = true; });
   arm.traverse(o => { if (o.isMesh) o.castShadow = true; });
   g.userData = { upper, cloak, arm, weaponMount, legs, head, eyes, torch,
-    weapon, weaponKind: "greatsword",
+    weapon, weaponKind: "greatsword", cls: "knight",
     armor: { chest: aChest, pauld: aPauld, helm: aHelm, trim: aTrim,
       torso: aTorso, cape: capeMat, pauldrons, spikes: pSpikes } };
+  return g;
+}
+
+/* ─── shared scaffold — every class needs the same userData "skeleton"
+   (upper/arm/legs/eyes/cape/etc.) so anim and gear code Just Works.
+   This returns a partially-assembled hero you can decorate per-class. */
+function makeHeroSkeleton(opts) {
+  const o = opts || {};
+  const g = new THREE.Group();
+  const aChest = metalMat(o.chest || 0x7a818b, o.chestMetal != null ?
+    o.chestMetal : 0.5);
+  const aPauld = metalMat(o.pauld || 0x646b75, 0.5);
+  const aHelm  = metalMat(o.helm  || 0x474a52, 0.5);
+  const aTrim  = mat(o.trim || 0x8a2018, 0.7);
+  const aTorso = mat(o.torso || 0x2c2832);
+  const capeMat = new THREE.MeshStandardMaterial({
+    color: o.cape || 0x5a1518, roughness: 1, side: THREE.DoubleSide });
+  return { g, aChest, aPauld, aHelm, aTrim, aTorso, capeMat };
+}
+
+/* ─── WIZARD — robed sorcerer with a glowing staff ─────────────────────── */
+function buildWizard() {
+  const sk = makeHeroSkeleton({
+    chest: 0x2e3a8a, chestMetal: 0.15, pauld: 0x1a224a,
+    helm: 0x111530, trim: 0xe4d56a, torso: 0x1a1d3a, cape: 0x3a2a7a,
+  });
+  const g = sk.g;
+  const skin = mat(0xc89a72, 0.7), gold = metalMat(0xc9a23a, 0.55);
+  const cloth = mat(0x1a1d3a, 1);
+  const dark = mat(0x0a0810, 0.95);
+  // ══ legs — long robe; just feet sticking out the bottom ══
+  const legs = [];
+  for (const sx of [-0.34, 0.34]) {
+    const leg = new THREE.Group(); leg.position.set(sx, 1.92, 0);
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.48, 1.0, 0.5), cloth);
+    thigh.position.y = -0.6; leg.add(thigh);
+    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.36, 1.0, 0.4), cloth);
+    shin.position.y = -1.7; leg.add(shin);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.7), dark);
+    foot.position.set(0, -2.16, 0.18); leg.add(foot);
+    leg.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    g.add(leg); legs.push(leg);
+  }
+  // ══ flowing lower robe — a cone skirt that hides the legs ══
+  const robe = new THREE.Mesh(
+    new THREE.ConeGeometry(1.05, 2.7, 8, 1, true), sk.aTorso);
+  robe.position.y = 1.4; g.add(robe);
+  // robe trim — a glowing rune-band at the hem
+  const hem = new THREE.Mesh(
+    new THREE.TorusGeometry(0.95, 0.07, 5, 16), sk.aTrim);
+  hem.position.y = 0.4; hem.rotation.x = Math.PI / 2; g.add(hem);
+  // ══ upper body ══
+  const upper = new THREE.Group(); upper.position.y = 1.92; g.add(upper);
+  const midTorso = new THREE.Mesh(
+    new THREE.BoxGeometry(1.08, 1.18, 0.74), sk.aChest);
+  midTorso.position.y = 1.0; upper.add(midTorso);
+  // rune stripes down the chest
+  for (let i = 0; i < 3; i++) {
+    const r = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.36, 0.05), sk.aTrim);
+    r.position.set(0, 1.25 - i * 0.4, 0.38); upper.add(r);
+  }
+  // robe collar / shoulder mantle
+  const mantle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.84, 0.96, 0.36, 8), sk.aPauld);
+  mantle.position.y = 1.78; upper.add(mantle);
+  for (const sx of [-1, 1]) {
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.74),
+      sk.aPauld);
+    sh.position.set(sx * 0.78, 1.66, 0); sh.rotation.z = -sx * 0.3;
+    upper.add(sh);
+  }
+  // ══ cape ══
+  const cloak = new THREE.Mesh(
+    new THREE.ConeGeometry(0.86, 3.3, 4, 1, true), sk.capeMat);
+  cloak.position.set(0, 0.8, -0.62); cloak.rotation.x = 0.16;
+  cloak.rotation.y = Math.PI / 4; upper.add(cloak);
+  // ══ head / hood ══
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.74, 0.66), skin);
+  head.position.y = 2.5; upper.add(head);
+  // pointed conical hood — wizard hat
+  const hood = new THREE.Mesh(
+    new THREE.ConeGeometry(0.62, 1.6, 8), sk.aHelm);
+  hood.position.y = 3.4; upper.add(hood);
+  // hat brim
+  const brim = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.86, 0.86, 0.1, 8), sk.aHelm);
+  brim.position.y = 2.74; upper.add(brim);
+  // glowing rune-band around the hood
+  const hoodBand = new THREE.Mesh(
+    new THREE.TorusGeometry(0.46, 0.07, 5, 12), sk.aTrim);
+  hoodBand.position.y = 2.92; hoodBand.rotation.x = Math.PI / 2; upper.add(hoodBand);
+  // beard — a stylised wizard's beard
+  const beard = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.52, 6),
+    mat(0xd8d2c0, 1));
+  beard.position.set(0, 2.18, 0.3); beard.rotation.x = Math.PI; upper.add(beard);
+  // glowing eyes deep under the hood
+  const eyes = [];
+  for (const sx of [-0.12, 0.12]) {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.04),
+      new THREE.MeshBasicMaterial({ color: 0x9af0ff }));
+    e.position.set(sx, 2.58, 0.34); upper.add(e); eyes.push(e);
+  }
+  // ══ arms ══
+  const arm = new THREE.Group(); arm.position.set(0, 1.52, 0.16); upper.add(arm);
+  for (const sx of [-1, 1]) {
+    // robed upper arm
+    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.78, 0.42),
+      cloth);
+    upperArm.position.set(sx * 0.74, 0.04, 0.1); arm.add(upperArm);
+    // forearm
+    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.36, 1.0),
+      cloth);
+    fore.position.set(sx * 0.5, -0.18, 0.74); fore.rotation.y = -sx * 0.4;
+    arm.add(fore);
+    // bare hand
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.32, 0.36),
+      skin);
+    hand.position.set(sx * 0.22, -0.16, 1.2); arm.add(hand);
+  }
+  const weaponMount = new THREE.Group();
+  weaponMount.position.set(0, -0.14, 1.34);
+  weaponMount.rotation.x = Math.PI / 2;
+  arm.add(weaponMount);
+  const weapon = buildWeapon("staff");
+  weaponMount.add(weapon);
+  const torch = new THREE.PointLight(0x6aaaff, 1.2, 28, 1.7);
+  torch.position.set(0, 3.4, 0); g.add(torch);
+  upper.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  arm.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  g.userData = { upper, cloak, arm, weaponMount, legs, head, eyes, torch,
+    weapon, weaponKind: "staff", cls: "wizard",
+    armor: { chest: sk.aChest, pauld: sk.aPauld, helm: sk.aHelm,
+      trim: sk.aTrim, torso: sk.aTorso, cape: sk.capeMat,
+      pauldrons: [mantle], spikes: [] } };
+  return g;
+}
+
+/* ─── GUNSLINGER — long-coat duster with a brass-rimmed revolver ────────── */
+function buildGunslinger() {
+  const sk = makeHeroSkeleton({
+    chest: 0x4a342a, chestMetal: 0.2, pauld: 0x3a261c,
+    helm: 0x6a4828, trim: 0xc97a30, torso: 0x261812, cape: 0x4a302a,
+  });
+  const g = sk.g;
+  const skin = mat(0xb88560, 0.7), brass = metalMat(0xc89a3a, 0.6);
+  const leather = mat(0x2a1a14, 0.92);
+  const dark = mat(0x141010, 0.95);
+  // ══ legs — leather pants and boots ══
+  const legs = [];
+  for (const sx of [-0.36, 0.36]) {
+    const leg = new THREE.Group(); leg.position.set(sx, 1.92, 0);
+    const thigh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 1.0, 0.54), leather);
+    thigh.position.y = -0.6; leg.add(thigh);
+    const shin = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 1.0, 0.46), leather);
+    shin.position.y = -1.7; leg.add(shin);
+    const boot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.4, 0.84), dark);
+    boot.position.set(0, -2.18, 0.16); leg.add(boot);
+    // spur
+    const spur = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.22, 4), brass);
+    spur.position.set(0, -2.18, -0.32); spur.rotation.x = -Math.PI / 2;
+    leg.add(spur);
+    leg.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    g.add(leg); legs.push(leg);
+  }
+  // ══ upper body ══
+  const upper = new THREE.Group(); upper.position.y = 1.92; g.add(upper);
+  // open duster coat — wide skirt
+  const coatSkirt = new THREE.Mesh(
+    new THREE.ConeGeometry(1.1, 1.9, 6, 1, true), sk.capeMat);
+  coatSkirt.position.y = 0.3; upper.add(coatSkirt);
+  // torso — vest under the coat
+  const midTorso = new THREE.Mesh(
+    new THREE.BoxGeometry(1.16, 1.18, 0.78), sk.aChest);
+  midTorso.position.y = 1.0; upper.add(midTorso);
+  // belt + buckle
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.24, 0.82), leather);
+  belt.position.y = 0.42; upper.add(belt);
+  const buckle = new THREE.Mesh(
+    new THREE.BoxGeometry(0.4, 0.28, 0.18), brass);
+  buckle.position.set(0, 0.42, 0.46); upper.add(buckle);
+  // bullet bandolier across the chest
+  for (let i = 0; i < 5; i++) {
+    const b = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.07, 0.07, 0.16, 6), brass);
+    b.position.set(-0.4 + i * 0.2, 1.3 - i * 0.06, 0.45);
+    b.rotation.z = 0.5; upper.add(b);
+  }
+  // shoulder pads (no plate — soft duster shoulders)
+  const pauldrons = [];
+  for (const sx of [-1, 1]) {
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 0.78),
+      sk.aPauld);
+    sh.position.set(sx * 0.82, 1.66, 0); sh.rotation.z = -sx * 0.16;
+    upper.add(sh); pauldrons.push(sh);
+  }
+  // ══ head + cowboy hat ══
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.74, 0.68), skin);
+  head.position.y = 2.5; upper.add(head);
+  // hat brim
+  const hatBrim = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.95, 0.95, 0.1, 10), sk.aHelm);
+  hatBrim.position.y = 2.85; upper.add(hatBrim);
+  // hat crown
+  const hatCrown = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.55, 0.6, 8), sk.aHelm);
+  hatCrown.position.y = 3.2; upper.add(hatCrown);
+  // hat dent
+  const hatDent = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 0.1, 0.2), sk.aHelm);
+  hatDent.position.y = 3.46; upper.add(hatDent);
+  // hat band
+  const hatBand = new THREE.Mesh(
+    new THREE.TorusGeometry(0.5, 0.04, 4, 10), sk.aTrim);
+  hatBand.position.y = 2.94; hatBand.rotation.x = Math.PI / 2;
+  upper.add(hatBand);
+  // bandana around the neck
+  const bandana = new THREE.Mesh(
+    new THREE.BoxGeometry(0.78, 0.32, 0.5), sk.aTrim);
+  bandana.position.set(0, 2.18, 0.18); bandana.rotation.x = 0.3;
+  upper.add(bandana);
+  // gritty eyes
+  const eyes = [];
+  for (const sx of [-0.15, 0.15]) {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.04),
+      new THREE.MeshBasicMaterial({ color: 0xffd06a }));
+    e.position.set(sx, 2.62, 0.34); upper.add(e); eyes.push(e);
+  }
+  // ══ arms ══
+  const arm = new THREE.Group(); arm.position.set(0, 1.52, 0.16); upper.add(arm);
+  for (const sx of [-1, 1]) {
+    const upperArm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.78, 0.46), sk.aChest);
+    upperArm.position.set(sx * 0.78, 0.04, 0.1); arm.add(upperArm);
+    const cuff = new THREE.Mesh(
+      new THREE.BoxGeometry(0.44, 0.16, 0.4), sk.aTrim);
+    cuff.position.set(sx * 0.78, -0.36, 0.1); arm.add(cuff);
+    const fore = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.36, 1.0), sk.aChest);
+    fore.position.set(sx * 0.5, -0.18, 0.74); fore.rotation.y = -sx * 0.4;
+    arm.add(fore);
+    const hand = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.32, 0.36), skin);
+    hand.position.set(sx * 0.22, -0.18, 1.2); arm.add(hand);
+  }
+  const weaponMount = new THREE.Group();
+  weaponMount.position.set(0, -0.14, 1.34);
+  weaponMount.rotation.x = Math.PI / 2;
+  arm.add(weaponMount);
+  const weapon = buildWeapon("pistol");
+  weaponMount.add(weapon);
+  const torch = new THREE.PointLight(0xffd06a, 0.7, 24, 1.7);
+  torch.position.set(0, 3.6, 0); g.add(torch);
+  upper.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  arm.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  g.userData = { upper, cloak: coatSkirt, arm, weaponMount, legs, head, eyes,
+    torch, weapon, weaponKind: "pistol", cls: "gunslinger",
+    armor: { chest: sk.aChest, pauld: sk.aPauld, helm: sk.aHelm,
+      trim: sk.aTrim, torso: sk.aTorso, cape: sk.capeMat,
+      pauldrons, spikes: [] } };
+  return g;
+}
+
+/* ─── HUNTER — ranger in green leather with a longbow ───────────────────── */
+function buildHunter() {
+  const sk = makeHeroSkeleton({
+    chest: 0x2a4a26, chestMetal: 0.18, pauld: 0x1c3018,
+    helm: 0x16240e, trim: 0xc9a23a, torso: 0x1a2412, cape: 0x2a3a1c,
+  });
+  const g = sk.g;
+  const skin = mat(0xc89a72, 0.7), leather = mat(0x2a1a14, 0.92);
+  const dark = mat(0x0c0a08, 0.95);
+  // ══ legs — leather leggings ══
+  const legs = [];
+  for (const sx of [-0.34, 0.34]) {
+    const leg = new THREE.Group(); leg.position.set(sx, 1.92, 0);
+    const thigh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.46, 1.0, 0.52), sk.aChest);
+    thigh.position.y = -0.6; leg.add(thigh);
+    const shin = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 1.0, 0.44), leather);
+    shin.position.y = -1.7; leg.add(shin);
+    // shin wrap
+    for (let i = 0; i < 3; i++) {
+      const wrap = new THREE.Mesh(
+        new THREE.BoxGeometry(0.44, 0.08, 0.5), dark);
+      wrap.position.set(0, -1.4 - i * 0.34, 0); leg.add(wrap);
+    }
+    const boot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.44, 0.32, 0.68), dark);
+    boot.position.set(0, -2.18, 0.14); leg.add(boot);
+    leg.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    g.add(leg); legs.push(leg);
+  }
+  // ══ upper body ══
+  const upper = new THREE.Group(); upper.position.y = 1.92; g.add(upper);
+  const midTorso = new THREE.Mesh(
+    new THREE.BoxGeometry(1.06, 1.2, 0.72), sk.aChest);
+  midTorso.position.y = 1.0; upper.add(midTorso);
+  // hooded chest — leather strap + cross belt
+  const strap = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 1.18, 0.78), leather);
+  strap.position.set(0.3, 1.0, 0); strap.rotation.z = 0.3; upper.add(strap);
+  // belt + buckle
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.22, 0.76), leather);
+  belt.position.y = 0.42; upper.add(belt);
+  // quiver on the back — arrows poking out
+  const quiver = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.22, 1.0, 6), leather);
+  quiver.position.set(-0.32, 1.4, -0.42); quiver.rotation.x = -0.3;
+  upper.add(quiver);
+  for (let i = 0; i < 4; i++) {
+    const af = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025, 0.025, 0.9, 4),
+      mat(0x6a4a2a, 0.9));
+    af.position.set(-0.32 + (i - 1.5) * 0.07, 2.0, -0.5);
+    af.rotation.x = -0.3; upper.add(af);
+    const fle = new THREE.Mesh(
+      new THREE.ConeGeometry(0.07, 0.18, 4), sk.aTrim);
+    fle.position.set(-0.32 + (i - 1.5) * 0.07, 2.4, -0.66);
+    fle.rotation.x = -0.3; upper.add(fle);
+  }
+  // shoulder pads
+  const pauldrons = [];
+  for (const sx of [-1, 1]) {
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.3, 0.72),
+      sk.aPauld);
+    sh.position.set(sx * 0.74, 1.62, 0); sh.rotation.z = -sx * 0.16;
+    upper.add(sh); pauldrons.push(sh);
+  }
+  // cloak — short ranger cape
+  const cloak = new THREE.Mesh(
+    new THREE.ConeGeometry(0.74, 2.4, 4, 1, true), sk.capeMat);
+  cloak.position.set(0, 0.86, -0.52); cloak.rotation.x = 0.12;
+  cloak.rotation.y = Math.PI / 4; upper.add(cloak);
+  // ══ head + ranger hood ══
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.72, 0.66), skin);
+  head.position.y = 2.5; upper.add(head);
+  // hood — covers the top of the head and casts shadow on eyes
+  const hood = new THREE.Mesh(
+    new THREE.ConeGeometry(0.5, 0.8, 6), sk.aHelm);
+  hood.position.y = 3.05; upper.add(hood);
+  // hood drape — sides of the hood
+  const hoodDrape = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.6, 0.4, 6, 1, true), sk.aHelm);
+  hoodDrape.position.y = 2.7; upper.add(hoodDrape);
+  // sharp piercing eyes
+  const eyes = [];
+  for (const sx of [-0.13, 0.13]) {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.04),
+      new THREE.MeshBasicMaterial({ color: 0x9af0ff }));
+    e.position.set(sx, 2.56, 0.34); upper.add(e); eyes.push(e);
+  }
+  // ══ arms ══
+  const arm = new THREE.Group(); arm.position.set(0, 1.52, 0.16); upper.add(arm);
+  for (const sx of [-1, 1]) {
+    const upperArm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.74, 0.44), sk.aChest);
+    upperArm.position.set(sx * 0.74, 0.04, 0.1); arm.add(upperArm);
+    const fore = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.36, 1.0), leather);
+    fore.position.set(sx * 0.5, -0.18, 0.74); fore.rotation.y = -sx * 0.4;
+    arm.add(fore);
+    // bracer
+    const bracer = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.2, 0.5), sk.aTrim);
+    bracer.position.set(sx * 0.42, -0.18, 1.0);
+    bracer.rotation.y = -sx * 0.4; arm.add(bracer);
+    const hand = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.3, 0.34), skin);
+    hand.position.set(sx * 0.22, -0.18, 1.2); arm.add(hand);
+  }
+  const weaponMount = new THREE.Group();
+  weaponMount.position.set(0, -0.14, 1.34);
+  weaponMount.rotation.x = Math.PI / 2;
+  arm.add(weaponMount);
+  const weapon = buildWeapon("bow");
+  weaponMount.add(weapon);
+  const torch = new THREE.PointLight(0x9af0c0, 0.6, 24, 1.7);
+  torch.position.set(0, 3.6, 0); g.add(torch);
+  upper.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  arm.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  g.userData = { upper, cloak, arm, weaponMount, legs, head, eyes, torch,
+    weapon, weaponKind: "bow", cls: "hunter",
+    armor: { chest: sk.aChest, pauld: sk.aPauld, helm: sk.aHelm,
+      trim: sk.aTrim, torso: sk.aTorso, cape: sk.capeMat,
+      pauldrons, spikes: [] } };
+  return g;
+}
+
+/* ─── ROGUE — twin-blade shadow in dark leather ─────────────────────────── */
+function buildRogue() {
+  const sk = makeHeroSkeleton({
+    chest: 0x2a1a32, chestMetal: 0.3, pauld: 0x1a1020,
+    helm: 0x0e0814, trim: 0xc850a8, torso: 0x14101a, cape: 0x261820,
+  });
+  const g = sk.g;
+  const skin = mat(0xc89a72, 0.7);
+  const leather = mat(0x1a1018, 0.92);
+  const dark = mat(0x070508, 0.95);
+  // ══ legs — tight dark leather pants ══
+  const legs = [];
+  for (const sx of [-0.34, 0.34]) {
+    const leg = new THREE.Group(); leg.position.set(sx, 1.92, 0);
+    const thigh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 1.04, 0.48), leather);
+    thigh.position.y = -0.6; leg.add(thigh);
+    const knee = new THREE.Mesh(
+      new THREE.BoxGeometry(0.44, 0.18, 0.5), sk.aTrim);
+    knee.position.y = -1.18; leg.add(knee);
+    const shin = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38, 1.0, 0.42), leather);
+    shin.position.y = -1.7; leg.add(shin);
+    const boot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.36, 0.66), dark);
+    boot.position.set(0, -2.18, 0.14); leg.add(boot);
+    leg.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    g.add(leg); legs.push(leg);
+  }
+  // ══ upper body ══
+  const upper = new THREE.Group(); upper.position.y = 1.92; g.add(upper);
+  const midTorso = new THREE.Mesh(
+    new THREE.BoxGeometry(1.0, 1.16, 0.7), sk.aChest);
+  midTorso.position.y = 1.0; upper.add(midTorso);
+  // crossbelts — twin holsters
+  const xbelt1 = new THREE.Mesh(
+    new THREE.BoxGeometry(0.16, 1.18, 0.74), leather);
+  xbelt1.position.set(0.25, 1.0, 0); xbelt1.rotation.z = 0.34;
+  upper.add(xbelt1);
+  const xbelt2 = new THREE.Mesh(
+    new THREE.BoxGeometry(0.16, 1.18, 0.74), leather);
+  xbelt2.position.set(-0.25, 1.0, 0); xbelt2.rotation.z = -0.34;
+  upper.add(xbelt2);
+  // throwing knives on the belt
+  for (let i = 0; i < 3; i++) {
+    const k = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.2, 0.04),
+      metalMat(0xc8ccd6, 0.8));
+    k.position.set(-0.35 + i * 0.18, 0.4, 0.4); upper.add(k);
+  }
+  // belt
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.18, 0.74), leather);
+  belt.position.y = 0.42; upper.add(belt);
+  // sleek shoulder pads
+  const pauldrons = [];
+  for (const sx of [-1, 1]) {
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.26, 0.6),
+      sk.aPauld);
+    sh.position.set(sx * 0.7, 1.58, 0); sh.rotation.z = -sx * 0.16;
+    upper.add(sh); pauldrons.push(sh);
+  }
+  // cloak — torn ragged
+  const cloak = new THREE.Mesh(
+    new THREE.ConeGeometry(0.72, 2.4, 5, 1, true), sk.capeMat);
+  cloak.position.set(0, 0.86, -0.5); cloak.rotation.x = 0.12;
+  cloak.rotation.y = Math.PI / 4; upper.add(cloak);
+  // ══ head + mask ══
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.64), skin);
+  head.position.y = 2.5; upper.add(head);
+  // hood
+  const hood = new THREE.Mesh(
+    new THREE.ConeGeometry(0.5, 0.7, 4), sk.aHelm);
+  hood.position.y = 3.0; upper.add(hood);
+  // face mask — covers nose & mouth
+  const mask = new THREE.Mesh(
+    new THREE.BoxGeometry(0.58, 0.4, 0.3), dark);
+  mask.position.set(0, 2.4, 0.34); upper.add(mask);
+  // glowing menacing eyes
+  const eyes = [];
+  for (const sx of [-0.13, 0.13]) {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.04),
+      new THREE.MeshBasicMaterial({ color: 0xf06aff }));
+    e.position.set(sx, 2.62, 0.34); upper.add(e); eyes.push(e);
+  }
+  // ══ arms ══
+  const arm = new THREE.Group(); arm.position.set(0, 1.52, 0.16); upper.add(arm);
+  for (const sx of [-1, 1]) {
+    const upperArm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38, 0.74, 0.42), sk.aChest);
+    upperArm.position.set(sx * 0.7, 0.04, 0.1); arm.add(upperArm);
+    const wrap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.6, 0.46), leather);
+    wrap.position.set(sx * 0.5, -0.22, 0.6);
+    wrap.rotation.y = -sx * 0.3; arm.add(wrap);
+    const hand = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.3, 0.34), dark);
+    hand.position.set(sx * 0.22, -0.18, 1.2); arm.add(hand);
+  }
+  const weaponMount = new THREE.Group();
+  weaponMount.position.set(0, -0.14, 1.34);
+  weaponMount.rotation.x = Math.PI / 2;
+  arm.add(weaponMount);
+  const weapon = buildWeapon("daggers");
+  weaponMount.add(weapon);
+  const torch = new THREE.PointLight(0xf06aff, 0.6, 22, 1.7);
+  torch.position.set(0, 3.4, 0); g.add(torch);
+  upper.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  arm.traverse(m => { if (m.isMesh) m.castShadow = true; });
+  g.userData = { upper, cloak, arm, weaponMount, legs, head, eyes, torch,
+    weapon, weaponKind: "daggers", cls: "rogue",
+    armor: { chest: sk.aChest, pauld: sk.aPauld, helm: sk.aHelm,
+      trim: sk.aTrim, torso: sk.aTorso, cape: sk.capeMat,
+      pauldrons, spikes: [] } };
   return g;
 }
 
@@ -3674,14 +4502,56 @@ function cannonExplode(x, z) {
 
 /* ─── player + horde state ────────────────────────────────────────────────── */
 let player = null, zombies = [];
+
+/* CLASSES — the five heroes. Each tweaks base stats, starting weapon,
+   primary attack mode, and a few class-specific tunables. */
+const CLASSES = {
+  knight:     { hpMul: 1.14, dmgMul: 1.00, spdMul: 1.00, atkSpdMul: 1.00,
+                critC: 0.13, critMul: 2.1,
+                weapon: "greatsword", outfit: "rags",
+                wepName: "Rusted Greatsword", armorName: "Worn Plate",
+                primary: "melee",  range: 8.4,  arc: 1.2,
+                color: 0xd8b75a },
+  wizard:     { hpMul: 0.75, dmgMul: 1.35, spdMul: 0.95, atkSpdMul: 1.10,
+                critC: 0.10, critMul: 2.0,
+                weapon: "staff", outfit: "rags",
+                wepName: "Apprentice Staff", armorName: "Arcane Robes",
+                primary: "ranged", projectile: "bolt",
+                range: 56, arc: 0.18, color: 0x6aaaff },
+  gunslinger: { hpMul: 0.90, dmgMul: 1.20, spdMul: 1.04, atkSpdMul: 1.30,
+                critC: 0.16, critMul: 2.2,
+                weapon: "pistol", outfit: "rags",
+                wepName: "Worn Revolver", armorName: "Duster Coat",
+                primary: "ranged", projectile: "bullet",
+                range: 52, arc: 0.14, color: 0xc97a30 },
+  hunter:     { hpMul: 0.86, dmgMul: 1.15, spdMul: 1.06, atkSpdMul: 1.05,
+                critC: 0.18, critMul: 2.4,
+                weapon: "bow", outfit: "rags",
+                wepName: "Yew Longbow", armorName: "Ranger Leather",
+                primary: "ranged", projectile: "arrow",
+                range: 64, arc: 0.10, color: 0x6abe5f },
+  rogue:      { hpMul: 0.82, dmgMul: 0.85, spdMul: 1.18, atkSpdMul: 1.60,
+                critC: 0.28, critMul: 2.6,
+                weapon: "daggers", outfit: "rags",
+                wepName: "Twin Daggers", armorName: "Shadow Leather",
+                primary: "melee",  range: 6.2,  arc: 1.4,
+                color: 0xc850a8 },
+};
+let chosenClass = "knight";
+
 function makePlayer() {
+  // pass the chosen class into the builder via a window-side flag
+  window.__heroClass = chosenClass;
+  const cls = CLASSES[chosenClass] || CLASSES.knight;
   const obj = buildSurvivor();
   scene.add(obj);
+  const baseHp = Math.round(P.baseHp * cls.hpMul);
   return {
     obj, x: 0, z: 0, y: 0, aim: 0, t: 0,
-    hp: P.baseHp, maxHp: P.baseHp, dmg: P.baseDmg,
-    dmgMul: 1, atkSpeed: 1, moveMul: 1,
-    critChance: P.baseCrit, critMul: P.baseCritMul,
+    cls: chosenClass, classDef: cls,
+    hp: baseHp, maxHp: baseHp, dmg: Math.round(P.baseDmg * cls.dmgMul),
+    dmgMul: 1, atkSpeed: cls.atkSpdMul || 1, moveMul: cls.spdMul || 1,
+    critChance: cls.critC, critMul: cls.critMul,
     level: 1, xp: 0, xpNext: 74,
     statPoints: PTS_START, stat: { power: 0, defense: 0, speed: 0 },
     gear: { weapon: null, armor: null }, inventory: [],
@@ -3710,16 +4580,18 @@ function hasA(id) { return player.abil.has(id); }
 function recalc() {
   const before = player.maxHp;
   const pm = player.perma;
+  const cls = player.classDef || CLASSES.knight;
   const armorVal = player.gear.armor ? player.gear.armor.value : 0;
   const weaponVal = player.gear.weapon ? player.gear.weapon.value : 0;
-  player.maxHp = Math.round(P.baseHp + player.stat.defense * DEF_HP +
-    armorVal + pm.hp);
-  player.dmg = P.baseDmg + player.stat.power * PWR_DMG + weaponVal + pm.dmg;
-  let moveMul = 1 + player.stat.speed * SPD_PCT + pm.spd;
-  let atkSpeed = 1 + player.stat.speed * SPD_PCT;
+  player.maxHp = Math.round(P.baseHp * cls.hpMul +
+    player.stat.defense * DEF_HP + armorVal + pm.hp);
+  player.dmg = P.baseDmg * cls.dmgMul + player.stat.power * PWR_DMG +
+    weaponVal + pm.dmg;
+  let moveMul = cls.spdMul * (1 + player.stat.speed * SPD_PCT) + pm.spd;
+  let atkSpeed = cls.atkSpdMul * (1 + player.stat.speed * SPD_PCT);
   let dmgMul = 1, dmgTakenMul = 1, sizeMul = 1;
-  let lifesteal = pm.life, critC = P.baseCrit + pm.crit;
-  let critMul = P.baseCritMul;
+  let lifesteal = pm.life, critC = cls.critC + pm.crit;
+  let critMul = cls.critMul;
   // active temporary buffs stack on top
   for (const b of player.buffs) {
     const m = b.def.mod;
@@ -4121,9 +4993,16 @@ function applyOutfit(obj, key) {
 function applyGearVisual(obj) {
   obj = obj || player.obj;
   const u = obj.userData;
+  const cls = (player && player.classDef) || CLASSES.knight;
   const ham = hasA("hammer");
   const wItem = player.gear.weapon;
-  const wKind = ham ? "godhammer" : ((wItem && wItem.model) || "greatsword");
+  // non-knight classes always wield their signature weapon (staff/pistol/
+  // bow/daggers). Picked-up swords still grant their rarity / glow / dmg
+  // value, but the model stays class-locked.
+  let wKind;
+  if (ham && u.cls === "knight") wKind = "godhammer";
+  else if (u.cls && u.cls !== "knight") wKind = cls.weapon;
+  else wKind = (wItem && wItem.model) || "greatsword";
   const wRar = wItem ? wItem.rarity : 0;
   if (u.weaponKind !== wKind) {
     u.weaponMount.clear();
@@ -4131,9 +5010,14 @@ function applyGearVisual(obj) {
     u.weaponMount.add(u.weapon);
     u.weaponKind = wKind;
   }
-  u.weaponMount.scale.setScalar(ham ? 1 : [0.62, 0.82, 0.98, 1.16][wRar]);
-  u.weapon.userData.bladeMat.color.setHex(
-    ham ? 0x4a4a54 : [0xb6bcc6, 0xccd6e0, 0xd8c4ec, 0xf2d68a][wRar]);
+  const scaleArr = [0.62, 0.82, 0.98, 1.16, 1.34];
+  const tintArr = [0xb6bcc6, 0xccd6e0, 0xd8c4ec, 0xf2d68a, 0xff9adf];
+  u.weaponMount.scale.setScalar(ham && u.cls === "knight" ? 1 :
+    scaleArr[Math.min(wRar, 4)]);
+  if (u.weapon.userData.bladeMat) {
+    u.weapon.userData.bladeMat.color.setHex(
+      ham && u.cls === "knight" ? 0x4a4a54 : tintArr[Math.min(wRar, 4)]);
+  }
   const order = ["fire", "lightning", "frost", "wind", "soul"];
   let glow = null;
   for (const id of order) if (hasA(id)) { glow = abilityById(id).col; break; }
@@ -4321,7 +5205,14 @@ function tryAttack() {
   player.atkS = P.atkStrike / player.atkSpeed;
   player.atkR = P.atkRecover / player.atkSpeed;
   player.atkHits = new Set();
-  player.atkSlowT = ATK_SLOW_DUR;
+  player.atkSlowT = ATK_SLOW_DUR * 0.4; // ranged classes don't lock as hard
+  // ranged classes fire a projectile mid-swing instead of swinging a sword.
+  const cls = player.classDef || CLASSES.knight;
+  if (cls.primary === "ranged") {
+    player.atkSlowT = ATK_SLOW_DUR * 0.25;
+  } else {
+    player.atkSlowT = ATK_SLOW_DUR;
+  }
   Sound.swing();
 }
 /* RIGHT MOUSE — a committed, heavy SMASH with the weapon you wield.
@@ -4492,8 +5383,17 @@ function leapLand() {
   banner("STAGGERED — RECOVER YOUR FOOTING", "EARTHSHATTER");
 }
 function meleeStrike() {
+  // ranged classes diverge here — they fire a class-specific projectile
+  // instead of swinging a sword arc, then bail out before the melee hits.
+  const cls = player.classDef || CLASSES.knight;
+  if (cls.primary === "ranged") {
+    if (!player.atkHits.has("__fired")) {
+      player.atkHits.add("__fired"); rangedFire();
+    }
+    return;
+  }
   let hits = 0;
-  const range = P.atkRange, arc = P.atkArc;
+  const range = cls.range || P.atkRange, arc = cls.arc || P.atkArc;
   const wind = hasA("wind"), fire = hasA("fire");
   for (const z of zombies) {
     if (z.state === "die" || z.state === "rising" ||
@@ -4545,6 +5445,137 @@ function meleeStrike() {
         flare(player.x + Math.sin(player.aim) * rand(2, 6), player.y + 1.4,
           player.z + Math.cos(player.aim) * rand(2, 6), rand(3, 5),
           0xdff0e0, 0.35, 0.7);
+    }
+  }
+}
+/* ─── ranged classes — projectile primary attack ──────────────────────────
+   Each ranged class fires a different projectile from the player's hand.
+   These are HERO projectiles (heroProjectiles) — completely independent
+   of the enemy cannon balls in `projectiles`. They travel along player.aim
+   and damage zombies on contact. Each kind has its own colour, geometry,
+   speed, life and pierce-count.  */
+let heroProjectiles = [];
+const PROJ_TYPES = {
+  bolt:   { speed: 75, life: 1.0, pierce: 0, dmgMul: 1.0,
+            col: 0x6aaaff, size: 0.5, trail: 0x6aaaff, trailN: 6 },
+  bullet: { speed: 130, life: 0.7, pierce: 1, dmgMul: 0.65,
+            col: 0xffe06a, size: 0.18, trail: 0xffd06a, trailN: 2 },
+  arrow:  { speed: 96, life: 1.1, pierce: 4, dmgMul: 0.85,
+            col: 0xe8e0c0, size: 0.18, trail: 0x9aeac0, trailN: 1 },
+};
+function rangedFire() {
+  const cls = player.classDef || CLASSES.knight;
+  const kind = cls.projectile;
+  const pt = PROJ_TYPES[kind]; if (!pt) return;
+  Sound.swing();
+  const startX = player.x + Math.sin(player.aim) * 1.6;
+  const startZ = player.z + Math.cos(player.aim) * 1.6;
+  const startY = (player.y || 0) + 2.2;
+  let geom, mat;
+  if (kind === "bolt") {
+    geom = new THREE.IcosahedronGeometry(pt.size, 0);
+    mat = new THREE.MeshStandardMaterial({ color: 0x4a8aff,
+      emissive: 0x6aaaff, emissiveIntensity: 2.0, transparent: true,
+      opacity: 0.92 });
+  } else if (kind === "bullet") {
+    geom = new THREE.SphereGeometry(pt.size, 6, 5);
+    mat = new THREE.MeshStandardMaterial({ color: 0xffd06a,
+      emissive: 0xff8030, emissiveIntensity: 1.0,
+      roughness: 0.4, metalness: 0.6 });
+  } else if (kind === "arrow") {
+    const ag = new THREE.Group();
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.05, 1.6, 5),
+      mat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a,
+        emissive: 0x9aeac0, emissiveIntensity: 0.6 }));
+    shaft.rotation.x = Math.PI / 2; ag.add(shaft);
+    const tip = new THREE.Mesh(
+      new THREE.ConeGeometry(0.12, 0.34, 5),
+      new THREE.MeshStandardMaterial({ color: 0xe6e2d0,
+        emissive: 0x9aeac0, emissiveIntensity: 0.6 }));
+    tip.position.z = 0.95; tip.rotation.x = Math.PI / 2; ag.add(tip);
+    const fle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.3, 0.2),
+      new THREE.MeshStandardMaterial({ color: 0xd8b75a }));
+    fle.position.z = -0.7; ag.add(fle);
+    ag.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    ag.position.set(startX, startY, startZ);
+    ag.rotation.y = player.aim;
+    scene.add(ag);
+    heroProjectiles.push({ obj: ag, kind, x: startX, y: startY, z: startZ,
+      vx: Math.sin(player.aim) * pt.speed,
+      vz: Math.cos(player.aim) * pt.speed,
+      life: pt.life, hits: new Set(), pierce: pt.pierce, def: pt });
+    // crisp string-twang
+    Sound.tone && Sound.tone("triangle", 580, 50, 0.18, 0.15);
+    return;
+  }
+  // bolt / bullet — simple mesh
+  const obj = new THREE.Mesh(geom, mat);
+  obj.position.set(startX, startY, startZ);
+  obj.castShadow = false;
+  scene.add(obj);
+  if (kind === "bolt") {
+    // muzzle halo
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: flareTex, color: 0x9adfff, transparent: true,
+      opacity: 0.85, depthWrite: false,
+      blending: THREE.AdditiveBlending }));
+    halo.scale.set(2.0, 2.0, 1); obj.add(halo);
+    Sound.tone && Sound.tone("triangle", 740, 70, 0.22, 0.18);
+  } else if (kind === "bullet") {
+    Sound.tone && Sound.tone("square", 920, 40, 0.32, 0.12);
+    screenFlash("#ffd06a", 0.06);
+  }
+  heroProjectiles.push({ obj, kind, x: startX, y: startY, z: startZ,
+    vx: Math.sin(player.aim) * pt.speed,
+    vz: Math.cos(player.aim) * pt.speed,
+    life: pt.life, hits: new Set(), pierce: pt.pierce, def: pt });
+  // muzzle flash
+  const fx = startX, fz = startZ;
+  spawnParts(fx, startY, fz, kind === "bullet" ? 6 : 8,
+    { color: pt.trail, speed: 12, life: 0.25 });
+  flashLight(fx, startY, fz, 0.16, pt.trail);
+}
+function updateHeroProjectiles(dt) {
+  for (let i = heroProjectiles.length - 1; i >= 0; i--) {
+    const p = heroProjectiles[i];
+    p.x += p.vx * dt; p.z += p.vz * dt; p.life -= dt;
+    p.obj.position.set(p.x, p.y, p.z);
+    // a soft trail
+    if (p.def.trailN > 0 && Math.random() < 0.7)
+      spawnParts(p.x, p.y, p.z, p.def.trailN,
+        { color: p.def.trail, speed: 2, life: 0.25 });
+    // hit-check vs zombies
+    let dead = false;
+    for (const z of zombies) {
+      if (z.state === "die" || z.state === "rising") continue;
+      if (p.hits.has(z)) continue;
+      const dx = z.x - p.x, dz = z.z - p.z;
+      if (Math.hypot(dx, dz) < z.r + 0.8 &&
+          Math.abs((z.y || 0) + 1.2 - p.y) < 3.2) {
+        p.hits.add(z);
+        const crit = Math.random() < player.critChance;
+        const ang = Math.atan2(dx, dz);
+        const dmg = player.dmg * player.dmgMul * p.def.dmgMul *
+          (crit ? player.critMul : 1);
+        hitZombie(z, dmg, crit, ang, 2);
+        if (z.state !== "die") {
+          if (hasA("fire")) { z.burn = 3.0; z.burnDps = 8 + player.level * 1.5; }
+          if (hasA("frost")) applyChill(z);
+        }
+        gainRage(RAGE_HIT);
+        // hit FX
+        flare(p.x, p.y, p.z, 3, p.def.col, 0.45);
+        if (p.pierce > 0) p.pierce--; else { dead = true; break; }
+      }
+    }
+    if (!dead && (p.life <= 0 || Math.hypot(p.x, p.z) > ARENA - 2)) dead = true;
+    if (dead) {
+      // burst on death
+      spawnParts(p.x, p.y, p.z, p.kind === "bolt" ? 18 : 6,
+        { color: p.def.col, speed: 12, life: 0.4 });
+      scene.remove(p.obj); heroProjectiles.splice(i, 1);
     }
   }
 }
@@ -5156,6 +6187,7 @@ const UI = {
   toast: document.getElementById("toast"),
   ach: document.getElementById("ach"),
   title: document.getElementById("title"),
+  classSelect: document.getElementById("classSelect"),
   choice: document.getElementById("choice"),
   charScreen: document.getElementById("charScreen"),
   invScreen: document.getElementById("invScreen"),
@@ -5536,12 +6568,31 @@ function initDoll() {
 }
 function syncDoll() {
   if (!dollObj) return;
+  // if the player has switched class, rebuild the doll so the body matches
+  if (dollObj.userData.cls !== player.cls) {
+    dollScene.remove(dollObj);
+    dollObj = buildSurvivor();
+    dollScene.add(dollObj);
+  }
   applyGearVisual(dollObj);
   const u = dollObj.userData;
-  u.arm.rotation.set(-1.62, 0, 0);             // greatsword raised aloft
+  // class-specific idle pose for the character-sheet doll
+  if (u.cls === "wizard") {
+    u.arm.rotation.set(-2.05, 0, 0);           // staff held high
+  } else if (u.cls === "gunslinger") {
+    u.arm.rotation.set(-1.1, 0, 0);            // pistol held forward
+  } else if (u.cls === "hunter") {
+    u.arm.rotation.set(-1.4, 0, 0);            // bow at the ready
+  } else if (u.cls === "rogue") {
+    u.arm.rotation.set(-1.3, 0, 0);            // daggers reverse-grip
+  } else {
+    u.arm.rotation.set(-1.62, 0, 0);           // greatsword raised aloft
+  }
   u.upper.rotation.x = 0;
   u.legs[0].rotation.x = 0.07; u.legs[1].rotation.x = -0.07;
-  for (const eye of u.eyes) eye.material.color.setHex(0xffd06a);
+  const eyeCol = u.cls === "wizard" ? 0x9af0ff : u.cls === "rogue" ? 0xf06aff
+    : u.cls === "hunter" ? 0x9af0c0 : 0xffd06a;
+  for (const eye of u.eyes) eye.material.color.setHex(eyeCol);
   dollObj.scale.setScalar(1 + Math.min(player.level - 1, 24) * 0.014);
   // measure the posed figure so renderDoll can frame it precisely.
   // the doll spins about its y-axis, so the framing radius is the farthest
@@ -5952,14 +7003,16 @@ function resetGame() {
   for (const l of loot) scene.remove(l.obj); loot = [];
   clearBuffDrops();
   for (const p of projectiles) scene.remove(p.obj); projectiles = [];
+  for (const p of heroProjectiles) scene.remove(p.obj); heroProjectiles = [];
   for (let i = 0; i < PCOUNT; i++) { pState[i].life = 0; pPos[i*3+1] = -999; }
   pGeo.attributes.position.needsUpdate = true;
   if (player) scene.remove(player.obj);
   player = makePlayer();
-  player.gear.weapon = { slot: "weapon", rarity: 0, model: "greatsword",
-    name: "Rusted Greatsword", value: 5 };
-  player.gear.armor = { slot: "armor", rarity: 0, outfit: "rags",
-    name: "Worn Rags", value: 25 };
+  const startCls = CLASSES[chosenClass] || CLASSES.knight;
+  player.gear.weapon = { slot: "weapon", rarity: 0, model: startCls.weapon,
+    name: startCls.wepName, value: 5 };
+  player.gear.armor = { slot: "armor", rarity: 0, outfit: startCls.outfit,
+    name: startCls.armorName, value: 25 };
   recalc(); player.hp = player.maxHp;
   player.y = walkHeight(0, 0);
   player.obj.position.set(0, player.y, 0);
@@ -6001,10 +7054,25 @@ function gameOver() {
   document.exitPointerLock();
 }
 UI.title.addEventListener("click", () => {
-  if (state === ST.TITLE) startGame();
+  if (state === ST.TITLE) {
+    UI.title.classList.add("hidden");
+    UI.classSelect.classList.remove("hidden");
+  }
 });
+// each class card on the select screen — pick this hero and begin the run
+for (const cardEl of UI.classSelect.querySelectorAll(".classCard")) {
+  cardEl.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    chosenClass = cardEl.getAttribute("data-cls") || "knight";
+    UI.classSelect.classList.add("hidden");
+    startGame();
+  });
+}
 UI.over.addEventListener("click", () => {
-  if (state === ST.GAMEOVER && gameOverT > 1.1) startGame();
+  if (state === ST.GAMEOVER && gameOverT > 1.1) {
+    UI.over.classList.add("hidden");
+    UI.classSelect.classList.remove("hidden");   // pick again on death
+  }
 });
 
 /* ─── update: player ──────────────────────────────────────────────────────── */
@@ -6130,13 +7198,29 @@ function poseSurvivor() {
   u.legs[0].rotation.x = Math.sin(e.walkP) * sw;
   u.legs[1].rotation.x = Math.sin(e.walkP + Math.PI) * sw;
   // ---- weapon stance & strikes — arm pose is [pitch, yaw, roll] ----
-  const idleP = [-0.62, 0.5, -0.56];           // weapon shouldered
+  // class-specific idle poses
+  const cls = e.cls || u.cls || "knight";
+  const idleP =
+    cls === "wizard"     ? [-1.7, 0, 0]      :     // staff vertical
+    cls === "gunslinger" ? [-1.1, 0, 0]      :     // pistol forward
+    cls === "hunter"     ? [-1.35, 0.2, 0.1] :     // bow held forward
+    cls === "rogue"      ? [-0.95, 0.3, -0.3]:     // dagger reverse-grip
+                           [-0.62, 0.5, -0.56];    // greatsword shouldered
   let pX = idleP[0], pY = idleP[1], pZ = idleP[2];
   const ham = u.weaponKind === "godhammer";
   if (e.atk) {
-    // quick slash — up off the shoulder, then down and across the body
     const a = e.atkT, w = e.atkW, s = e.atkS, r = e.atkR;
-    const wnd = [-1.55, 1.0, -0.72], hit = [0.62, -1.12, 0.62];
+    // ranged classes thrust the weapon forward to fire
+    let wnd, hit;
+    if (cls === "wizard") { wnd = [-2.2, 0, 0]; hit = [-1.3, 0, 0]; }
+    else if (cls === "gunslinger") { wnd = [-1.2, 0, 0]; hit = [-0.9, 0, 0]; }
+    else if (cls === "hunter") { wnd = [-1.5, 0.4, 0.3]; hit = [-1.2, 0, 0]; }
+    else if (cls === "rogue") {
+      // a fast double-stab
+      wnd = [-1.6, 0.2, -0.4]; hit = [0.4, -0.6, 0.4];
+    } else {
+      wnd = [-1.55, 1.0, -0.72]; hit = [0.62, -1.12, 0.62];
+    }
     if (a < w) { const t = easeOut(a / w);
       pX = lerp(idleP[0], wnd[0], t); pY = lerp(idleP[1], wnd[1], t);
       pZ = lerp(idleP[2], wnd[2], t); }
@@ -6790,6 +7874,7 @@ function update(dt) {
   updateCombo(dt);
   updateUltimate(dt);
   updateProjectiles(dt);
+  updateHeroProjectiles(dt);
   updateOrbs(dt);
   updateLoot(dt);
   updateBuffDrops(dt);
