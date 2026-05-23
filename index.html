@@ -1162,10 +1162,10 @@ function glowSprite(x, y, z, size, color, opacity) {
 const colliders = [];
 const interactables = [];   // explosive barrels & breakable crates — destructible
 const occluders = [];        // buildings that fade when they hide the hero
-function registerOccluder(group, x, z, r) {
+function registerOccluder(group, x, z, r, topY) {
   const meshes = [];
   group.traverse(o => { if (o.isMesh && o.material) meshes.push(o); });
-  occluders.push({ x, z, r, meshes, faded: false });
+  occluders.push({ x, z, r, topY: topY || 12, meshes, faded: false });
 }
 function removeCollider(c) {
   const i = colliders.indexOf(c);
@@ -2165,7 +2165,7 @@ function addTownBuilding(x, z, w, dp, stories, rot, kind) {
   scene.add(g);
   glowSprite(x, y + h * 0.45, z, Math.max(w, dp) * 0.72, 0xffd27a, 0.13);
   boxCollider(x, z, w, dp, rot);
-  registerOccluder(g, x, z, Math.max(w, dp) * 0.55 + 1);
+  registerOccluder(g, x, z, Math.max(w, dp) * 0.55 + 1, y + h + 0.6);
 }
 function buildTown() {
   const BC = [-112, -56, 0, 56, 112];
@@ -3751,20 +3751,22 @@ function gainRage(n) {
 }
 
 /* ─── gear / loot ─────────────────────────────────────────────────────────── */
-const RARITY = ["Common", "Rare", "Epic", "Legendary"];
-const RCOL = ["#9aa0aa", "#4aa3ff", "#b85cff", "#f0a52a"];
-const RHEX = [0x9aa0aa, 0x4aa3ff, 0xb85cff, 0xf0a52a];
+const RARITY = ["Common", "Rare", "Epic", "Legendary", "Mythic"];
+const RCOL = ["#9aa0aa", "#4aa3ff", "#b85cff", "#f0a52a", "#ff5fb0"];
+const RHEX = [0x9aa0aa, 0x4aa3ff, 0xb85cff, 0xf0a52a, 0xff5fb0];
 const WPREFIX = [
   ["Rusted", "Notched", "Pitted", "Cracked"],
   ["Iron", "Tempered", "Keen", "Soldier's"],
   ["Grave", "Bloodforged", "Vicious", "Executioner's"],
   ["Doomforged", "Ancient", "Mortis", "Godcleaving"],
+  ["Voidforged", "Worldsunder", "Apocrypha", "Hellrend"],
 ];
 const APREFIX = [
   ["Threadbare", "Worn", "Tattered", "Patched"],
   ["Sturdy", "Reinforced", "Sentinel's", "Trooper's"],
   ["Gravewatch", "Warded", "Vicious", "Grave-touched"],
   ["Undying", "Ancient", "Doomforged", "Eternal"],
+  ["Apocalypse", "Worldscale", "Eternity", "Voidwoven"],
 ];
 const WEAPON_BASE = {
   greatsword: ["Greatsword", "Warblade", "Claymore", "Zweihander"],
@@ -3781,8 +3783,8 @@ const ARMOR_BASE = {
   plate:   ["Knight's Plate", "Steel Cuirass", "Bulwark Harness"],
   warlord: ["Warlord's Aegis", "Doomplate", "Sepulchre Armour"],
 };
-const WVAL = [[3, 8], [9, 16], [17, 28], [30, 48]];
-const AVAL = [[14, 34], [40, 75], [85, 140], [160, 260]];
+const WVAL = [[3, 8], [9, 16], [17, 28], [30, 48], [55, 88]];
+const AVAL = [[14, 34], [40, 75], [85, 140], [160, 260], [310, 470]];
 function makeItem(slot, minR, maxR) {
   const rarity = irand(minR, maxR);
   if (slot === "weapon") {
@@ -4656,9 +4658,13 @@ function killZombie(z) {
   // drops thin out as you level — late game is mastery, not a loot flood
   const dm = dropMul();
   if (z.rare || z.boss || z.type === "giant") {
-    if (z.boss || Math.random() < 0.55)
-      spawnLoot(z.x, z.z, makeItem(Math.random() < 0.5 ? "weapon" : "armor",
-        2, 3));
+    if (z.boss || Math.random() < 0.55) {
+      // tougher stages unlock Mythic gear from elites and bosses
+      const rMin = Math.min(2 + Math.max(0, level - 1), 4);
+      const rMax = Math.min(3 + Math.max(0, level - 1), 4);
+      spawnLoot(z.x, z.z, makeItem(
+        Math.random() < 0.5 ? "weapon" : "armor", rMin, rMax));
+    }
     if (z.boss || Math.random() < 0.5 * dm)
       spawnBuffDrop(z.x + rand(-3, 3), z.z + rand(-3, 3), true);
   } else if (Math.random() < 0.022 * dm) {
@@ -4670,8 +4676,9 @@ function killZombie(z) {
 }
 
 /* ─── progression & waves ─────────────────────────────────────────────────── */
-let wave = 0, kills = 0, score = 0, zombiesAlive = 0, totalDmg = 0;
+let wave = 0, kills = 0, score = 0, zombiesAlive = 0, totalDmg = 0, level = 1;
 let waveState = "fight", toSpawn = [], spawnT = 0, waveCountPrev = 0;
+let portal = null, portalActive = false, portalT = 0;
 let levelFx = 0;
 // ─── combat combo — sustained fighting compounds your score multiplier ───
 let comboMul = 1, comboT = 0, comboOut = 99, comboFx = 0;
@@ -4710,8 +4717,9 @@ function startWave(n) {
   wave = n;
   toSpawn = [];
   let count;
-  if (n === 1) count = 18;
-  else count = Math.round(waveCountPrev * 1.18) + 4;
+  if (n === 1) count = 26;
+  else count = Math.round(waveCountPrev * 1.22) + 7;
+  count = Math.round(count * (1 + (level - 1) * 0.4));
   waveCountPrev = count;
   for (let i = 0; i < count; i++) {
     const r = Math.random();
@@ -4724,7 +4732,7 @@ function startWave(n) {
     toSpawn.push(t);
   }
   if (n % 5 === 0) toSpawn.push("boss");        // every 5th wave: a BOSS
-  spawnT = 0.7;
+  spawnT = 0.35;
   waveState = "fight";
   banner(n % 5 === 0 ? "A monstrous thing stirs below" : "The dead rise",
     "WAVE " + n);
@@ -4735,11 +4743,15 @@ function updateWaves(dt) {
   if (waveState !== "fight") return;
   if (toSpawn.length) {
     spawnT -= dt;
-    if (spawnT <= 0 && zombiesAlive < 80) {
-      // 5% of the time (from wave 3) a rare Revenant claws free instead
+    if (spawnT <= 0 && zombiesAlive < 110) {
+      // about 1 in 5 spawns dives off a rooftop; the rest claw up from the ground
+      const t = toSpawn.pop();
       if (wave >= 3 && Math.random() < 0.05) spawnZombie("revenant", true);
-      else spawnZombie(toSpawn.pop());
-      spawnT = Math.max(0.1, 0.6 - wave * 0.025);
+      else if ((t === "shambler" || t === "runner") && occluders.length &&
+               Math.random() < 0.22 && spawnDiver(t)) {
+        /* a rooftop diver took its place */
+      } else spawnZombie(t);
+      spawnT = Math.max(0.06, 0.42 - wave * 0.022);
     }
   } else if (zombiesAlive <= 0) {
     waveState = "cleared";
@@ -4755,10 +4767,18 @@ const moundGeo = (() => {
 function spawnZombie(type, rare) {
   const d = ETYPES[type];
   let x, z, ok = false, tries = 0;
-  while (!ok && tries < 36) {
-    const a = rand(0, TAU), dist = rand(20, 40);
-    x = player.x + Math.cos(a) * dist; z = player.z + Math.sin(a) * dist;
+  while (!ok && tries < 50) {
     tries++;
+    // 30% claw up near the hero, 70% anywhere across the map
+    if (Math.random() < 0.3) {
+      const a = rand(0, TAU), dist = rand(22, 55);
+      x = player.x + Math.cos(a) * dist;
+      z = player.z + Math.sin(a) * dist;
+    } else {
+      x = rand(-ARENA + 14, ARENA - 14);
+      z = rand(-ARENA + 14, ZSHORE - 6);
+    }
+    if (Math.hypot(x - player.x, z - player.z) < 18) continue;
     if (Math.abs(x) > ARENA - 9 || z < -ARENA + 9 || z > ZSHORE - 4) continue;
     if (blocked(x, z, 3)) continue;
     ok = true;
@@ -4782,7 +4802,8 @@ function spawnZombie(type, rare) {
   const hpScale = type === "boss"
     ? 1 + Math.max(0, wave - 5) * 0.3
     : 1 + (wave - 1) * 0.20;
-  const hp = d.hp * hpScale;
+  const levelMul = 1 + (level - 1) * 0.55;        // each level toughens the horde
+  const hp = d.hp * hpScale * levelMul;
   const crawler = !!obj.userData.crawler;
   zombies.push({
     obj, mound, type, rare: !!rare, boss: type === "boss", x, z, y: gy,
@@ -4802,6 +4823,54 @@ function spawnZombie(type, rare) {
   spawnParts(x, gy + 0.3, z, 20,
     { color: 0x3a2c1c, speed: 8, up: 5, life: 0.8 });
   Sound.rise();
+}
+
+/* ─── rooftop dive — a zombie launches off a building toward the hero ─────── */
+function spawnDiver(type) {
+  if (!occluders.length) return false;
+  // pick a building close to the hero — but not the one he's right beside
+  let best = null, bestD = 1e9;
+  for (let i = 0; i < 14; i++) {
+    const oc = occluders[(Math.random() * occluders.length) | 0];
+    const d = Math.hypot(oc.x - player.x, oc.z - player.z);
+    if (d > 16 && d < 90 && d < bestD) { bestD = d; best = oc; }
+  }
+  if (!best) return false;
+  const d = ETYPES[type];
+  const ang = rand(0, TAU), rad = best.r * 0.4;
+  const x = best.x + Math.cos(ang) * rad, z = best.z + Math.sin(ang) * rad;
+  const topY = best.topY;
+  const sizeMul = 1 + Math.min(wave, 24) * 0.014;
+  const obj = buildZombie(type, false);
+  obj.scale.setScalar(sizeMul);
+  obj.position.set(x, topY, z);
+  scene.add(obj);
+  // aim at the hero
+  const dx = player.x - x, dz = player.z - z;
+  const dh = Math.hypot(dx, dz) || 1;
+  const vx = dx / dh * 12, vz = dz / dh * 12;
+  const hpScale = 1 + (wave - 1) * 0.20;
+  const lvlMul = 1 + (level - 1) * 0.55;
+  const hp = d.hp * hpScale * lvlMul;
+  zombies.push({
+    obj, mound: null, type, rare: false, boss: false, x, z, y: topY,
+    hp, maxHp: hp, sizeMul, crawler: false,
+    speed: d.speed, r: d.r * sizeMul,
+    state: "diving", diveVx: vx, diveVz: vz, diveVy: 0,
+    riseT: 0, walkP: 0, t: rand(0, 5),
+    flash: 0, atkCd: 0, stagger: 0, kx: 0, kz: 0,
+    groanT: 99, dieT: 0,
+    burn: 0, burnDps: 0, chill: 0, chillHits: 0, stun: 0, frozen: false,
+    quake: 0, dodgeT: 0, dodgeAng: 0,
+    spCd: 99, spState: 0, spT: 0, spAng: 0, spH: topY - groundHeight(x, z),
+    lsx: 0, lsz: 0, ltx: 0, ltz: 0,
+    steerBias: 0,
+  });
+  zombiesAlive++;
+  spawnParts(x, topY, z, 14,
+    { color: 0x6a1410, speed: 9, up: 4, life: 0.6 });
+  Sound.groan();
+  return true;
 }
 
 /* ─── damage to the player ────────────────────────────────────────────────── */
@@ -5592,7 +5661,11 @@ function updateCharTimer(dt) {
 }
 function closeChar() {
   UI.charScreen.classList.add("hidden");
-  if (charFlow) { charFlow = false; startWave(wave + 1); }
+  if (charFlow) {
+    charFlow = false;
+    if (wave > 0 && wave % 10 === 0) activatePortal();
+    else startWave(wave + 1);
+  }
   state = ST.PLAYING;
   document.body.style.cursor = "none";
 }
@@ -5705,6 +5778,78 @@ function onWaveCleared() {
   else
     openChar(true, true);
 }
+/* ─── level portal — a doorway to the next stage ──────────────────────────── */
+function buildPortal() {
+  if (portal) return;
+  portal = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(2.7, 0.42, 8, 28),
+    new THREE.MeshStandardMaterial({ color: 0x4a1668, emissive: 0xb05fee,
+      emissiveIntensity: 1.7, roughness: 0.35, metalness: 0.5 }));
+  ring.rotation.x = Math.PI / 2;
+  portal.add(ring);
+  const inner = new THREE.Mesh(
+    new THREE.CircleGeometry(2.4, 28),
+    new THREE.MeshBasicMaterial({ color: 0x7a3ad6, transparent: true,
+      opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+  inner.rotation.x = Math.PI / 2;
+  portal.add(inner);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+    color: 0xc870ff, transparent: true, opacity: 0.7, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  glow.scale.setScalar(8);
+  portal.add(glow);
+  const light = new THREE.PointLight(0xb05fee, 3.5, 36, 2);
+  light.position.set(0, 0.5, 0); portal.add(light);
+  portal.position.set(0, 3.0, -22);
+  portal.visible = false;
+  scene.add(portal);
+}
+function activatePortal() {
+  buildPortal();
+  portal.visible = true;
+  portalActive = true; portalT = 0;
+  banner("A PORTAL OPENS — STEP THROUGH", "STAGE CLEARED");
+  Sound.ability && Sound.ability();
+}
+function updatePortal(dt) {
+  if (!portalActive || !portal) return;
+  portalT += dt;
+  portal.rotation.y = portalT * 0.6;
+  portal.position.y = 3.0 + Math.sin(portalT * 1.4) * 0.22;
+  // a constant trickle of swirling embers
+  if (Math.random() < dt * 18) {
+    const a = portalT * 3.5 + rand(-1, 1);
+    spawnParts(portal.position.x + Math.cos(a) * 2.6,
+      portal.position.y + rand(-1.5, 1.5),
+      portal.position.z + Math.sin(a) * 2.6, 1,
+      { color: pick([0xc870ff, 0xff9affff & 0xffffff, 0x8a3ad6]),
+        speed: 1.2, up: 1.2, grav: -0.4, life: 0.8 });
+  }
+  if (player && Math.hypot(player.x - portal.position.x,
+      player.z - portal.position.z) < 3.6) {
+    advanceLevel();
+  }
+}
+function advanceLevel() {
+  level++;
+  portalActive = false;
+  if (portal) portal.visible = false;
+  // wipe the lingering horde
+  for (let i = zombies.length - 1; i >= 0; i--) {
+    const z = zombies[i];
+    if (z.mound) scene.remove(z.mound);
+    scene.remove(z.obj);
+  }
+  zombies = []; zombiesAlive = 0; toSpawn = [];
+  // a thunderclap of light, then back to spawn
+  screenFlash("#c870ff", 0.7); shake(1.0);
+  spawnParts(0, 2, -22, 60,
+    { color: 0xc870ff, speed: 22, up: 8, life: 1.0 });
+  player.x = 0; player.z = 0;
+  banner("STAGE " + level + " — THE NIGHT DEEPENS", "BEGIN");
+  startWave(1);
+}
 function openAbilityChoice() {
   state = ST.CHOICE;
   document.body.style.cursor = "default";
@@ -5813,6 +5958,7 @@ function resetGame() {
   player.obj.position.set(0, player.y, 0);
   camera.position.set(CAM_OFF.x, player.y + CAM_OFF.y, CAM_OFF.z);
   kills = 0; score = 0; zombiesAlive = 0; wave = 0; waveCountPrev = 0;
+  level = 1; portalActive = false; if (portal) portal.visible = false;
   totalDmg = 0;
   comboMul = 1; comboT = 0; comboOut = 99; comboFx = 0;
   camYaw = 0; camPitch = 0.69; pendingUlt = false; clearTornadoes();
@@ -6072,6 +6218,32 @@ function updateZombies(dt) {
       continue;
     }
 
+    if (z.state === "diving") {
+      z.diveVy -= 32 * dt;
+      z.x += z.diveVx * dt;
+      z.z += z.diveVz * dt;
+      z.spH += z.diveVy * dt;
+      const gy = walkHeight(z.x, z.z);
+      z.y = gy;
+      z.obj.position.set(z.x, gy + z.spH, z.z);
+      z.obj.rotation.y = Math.atan2(z.diveVx, z.diveVz);
+      z.obj.rotation.x = clamp(-0.4 - z.diveVy * 0.035, -1.1, 0.5);
+      // arms outstretched, clawing forward through the air
+      z.obj.userData.arms[0].rotation.x = -1.9;
+      z.obj.userData.arms[1].rotation.x = -1.9;
+      if (z.spH <= 0.2) {                             // hit the ground
+        const dp = Math.hypot(z.x - player.x, z.z - player.z);
+        if (dp < 3.6 && player.alive) hurtPlayer(22 + wave * 2);
+        spawnParts(z.x, gy + 0.2, z.z, 42,
+          { color: 0x5a0c08, speed: 18, up: 5, life: 1.1, grav: 1.4 });
+        spawnGibs(z.x, gy + 0.4, z.z, 14, 0x6a1410);
+        scorch(z.x, z.z, 4.5);
+        Sound.die(); shake(0.4);
+        z.hp = 0; killZombie(z);
+      }
+      continue;
+    }
+
     if (z.state === "rising") {
       z.riseT += dt;
       const k = clamp(z.riseT / RISE_DUR, 0, 1);
@@ -6118,7 +6290,7 @@ function updateZombies(dt) {
     const dx = player.x - z.x, dz = player.z - z.z;
     const dist = Math.hypot(dx, dz) || 1;
     const reach = z.r + P.r + 0.6;
-    const dmgScale = Math.pow(DMG_SCALE, wave - 1);
+    const dmgScale = Math.pow(DMG_SCALE, wave - 1) * (1 + (level - 1) * 0.3);
     if (z.stagger > 0) z.stagger -= dt;
     else if (!stunned) {
       if (z.type === "charger") {
@@ -6610,6 +6782,7 @@ function update(dt) {
   updateLoot(dt);
   updateBuffDrops(dt);
   updateInteractables(dt);
+  updatePortal(dt);
   updateBuffs(dt);
   updateParts(dt);
   updateFlashes(dt);
