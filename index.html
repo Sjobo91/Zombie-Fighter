@@ -4487,6 +4487,17 @@ const swingArc = (() => {
   scene.add(m);
   return m;
 })();
+// arcane shield halo — a faint glowing sprite that orbits the wizard when
+// the shield passive is armed and ready to absorb a hit.
+const shieldAura = (() => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: 0x6aaaff, transparent: true,
+    opacity: 0, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  s.scale.set(5, 5, 1);
+  scene.add(s);
+  return s;
+})();
 
 /* ─── pooled flash lights ─────────────────────────────────────────────────── */
 const flashPool = [];
@@ -4581,36 +4592,52 @@ let player = null, zombies = [];
 /* CLASSES — the five heroes. Each tweaks base stats, starting weapon,
    primary attack mode, and a few class-specific tunables. */
 const CLASSES = {
-  knight:     { hpMul: 1.14, dmgMul: 1.00, spdMul: 1.00, atkSpdMul: 1.00,
+  // KNIGHT — walking fortress. Slowest but tankiest. Hyperarmor on swings.
+  // Passive PLATE WALL: 30% damage reduction always-on.
+  knight:     { hpMul: 1.40, dmgMul: 1.10, spdMul: 0.85, atkSpdMul: 0.78,
                 critC: 0.13, critMul: 2.1,
                 weapon: "greatsword", outfit: "rags",
-                wepName: "Rusted Greatsword", armorName: "Worn Plate",
-                primary: "melee",  range: 8.4,  arc: 1.2,
-                color: 0xd8b75a },
-  wizard:     { hpMul: 0.75, dmgMul: 1.35, spdMul: 0.95, atkSpdMul: 1.10,
+                wepName: "Knight's Greatsword", armorName: "Battered Plate",
+                primary: "melee",  range: 9.2,  arc: 1.4,
+                color: 0xd8b75a,
+                passive: { dmgReduction: 0.30, hyperarmor: true } },
+  // WIZARD — glass cannon. Lowest HP, biggest spell damage, blink-dash.
+  // Passive ARCANE SHIELD: regenerating barrier absorbs 1 hit every 6s.
+  wizard:     { hpMul: 0.70, dmgMul: 1.40, spdMul: 0.92, atkSpdMul: 1.05,
                 critC: 0.10, critMul: 2.0,
                 weapon: "staff", outfit: "rags",
                 wepName: "Apprentice Staff", armorName: "Arcane Robes",
                 primary: "ranged", projectile: "bolt",
-                range: 56, arc: 0.18, color: 0x6aaaff },
-  gunslinger: { hpMul: 0.90, dmgMul: 1.65, spdMul: 1.04, atkSpdMul: 0.50,
+                range: 56, arc: 0.18, color: 0x6aaaff,
+                passive: { shieldCd: 6.0 } },
+  // GUNSLINGER — burst & dodge. 6-round cylinder, must reload.
+  // Passive DEAD-EYE: each kill stacks +8% crit (max +60%), drops on hit.
+  gunslinger: { hpMul: 0.90, dmgMul: 1.65, spdMul: 1.08, atkSpdMul: 0.55,
                 critC: 0.22, critMul: 2.4,
                 weapon: "pistol", outfit: "rags",
                 wepName: "Hand Cannon", armorName: "Duster Coat",
                 primary: "ranged", projectile: "bullet",
-                range: 52, arc: 0.14, color: 0xc97a30 },
-  hunter:     { hpMul: 0.86, dmgMul: 1.15, spdMul: 1.06, atkSpdMul: 1.05,
-                critC: 0.18, critMul: 2.4,
+                range: 52, arc: 0.14, color: 0xc97a30,
+                passive: { ammo: 6, reloadT: 1.1, deadEye: true } },
+  // HUNTER — mobile precision. Charge-shot + volley + tumble.
+  // Passive HUNTER'S MARK: arrow hit marks the target; next arrow on
+  // marked target deals +40% damage.
+  hunter:     { hpMul: 0.86, dmgMul: 1.15, spdMul: 1.12, atkSpdMul: 1.05,
+                critC: 0.20, critMul: 2.4,
                 weapon: "bow", outfit: "rags",
                 wepName: "Yew Longbow", armorName: "Ranger Leather",
                 primary: "ranged", projectile: "arrow",
-                range: 64, arc: 0.10, color: 0x6abe5f },
-  rogue:      { hpMul: 0.78, dmgMul: 0.70, spdMul: 1.22, atkSpdMul: 2.80,
+                range: 64, arc: 0.10, color: 0x6abe5f,
+                passive: { mark: true, markBonus: 0.40 } },
+  // ROGUE — fastest. Alternating daggers, bleed on hit, shadow-step.
+  // Passive PERFECT STRIKE: every 4th hit is a guaranteed crit.
+  rogue:      { hpMul: 0.78, dmgMul: 0.70, spdMul: 1.25, atkSpdMul: 2.80,
                 critC: 0.34, critMul: 2.8,
                 weapon: "daggers", outfit: "rags",
                 wepName: "Twin Daggers", armorName: "Shadow Leather",
                 primary: "melee",  range: 5.6,  arc: 0.9,
-                color: 0xc850a8 },
+                color: 0xc850a8,
+                passive: { perfectStrike: 4 } },
 };
 let chosenClass = "knight";
 
@@ -4647,6 +4674,17 @@ function makePlayer() {
     daggerHand: 0,
     // rogue: shadow-step cooldown (separate from smash for clarity)
     shadowCd: 0,
+    // rogue: hit counter for "every 4th hit = guaranteed crit"
+    hitCount: 0,
+    // gunslinger: ammo cylinder (6 rounds), reload timer
+    ammo: 6, reloadT: 0,
+    // gunslinger: dead-eye crit stack from consecutive kills
+    deadEyeStacks: 0,
+    // wizard: arcane shield. shieldReady=true means next hit is absorbed.
+    // start armed so the wizard isn't naked on wave 1.
+    shieldReady: chosenClass === "wizard", shieldT: 0,
+    // hunter mark — Set of zombie refs that are currently marked
+    markedZombies: new Set(),
     ultId: null, ultChosen: false, ultActive: false,
     ultImmune: false, ultHitT: 0,
     rage: 0, maxRage: RAGE_BASE,
@@ -4687,6 +4725,9 @@ function recalc() {
     if (m.size) sizeMul *= m.size;
   }
   if (featherOn()) { atkSpeed *= 2.5; dmgMul *= 1.5; }   // +150% attack speed
+  // GUNSLINGER DEAD-EYE — each kill stack adds +8% crit chance
+  if (cls.passive && cls.passive.deadEye && player.deadEyeStacks)
+    critC += player.deadEyeStacks * 0.08;
   player.moveMul = moveMul; player.atkSpeed = atkSpeed;
   player.dmgMul = dmgMul; player.dmgTakenMul = dmgTakenMul;
   player.lifesteal = lifesteal; player.sizeMul = sizeMul;
@@ -5644,6 +5685,7 @@ function smashStrike() {
   if (cls.weapon === "pistol") { revolverFan(dmg); return; }
   if (cls.weapon === "bow") { multishot(dmg); return; }
   if (cls.weapon === "daggers") { shadowStep(dmg); return; }
+  if (cls.weapon === "greatsword") { holyCharge(dmg); return; }
   if (ham) {
     const ix = e.x + Math.sin(e.aim) * 6.2;
     const iz = e.z + Math.cos(e.aim) * 6.2;
@@ -5721,6 +5763,56 @@ function quakeImpact(x, y, z, dmg) {
   pulseAbil("hammer");
 }
 
+/* ─── HOLY CHARGE — the knight's RMB. A shoulder-bashing forward dash
+   that knocks back and stuns everything in your path, leaves a wake of
+   busted ground and golden cross-strikes. Iframes during the charge. */
+function holyCharge(baseDmg) {
+  const e = player;
+  const dmg = baseDmg * 0.9;
+  Sound.boom(); Sound.tone && Sound.tone("triangle", 320, 220, 0.42, 0.18);
+  shake(1.0); screenFlash("#fff2b0", 0.32);
+  // path: 12 yards forward
+  const ang = e.aim;
+  const dist = 12;
+  const startX = e.x, startZ = e.z;
+  const targetX = clamp(e.x + Math.sin(ang) * dist, -ARENA + 5, ARENA - 5);
+  const targetZ = clamp(e.z + Math.cos(ang) * dist, -ARENA + 5, ZSHORE - 4);
+  // bookkeeping — reuse the leap state so existing animations apply
+  e.leapSX = startX; e.leapSZ = startZ;
+  e.leapTX = targetX; e.leapTZ = targetZ;
+  e.leaping = true; e.leapT = 0;
+  e._dashKind = "charge";              // marker — leapLand sees it
+  e.iframes = Math.max(e.iframes, P.leapTime + 0.1);
+  windRing.setColor(0xffd06a);
+  windRing.show(startX, e.y + 0.3, startZ, 6, 0.42);
+  // bash every zombie along the path
+  let hits = 0;
+  for (const z of zombies) {
+    if (z.state === "die" || z.state === "rising") continue;
+    const d = segDist(startX, startZ, targetX, targetZ, z.x, z.z);
+    if (d > z.r + 3) continue;
+    if (lineBlocked(startX, startZ, z.x, z.z)) continue;
+    hitZombie(z, dmg, true, ang, 6.5);
+    if (z.state !== "die") { z.stun = 1.2; z.quake = 3.4; }
+    hits++;
+  }
+  // golden cross-flashes & sparks along the path
+  for (let i = 0; i <= 4; i++) {
+    const k = i / 4;
+    const sx = lerp(startX, targetX, k);
+    const sz = lerp(startZ, targetZ, k);
+    spawnParts(sx, e.y + 1.4, sz, 14,
+      { color: 0xffd06a, speed: 12, up: 4, life: 0.6 });
+    for (let j = 0; j < 2; j++)
+      flare(sx + rand(-1, 1), e.y + rand(1.0, 2.6), sz + rand(-1, 1),
+        rand(4, 7), 0xffd06a, 0.6);
+  }
+  flashLight(e.x + Math.sin(ang) * 4, e.y + 2.4,
+    e.z + Math.cos(ang) * 4, 0.55, 0xffd06a);
+  gainRage(RAGE_SMASH);
+  hitStop = 0.08;
+}
+
 /* ─── ARCANE NOVA — the wizard's RMB. A pulse of arcane magic explodes
    outward from the caster. No earthquake — pure radiant force.  ─────────── */
 function arcaneNova(baseDmg) {
@@ -5777,26 +5869,39 @@ function arcaneNova(baseDmg) {
   grassFlatten = { x: e.x, z: e.z, r: range, t: 0 };
 }
 
-/* ─── REVOLVER FAN — gunslinger's RMB. Six staggered shots, a sweep
-   across a wide arc. Each shot is a real bullet projectile that physically
-   travels and can crit + ricochet through up to 2 zombies. ────────────── */
+/* ─── FAN THE HAMMER — gunslinger's RMB. Empties whatever's left in the
+   cylinder in a rapid burst (max 6 shots, 70ms apart). Triggers a reload
+   afterward. Each shot is a real piercing bullet projectile. ────────── */
 function revolverFan(baseDmg) {
   const e = player;
+  const cls = e.classDef || CLASSES.gunslinger;
+  // determine how many rounds we have left in the cylinder
+  let shots = cls.passive && cls.passive.ammo ? e.ammo : 5;
+  if (shots <= 0) {
+    if (e.reloadT <= 0 && cls.passive)
+      e.reloadT = cls.passive.reloadT;
+    return;
+  }
+  shots = Math.min(shots, 6);
+  // burn all remaining cylinder rounds + force a reload immediately
+  if (cls.passive && cls.passive.ammo) {
+    e.ammo = 0;
+    e.reloadT = cls.passive.reloadT;
+  }
   const pt = PROJ_TYPES.bullet;
   Sound.gunshot && Sound.gunshot();
   shake(0.8); screenFlash("#ffd06a", 0.28);
-  // pitch from camera so the fan also aims at the right height
   const pitchAng = (0.5 - camPitch) * 1.35;
   const cP = Math.cos(pitchAng), sP = Math.sin(pitchAng);
-  // stagger five bullets: each fires 60ms later than the last so it
-  // sounds like a hammered double-action revolver, not a shotgun.
-  const spread = 0.18;
+  const spread = 0.15;
   let shotIdx = 0;
-  for (let i = -2; i <= 2; i++) {
+  for (let i = 0; i < shots; i++) {
     const idx = shotIdx++;
+    // sweep across an arc centered on the player's aim
+    const sweepOff = (i - (shots - 1) / 2) * spread;
     setTimeout(() => {
       if (!player.alive) return;
-      const a = e.aim + i * spread + rand(-0.04, 0.04);
+      const a = e.aim + sweepOff + rand(-0.04, 0.04);
       const aimDirX = Math.sin(a) * cP;
       const aimDirZ = Math.cos(a) * cP;
       const sx = e.x + aimDirX * 1.8, sz = e.z + aimDirZ * 1.8;
@@ -5833,56 +5938,52 @@ function revolverFan(baseDmg) {
   }
 }
 
-/* ─── MULTISHOT — hunter's RMB. Five rapid-fire arrows loosed in quick
-   succession (60ms apart) — feels like an archer's pulled trigger. Each
-   arrow auto-charges to ~70% power for solid damage and good range. ─── */
+/* ─── HAIL OF ARROWS — hunter's RMB. Seven arrows loosed in a wide
+   forward arc in one breath. Each arrow flies at half the normal pierce
+   but the spread guarantees you hit something big in a horde. ─── */
 function multishot(baseDmg) {
   const e = player;
   Sound.bowfire && Sound.bowfire();
-  shake(0.3);
-  // if we were drawing the bow when RMB was pressed, abort it
+  shake(0.4);
+  // abort any draw in progress when this fires
   if (e.drawing) { e.drawing = false; e.drawT = 0; }
-  for (let i = 0; i < 5; i++) {
-    setTimeout(() => {
-      if (!player.alive) return;
-      const e2 = player;
-      const pitchAng = (0.5 - camPitch) * 1.35;
-      const cP = Math.cos(pitchAng), sP = Math.sin(pitchAng);
-      // small spread between arrows
-      const a = e2.aim + rand(-0.06, 0.06);
-      const aimDirX = Math.sin(a) * cP, aimDirZ = Math.cos(a) * cP;
-      const sx = e2.x + aimDirX * 1.6, sz = e2.z + aimDirZ * 1.6;
-      const sy = (e2.y || 0) + 2.2 + sP * 1.6;
-      const pt = PROJ_TYPES.arrow;
-      const ag = new THREE.Group();
-      const shaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.06, 0.06, 1.7, 5),
-        new THREE.MeshStandardMaterial({ color: 0x6a4a2a,
-          emissive: 0x9aeac0, emissiveIntensity: 1.0 }));
-      shaft.rotation.x = Math.PI / 2; ag.add(shaft);
-      const tip = new THREE.Mesh(
-        new THREE.ConeGeometry(0.14, 0.38, 5),
-        new THREE.MeshStandardMaterial({ color: 0xe6e2d0,
-          emissive: 0x9aeac0, emissiveIntensity: 1.0 }));
-      tip.position.z = 0.95; tip.rotation.x = Math.PI / 2; ag.add(tip);
-      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: flareTex, color: 0x9aeac0, transparent: true,
-        opacity: 0.55, depthWrite: false,
-        blending: THREE.AdditiveBlending }));
-      halo.scale.set(1.1, 1.1, 1); ag.add(halo);
-      ag.position.set(sx, sy, sz);
-      ag.rotation.y = a; ag.rotation.x = -pitchAng;
-      scene.add(ag);
-      const speed = pt.speed * 1.15;
-      heroProjectiles.push({ obj: ag, kind: "arrow", x: sx, y: sy, z: sz,
-        vx: aimDirX * speed, vy: sP * speed, vz: aimDirZ * speed,
-        life: pt.life * 1.4, hits: new Set(), pierce: pt.pierce + 1,
-        def: Object.assign({}, pt, { dmgMul: pt.dmgMul * 1.2 }) });
-      if (i > 0) Sound.bowfire && Sound.bowfire();
-      spawnParts(sx, sy, sz, 6, { color: 0x9aeac0, speed: 10, life: 0.25 });
-    }, i * 70);
+  const pitchAng = (0.5 - camPitch) * 1.35;
+  const cP = Math.cos(pitchAng), sP = Math.sin(pitchAng);
+  const ARROWS = 7;
+  const arcSpan = 1.05;                             // ~60° wide cone
+  const pt = PROJ_TYPES.arrow;
+  for (let i = 0; i < ARROWS; i++) {
+    const off = (i - (ARROWS - 1) / 2) / ((ARROWS - 1) / 2) * arcSpan * 0.5;
+    const a = e.aim + off;
+    const aimDirX = Math.sin(a) * cP, aimDirZ = Math.cos(a) * cP;
+    const sx = e.x + aimDirX * 1.6, sz = e.z + aimDirZ * 1.6;
+    const sy = (e.y || 0) + 2.2 + sP * 1.6;
+    const ag = new THREE.Group();
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.06, 1.7, 5),
+      new THREE.MeshStandardMaterial({ color: 0x6a4a2a,
+        emissive: 0x9aeac0, emissiveIntensity: 0.9 }));
+    shaft.rotation.x = Math.PI / 2; ag.add(shaft);
+    const tip = new THREE.Mesh(
+      new THREE.ConeGeometry(0.13, 0.36, 5),
+      new THREE.MeshStandardMaterial({ color: 0xe6e2d0,
+        emissive: 0x9aeac0, emissiveIntensity: 0.9 }));
+    tip.position.z = 0.95; tip.rotation.x = Math.PI / 2; ag.add(tip);
+    ag.position.set(sx, sy, sz);
+    ag.rotation.y = a; ag.rotation.x = -pitchAng;
+    scene.add(ag);
+    const speed = pt.speed * 1.1;
+    heroProjectiles.push({ obj: ag, kind: "arrow", x: sx, y: sy, z: sz,
+      vx: aimDirX * speed, vy: sP * speed, vz: aimDirZ * speed,
+      life: pt.life * 1.3, hits: new Set(), pierce: pt.pierce,
+      def: Object.assign({}, pt, { dmgMul: pt.dmgMul * 0.95 }) });
   }
-  flashLight(e.x, e.y + 2.4, e.z, 0.32, 0x9aeac0);
+  // a single, satisfying bowfire pop (not 7 — that'd be noise mush)
+  Sound.bowfire && Sound.bowfire();
+  flashLight(e.x, e.y + 2.4, e.z, 0.4, 0x9aeac0);
+  spawnParts(e.x + Math.sin(e.aim) * 1.6, e.y + 2.4,
+    e.z + Math.cos(e.aim) * 1.6, 20,
+    { color: 0x9aeac0, speed: 14, life: 0.35 });
 }
 
 /* ─── SHADOW STEP — rogue's RMB. Teleport behind the nearest zombie in
@@ -6012,7 +6113,17 @@ function fanOfKnives(baseDmg) {
 /* SPACE — the LEAP SMASH: arc into the air, crash down, tear an earthquake */
 function tryDash() {
   if (player.dashCd > 0 || player.leaping || !player.alive) return;
+  if (player.drawing) { player.drawing = false; player.drawT = 0; }
   player.atk = false; player.smash = false;
+  const cls = (player.classDef || CLASSES.knight);
+  // each class has its own escape skill — leap for the knight, blink for the
+  // wizard, combat-roll for the gunslinger, tumble for the hunter, vanish
+  // for the rogue. Same dashCd, very different feel.
+  if (cls.weapon === "staff")    { wizardBlink();   return; }
+  if (cls.weapon === "pistol")   { combatRoll();    return; }
+  if (cls.weapon === "bow")      { hunterTumble();  return; }
+  if (cls.weapon === "daggers")  { rogueVanish();   return; }
+  // KNIGHT — the existing leap-smash. Big, heavy, knightly.
   const mv = moveVec();
   const ang = mv ? Math.atan2(mv.x, mv.z) : player.aim;
   player.moveAng = ang;
@@ -6031,9 +6142,157 @@ function tryDash() {
   windRing.setColor(0xcaa46a);
   windRing.show(player.x, player.y + 0.15, player.z, 13, 0.36);
 }
-/* the leap lands — an earthquake tears the ground along the whole arc */
+
+/* ─── WIZARD BLINK — instant teleport ~18yd along the camera direction.
+   Arcane motes burst at both endpoints; you keep facing the same way. */
+function wizardBlink() {
+  const e = player;
+  // choose direction: aim if no movement keys, otherwise movement
+  const mv = moveVec();
+  const ang = mv ? Math.atan2(mv.x, mv.z) : e.aim;
+  const dist = 18;
+  let tx = e.x + Math.sin(ang) * dist;
+  let tz = e.z + Math.cos(ang) * dist;
+  // shorten the blink if a wall is in the way
+  for (let step = 1.0; step >= 0.1; step -= 0.18) {
+    const cx = e.x + Math.sin(ang) * dist * step;
+    const cz = e.z + Math.cos(ang) * dist * step;
+    if (!lineBlocked(e.x, e.z, cx, cz) && !blocked(cx, cz, 2)) {
+      tx = cx; tz = cz; break;
+    }
+  }
+  tx = clamp(tx, -ARENA + 5, ARENA - 5);
+  tz = clamp(tz, -ARENA + 5, ZSHORE - 4);
+  // ghost trail at the OLD position
+  for (let i = 0; i < 4; i++)
+    dashGhost(lerp(e.x, tx, i / 4), e.y + 1, lerp(e.z, tz, i / 4), e.aim);
+  spawnParts(e.x, e.y + 1.6, e.z, 36,
+    { color: 0x9adfff, speed: 14, life: 0.6 });
+  for (let i = 0; i < 5; i++)
+    flare(e.x + rand(-1, 1), e.y + rand(0.6, 2.6), e.z + rand(-1, 1),
+      rand(4, 6), 0x6aaaff, 0.55);
+  e.x = tx; e.z = tz; e.y = walkHeight(tx, tz);
+  spawnParts(tx, e.y + 1.6, tz, 36,
+    { color: 0x9adfff, speed: 14, life: 0.6 });
+  for (let i = 0; i < 6; i++)
+    flare(tx + rand(-1, 1), e.y + rand(0.6, 2.6), tz + rand(-1, 1),
+      rand(4, 6), 0x6aaaff, 0.6);
+  flashLight(tx, e.y + 2, tz, 0.42, 0x6aaaff);
+  e.dashCd = P.dashCd * 0.45;       // shorter cooldown — wizard's a kiter
+  e.iframes = 0.34;
+  Sound.blink && Sound.blink();
+  shake(0.25);
+}
+
+/* ─── COMBAT ROLL — gunslinger's lateral dive with iframes. Quick, low to
+   the ground, no leap-smash. Rolls in the movement direction (or away
+   from the camera aim if standing still). */
+function combatRoll() {
+  const e = player;
+  const mv = moveVec();
+  const ang = mv ? Math.atan2(mv.x, mv.z) : (e.aim + Math.PI); // roll back
+  e.moveAng = ang;
+  e.leapSX = e.x; e.leapSZ = e.z;
+  e.leapTX = clamp(e.x + Math.sin(ang) * 14, -ARENA + 5, ARENA - 5);
+  e.leapTZ = clamp(e.z + Math.cos(ang) * 14, -ARENA + 5, ZSHORE - 3);
+  e.leaping = true; e.leapT = 0;
+  e._dashKind = "roll";              // tells leapLand to skip the quake
+  e.dashCd = P.dashCd * 0.55;
+  e.iframes = 0.45;
+  e.dashTrailT = 0;
+  Sound.dash(); shake(0.2);
+  spawnParts(e.x, e.y + 0.3, e.z, 18,
+    { color: 0xc89a36, speed: 12, life: 0.4 });
+}
+
+/* ─── HUNTER TUMBLE — a low, fast lateral roll that grants a brief speed
+   buff after landing. Encourages constant repositioning. */
+function hunterTumble() {
+  const e = player;
+  const mv = moveVec();
+  const ang = mv ? Math.atan2(mv.x, mv.z) : (e.aim + Math.PI);
+  e.moveAng = ang;
+  e.leapSX = e.x; e.leapSZ = e.z;
+  e.leapTX = clamp(e.x + Math.sin(ang) * 16, -ARENA + 5, ARENA - 5);
+  e.leapTZ = clamp(e.z + Math.cos(ang) * 16, -ARENA + 5, ZSHORE - 3);
+  e.leaping = true; e.leapT = 0;
+  e._dashKind = "tumble";
+  e.dashCd = P.dashCd * 0.5;
+  e.iframes = 0.4;
+  e.dashTrailT = 0;
+  // buff: +25% move speed for 2s after the tumble
+  e._tumbleBuffT = 2.0;
+  Sound.dash(); shake(0.2);
+  spawnParts(e.x, e.y + 0.4, e.z, 16,
+    { color: 0x9aeac0, speed: 12, up: 4, life: 0.45 });
+}
+
+/* ─── ROGUE VANISH — short forward stealth-blink. The rogue fades into
+   smoke, reappears 12yd ahead, and is briefly untargetable. */
+function rogueVanish() {
+  const e = player;
+  const mv = moveVec();
+  const ang = mv ? Math.atan2(mv.x, mv.z) : e.aim;
+  let tx = e.x + Math.sin(ang) * 12;
+  let tz = e.z + Math.cos(ang) * 12;
+  // wall-safe
+  for (let step = 1.0; step >= 0.1; step -= 0.18) {
+    const cx = e.x + Math.sin(ang) * 12 * step;
+    const cz = e.z + Math.cos(ang) * 12 * step;
+    if (!lineBlocked(e.x, e.z, cx, cz) && !blocked(cx, cz, 2)) {
+      tx = cx; tz = cz; break;
+    }
+  }
+  tx = clamp(tx, -ARENA + 5, ARENA - 5);
+  tz = clamp(tz, -ARENA + 5, ZSHORE - 4);
+  spawnParts(e.x, e.y + 1.4, e.z, 26,
+    { color: 0xc850a8, speed: 12, life: 0.5 });
+  spawnParts(e.x, e.y + 1.4, e.z, 14,
+    { color: 0x1a0820, speed: 9, up: 4, life: 0.85 });
+  e.x = tx; e.z = tz; e.y = walkHeight(tx, tz);
+  spawnParts(tx, e.y + 1.4, tz, 26,
+    { color: 0xc850a8, speed: 12, life: 0.5 });
+  for (let i = 0; i < 4; i++)
+    flare(tx + rand(-1, 1), e.y + rand(0.6, 2.4), tz + rand(-1, 1),
+      rand(3, 5), 0xc850a8, 0.5);
+  e.dashCd = P.dashCd * 0.4;        // shortest cooldown — rogue mobility
+  e.iframes = 0.5;
+  Sound.blink && Sound.blink();
+  shake(0.15);
+}
+/* the leap lands — an earthquake tears the ground along the whole arc.
+   For non-knight rolls/tumbles the quake is skipped — they're just dives. */
 function leapLand() {
   const e = player;
+  // gunslinger / hunter dash kinds skip the quake & damage — they're
+  // mobility tools, not weapon strikes.
+  if (e._dashKind === "roll" || e._dashKind === "tumble") {
+    const kind = e._dashKind;
+    e._dashKind = null;
+    e.leapSlowT = 0.3;                       // tiny recover
+    const col = kind === "tumble" ? 0x9aeac0 : 0xc89a36;
+    spawnParts(e.x, e.y + 0.3, e.z, 16,
+      { color: col, speed: 12, life: 0.4 });
+    Sound.dash();
+    return;
+  }
+  // KNIGHT HOLY CHARGE — landing burst, golden cross sparkle, no quake
+  if (e._dashKind === "charge") {
+    e._dashKind = null;
+    e.leapSlowT = 0.6;
+    smashRing.setColor(0xffd06a);
+    smashRing.show(e.x, e.y + 0.2, e.z, 9, 0.4);
+    boomRing.setColor(0xfff2b0);
+    boomRing.show(e.x, e.y + 0.2, e.z, 12, 0.45);
+    spawnParts(e.x, e.y + 0.6, e.z, 48,
+      { color: 0xffd06a, speed: 20, up: 8, life: 0.7 });
+    for (let i = 0; i < 6; i++)
+      flare(e.x + rand(-2, 2), e.y + rand(0.5, 3.4), e.z + rand(-2, 2),
+        rand(5, 8), 0xfff2b0, 0.55);
+    flashLight(e.x, e.y + 2.6, e.z, 0.45, 0xffd06a);
+    Sound.smash();
+    return;
+  }
   gainRage(RAGE_LEAP);
   e.leapSlowT = 3;                               // crushing recovery
   const smashBase = e.dmg * e.dmgMul * (hasA("hammer") ? 4.2 : 3.0)
@@ -6205,6 +6464,24 @@ function rangedFire() {
   const cls = player.classDef || CLASSES.knight;
   const kind = cls.projectile;
   const pt = PROJ_TYPES[kind]; if (!pt) return;
+  // GUNSLINGER — out of ammo? trigger a reload and skip the shot
+  if (cls.passive && cls.passive.ammo) {
+    if (player.ammo <= 0) {
+      if (player.reloadT <= 0) {
+        player.reloadT = cls.passive.reloadT;
+        // chamber spin sound
+        Sound.tone && Sound.tone("triangle", 720, 240, 0.12, 0.08);
+        Sound.tone && Sound.tone("square", 460, 220, 0.16, 0.07, 0.08);
+      }
+      return;
+    }
+    player.ammo--;
+    // auto-reload after burning the last round
+    if (player.ammo === 0 && player.reloadT <= 0) {
+      player.reloadT = cls.passive.reloadT;
+      Sound.tone && Sound.tone("triangle", 720, 240, 0.12, 0.08);
+    }
+  }
   Sound.swing();
   // ── aim direction — yaw from player.aim, pitch from camPitch
   //    so dragging the camera UP makes projectiles arc upward.
@@ -6477,6 +6754,36 @@ function applyChill(z) {
 }
 function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
   registerCombat();                            // keep the combo alive
+  // ── class passives that modify the incoming hit ──
+  if (player) {
+    const cls = player.classDef || CLASSES.knight;
+    if (cls.passive) {
+      // HUNTER'S MARK — if the target is already marked, this arrow does
+      // bonus damage and the mark is consumed.
+      if (cls.passive.mark && !isChain) {
+        if (player.markedZombies.has(z)) {
+          dmg *= (1 + cls.passive.markBonus);
+          player.markedZombies.delete(z);
+          // small purple ripple to telegraph the bonus damage
+          spawnParts(z.x, z.y + 2, z.z, 10,
+            { color: 0x9aeac0, speed: 8, life: 0.4 });
+        } else {
+          // apply a fresh mark
+          player.markedZombies.add(z);
+        }
+      }
+      // ROGUE PERFECT STRIKE — every Nth dagger hit is a guaranteed crit
+      if (cls.passive.perfectStrike && !isChain && !crit) {
+        player.hitCount = (player.hitCount || 0) + 1;
+        if (player.hitCount % cls.passive.perfectStrike === 0) {
+          crit = true;
+          dmg *= player.critMul;
+        }
+      }
+      // GUNSLINGER DEAD-EYE — every kill stacks; if this hit kills,
+      // the bonus crit chance applies to FUTURE shots.
+    }
+  }
   dmg = Math.max(1, Math.round(dmg));
   totalDmg += dmg;                             // tallied for the death screen
   z.hp -= dmg; z.flash = 0.14;
@@ -6535,6 +6842,18 @@ function killZombie(z) {
   z.state = "die"; z.dieT = 0;
   zombiesAlive--;
   kills++;
+  // GUNSLINGER DEAD-EYE — each kill stacks +8% crit (capped at 60%)
+  if (player) {
+    const cls = player.classDef || CLASSES.knight;
+    if (cls.passive && cls.passive.deadEye) {
+      const before = player.deadEyeStacks;
+      player.deadEyeStacks = Math.min(player.deadEyeStacks + 1, 8);
+      if (before !== player.deadEyeStacks) recalc();
+    }
+    // HUNTER — clear any mark on this zombie
+    if (cls.passive && cls.passive.mark)
+      player.markedZombies.delete(z);
+  }
   const xp = ETYPES[z.type].xp;
   score += Math.round(xp * comboMul);          // combo multiplies the haul
   gainXp(xp);
@@ -6794,9 +7113,32 @@ function spawnDiver(type) {
 /* ─── damage to the player ────────────────────────────────────────────────── */
 function hurtPlayer(amt) {
   if (!player.alive || player.iframes > 0 || player.ultImmune) return;
+  // ── WIZARD: arcane shield absorbs an entire hit, then disarms.
+  if (player.shieldReady) {
+    player.shieldReady = false; player.shieldT = 0;
+    Sound.freeze && Sound.freeze();
+    screenFlash("#9adfff", 0.35);
+    shake(0.4);
+    smashRing.setColor(0x6aaaff);
+    smashRing.show(player.x, player.y + 1.6, player.z, 4, 0.45);
+    spawnParts(player.x, player.y + 1.6, player.z, 32,
+      { color: 0x9adfff, speed: 16, life: 0.55 });
+    for (let i = 0; i < 5; i++)
+      flare(player.x + rand(-1, 1), player.y + rand(0.4, 2.6),
+        player.z + rand(-1, 1), rand(3, 5), 0x6aaaff, 0.6);
+    return;          // hit fully absorbed
+  }
+  // ── KNIGHT: passive plate-wall damage reduction
+  const cls = player.classDef || CLASSES.knight;
+  if (cls.passive && cls.passive.dmgReduction)
+    amt *= (1 - cls.passive.dmgReduction);
   amt = Math.round(amt * player.dmgTakenMul);
   player.hp -= amt; player.hurt = 0.4;
   Sound.hurt(); shake(0.5);
+  // ── GUNSLINGER: taking damage breaks the dead-eye streak
+  if (cls.passive && cls.passive.deadEye && player.deadEyeStacks) {
+    player.deadEyeStacks = 0; recalc();
+  }
   if (player.hp <= 0) { player.hp = 0; player.alive = false; gameOver(); }
 }
 /* the boss rears up and slams the earth — a wide, brutal shockwave */
@@ -8000,6 +8342,42 @@ function updatePlayer(dt) {
   const e = player; e.t += dt;
   e.aim = camYaw;                     // the hero always faces the camera
   if (e.atkSlowT > 0) e.atkSlowT -= dt;
+  // ── per-class passive bookkeeping ──
+  const _cls = e.classDef || CLASSES.knight;
+  if (_cls.passive) {
+    // WIZARD — arcane shield regenerates on a timer
+    if (_cls.passive.shieldCd && !e.shieldReady) {
+      e.shieldT += dt;
+      if (e.shieldT >= _cls.passive.shieldCd) {
+        e.shieldReady = true; e.shieldT = 0;
+        // a small visual ping when it arms
+        spawnParts(e.x, e.y + 1.6, e.z, 12,
+          { color: 0x6aaaff, speed: 6, life: 0.4 });
+        Sound.tone && Sound.tone("sine", 880, 1320, 0.18, 0.08);
+      }
+    }
+    // GUNSLINGER — reload tick
+    if (_cls.passive.ammo) {
+      if (e.reloadT > 0) {
+        e.reloadT -= dt;
+        if (e.reloadT <= 0) {
+          e.ammo = _cls.passive.ammo;
+          Sound.tone && Sound.tone("triangle", 300, 600, 0.16, 0.12);
+        }
+      }
+    }
+    // HUNTER — sweep marks off dead/distant zombies
+    if (_cls.passive.mark && e.markedZombies.size) {
+      const stale = [];
+      for (const z of e.markedZombies) {
+        if (!z || z.state === "die" ||
+            Math.hypot(z.x - e.x, z.z - e.z) > 100) stale.push(z);
+      }
+      for (const z of stale) e.markedZombies.delete(z);
+    }
+  }
+  // TUMBLE buff — small speed boost for 2s after a hunter tumble
+  if (e._tumbleBuffT && e._tumbleBuffT > 0) e._tumbleBuffT -= dt;
 
   const wantSprint = (keys["ShiftLeft"] || keys["ShiftRight"]) &&
     e.stamina > 1;
@@ -8028,7 +8406,8 @@ function updatePlayer(dt) {
     if (mv) {
       const slow = 1 - ATK_SLOW_AMT * clamp(e.atkSlowT / ATK_SLOW_DUR, 0, 1);
       const recover = e.leapSlowT > 0 ? 0.3 : 1;  // staggered after a leap
-      const sp = P.speed * e.moveMul * slow * recover *
+      const tumble = (e._tumbleBuffT && e._tumbleBuffT > 0) ? 1.35 : 1;
+      const sp = P.speed * e.moveMul * slow * recover * tumble *
         (e.sprinting ? P.sprintMul : 1);
       e.x += mv.x * sp * dt;
       e.z += mv.z * sp * dt;
@@ -8219,6 +8598,15 @@ function poseSurvivor() {
     swingArc.scale.setScalar(arcScl);
     swingArc.material.opacity = (1 - arcK) * 0.72;
   } else swingArc.visible = false;
+  // wizard arcane shield — gently floating halo when armed
+  if (e.shieldReady) {
+    shieldAura.position.set(e.x, e.y + 2.0 + Math.sin(e.t * 3) * 0.12, e.z);
+    shieldAura.material.opacity = 0.45 + Math.sin(e.t * 6) * 0.1;
+    const s = 5 + Math.sin(e.t * 4) * 0.4;
+    shieldAura.scale.set(s, s, 1);
+  } else {
+    shieldAura.material.opacity = 0;
+  }
 }
 
 /* ─── obstacle avoidance — the dead steer around walls, cars and rubble
