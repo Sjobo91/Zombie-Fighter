@@ -4949,7 +4949,7 @@ function makePlayer() {
     hp: baseHp, maxHp: baseHp, dmg: Math.round(P.baseDmg * cls.dmgMul),
     dmgMul: 1, atkSpeed: cls.atkSpdMul || 1, moveMul: cls.spdMul || 1,
     critChance: cls.critC, critMul: cls.critMul,
-    level: 1, xp: 0, xpNext: 74,
+    level: 1, xp: 0, xpNext: 125,
     statPoints: PTS_START, stat: { power: 0, defense: 0, speed: 0 },
     gear: { weapon: null, armor: null }, inventory: [],
     abil: new Set(),
@@ -8212,12 +8212,13 @@ function updateCombo(dt) {
 }
 
 function gainXp(n) {
-  player.xp += n;
+  // XP per kill globally throttled — was running ~3 level-ups in wave 1
+  player.xp += n * 0.35;
   while (player.xp >= player.xpNext) {
     player.xp -= player.xpNext;
     player.level++;
-    // a steady climb so a fresh level — and a stat point — keeps coming
-    player.xpNext = Math.round(40 + player.level * 34);
+    // steeper level curve so ULT unlock at L9 takes the whole campaign
+    player.xpNext = Math.round(70 + player.level * 55);
     player.statPoints += PTS_PER_LEVEL;
     player.hp = Math.min(player.maxHp, player.hp + 16);
     levelFx = 1; Sound.levelup();
