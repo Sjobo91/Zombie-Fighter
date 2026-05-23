@@ -853,11 +853,13 @@ scene.add(new THREE.HemisphereLight(0x9badc8, 0x4c4738, 1.0));
 const moon = new THREE.DirectionalLight(0xd8d9e2, 0.95);
 moon.position.set(62, 100, 44);
 moon.castShadow = true;
-moon.shadow.mapSize.set(lowQ ? 1024 : 2048, lowQ ? 1024 : 2048);
+// 2048 was too steep with hundreds of dynamic casters; 1024 keeps the
+// silhouette nice without melting the GPU when the horde stacks.
+moon.shadow.mapSize.set(1024, 1024);
 moon.shadow.camera.near = 1; moon.shadow.camera.far = 340;
 // the shadow frustum is small and follows the player for crisp shadows
-moon.shadow.camera.left = -90; moon.shadow.camera.right = 90;
-moon.shadow.camera.top = 90; moon.shadow.camera.bottom = -90;
+moon.shadow.camera.left = -60; moon.shadow.camera.right = 60;
+moon.shadow.camera.top = 60; moon.shadow.camera.bottom = -60;
 moon.shadow.bias = -0.0015;
 scene.add(moon);
 scene.add(moon.target);
@@ -5543,9 +5545,10 @@ function updateUltimate(dt) {
       flare(e.x + rand(-4, 4), e.y + rand(2, 5), e.z + rand(-4, 4),
         rand(3, 5), 0xffe24a, 0.55);
   } else if (e.ultId === "bulletstorm") {
-    // rapid spiral of bullets fired in every direction
+    // rapid spiral of bullets fired in every direction (throttled
+    // when too many bullets are in flight already)
     e.ultHitT -= dt;
-    if (e.ultHitT <= 0) {
+    if (e.ultHitT <= 0 && heroProjectiles.length < 70) {
       e.ultHitT = 0.06;
       const pt = PROJ_TYPES.bullet;
       const a = e.t * 12 + Math.random() * 0.4;
@@ -5571,9 +5574,9 @@ function updateUltimate(dt) {
   }
   // ─── HUNTER ULTIMATES ──────────────────────────────────────────────
   else if (e.ultId === "arrowstorm") {
-    // arrows rain from above on nearby zombies
+    // arrows rain from above on nearby zombies (throttled by projectile cap)
     e.ultHitT -= dt;
-    if (e.ultHitT <= 0) {
+    if (e.ultHitT <= 0 && heroProjectiles.length < 70) {
       e.ultHitT = 0.18;
       const targets = zombies.filter(z =>
         z.state !== "die" && z.state !== "rising" &&
@@ -6930,6 +6933,15 @@ function meleeStrike() {
    and damage zombies on contact. Each kind has its own colour, geometry,
    speed, life and pierce-count.  */
 let heroProjectiles = [];
+// hard cap so explosive ultimates (bullet storm, arrow storm) can't
+// pile up enough projectiles to tank the framerate.
+const HERO_PROJ_CAP = 90;
+function capHeroProjectiles() {
+  while (heroProjectiles.length > HERO_PROJ_CAP) {
+    const p = heroProjectiles.shift();
+    if (p && p.obj) scene.remove(p.obj);
+  }
+}
 const PROJ_TYPES = {
   bolt:   { speed: 75, life: 1.0, pierce: 0, dmgMul: 1.0,
             col: 0x6aaaff, size: 0.5, trail: 0x6aaaff, trailN: 6 },
@@ -7020,6 +7032,7 @@ function rangedFire() {
       vx: aimDirX * pt.speed, vy: aimDirY * pt.speed, vz: aimDirZ * pt.speed,
       life: pt.life, hits: new Set(), pierce: pt.pierce, def: pt,
       runes, core, shell, halo, age: 0 });
+    capHeroProjectiles();
     return;
   }
   let geom, mat;
@@ -7100,6 +7113,10 @@ function rangedFire() {
   flashLight(startX, startY, startZ, 0.16, pt.trail);
 }
 function updateHeroProjectiles(dt) {
+  // hard cap — any over-pile from rapid-fire ults gets the oldest
+  // projectile retired immediately. Cheap insurance against framerate
+  // collapse during Bullet Storm / Arrow Storm.
+  capHeroProjectiles();
   for (let i = heroProjectiles.length - 1; i >= 0; i--) {
     const p = heroProjectiles[i];
     const prevX = p.x, prevZ = p.z;
@@ -7464,8 +7481,10 @@ function startWave(n) {
   wave = n;
   toSpawn = [];
   let count;
-  if (n === 1) count = 78;                       // was 26 (3× horde size)
-  else count = Math.round(waveCountPrev * 1.22) + 21;
+  // wave 1 is a softer opener now (was 78 → too many at once). It still
+  // grows fast, so by wave 3-4 you're swarmed.
+  if (n === 1) count = 32;
+  else count = Math.round(waveCountPrev * 1.22) + 12;
   count = Math.round(count * (1 + (level - 1) * 0.4));
   waveCountPrev = count;
   for (let i = 0; i < count; i++) {
@@ -7490,16 +7509,14 @@ function updateWaves(dt) {
   if (waveState !== "fight") return;
   if (toSpawn.length) {
     spawnT -= dt;
-    if (spawnT <= 0 && zombiesAlive < 220) {       // cap was 110 — tripled
-      // about 1 in 5 spawns dives off a rooftop; the rest claw up from the ground
+    if (spawnT <= 0 && zombiesAlive < 130) {       // perf-safe cap
       const t = toSpawn.pop();
       if (wave >= 3 && Math.random() < 0.05) spawnZombie("revenant", true);
       else if ((t === "shambler" || t === "runner") && occluders.length &&
                Math.random() < 0.22 && spawnDiver(t)) {
         /* a rooftop diver took its place */
       } else spawnZombie(t);
-      // much tighter spawn cadence — they pour in
-      spawnT = Math.max(0.02, 0.16 - wave * 0.008);
+      spawnT = Math.max(0.04, 0.22 - wave * 0.01);
     }
   } else if (zombiesAlive <= 0) {
     waveState = "cleared";
@@ -9259,14 +9276,17 @@ function poseSurvivor() {
   classAura.scale.set(auraSz, auraSz, 1);
   const hiSz = 3.6 + Math.sin(e.t * 3.1) * 0.18;
   classAuraHi.scale.set(hiSz, hiSz, 1);
-  // class-themed drifting embers around the player
+  // class-themed drifting embers — throttled so they don't flood the
+  // particle pool when there are dozens of effects on screen.
   classEmberT += 0.04;
-  if (classEmberT > 1 && Math.random() < 0.7) {
+  if (classEmberT > 1) {
     classEmberT = 0;
-    const a = Math.random() * TAU, d = rand(0.6, 1.6);
-    spawnParts(e.x + Math.cos(a) * d, e.y + rand(0.2, 2.4),
-      e.z + Math.sin(a) * d, 1,
-      { color: auraCol, speed: 0.5, life: rand(0.9, 1.6), grav: -1.4 });
+    if (Math.random() < 0.35 && zombiesAlive < 90) {
+      const a = Math.random() * TAU, d = rand(0.6, 1.6);
+      spawnParts(e.x + Math.cos(a) * d, e.y + rand(0.2, 2.4),
+        e.z + Math.sin(a) * d, 1,
+        { color: auraCol, speed: 0.5, life: rand(0.9, 1.6), grav: -1.4 });
+    }
   }
   // active-cooldown sparkle: a quick burst of light around the hero
   // when an ability resets (smash or dash). Subtle hint of readiness.
@@ -9596,6 +9616,23 @@ function poseZombie(z, d, chillMul) {
   const gy = walkHeight(z.x, z.z);
   z.y = gy;
   o.rotation.y = Math.atan2(player.x - z.x, player.z - z.z);
+  // PERF: zombies beyond ~28yd don't cast shadows. This is the single
+  // biggest performance win — the shadowmap stops rendering 100+
+  // animated rigs every frame.
+  const dToPlayer = Math.hypot(z.x - player.x, z.z - player.z);
+  const shadowOn = dToPlayer < 28;
+  if (z._shadowOn !== shadowOn) {
+    z._shadowOn = shadowOn;
+    o.traverse(m => { if (m.isMesh) m.castShadow = shadowOn; });
+  }
+  // PERF: also fully hide zombies past 160yd so the GPU doesn't waste
+  // draws on things you can't see. The fog already blackens them anyway.
+  const visibleOn = dToPlayer < 160;
+  if (z._visibleOn !== visibleOn) {
+    z._visibleOn = visibleOn;
+    o.visible = visibleOn;
+  }
+  if (!visibleOn) return;
   const moving = (z.state === "chase" || z.dodgeT > 0) && chillMul > 0;
   const amp = moving ? 0.82 : 0.12;
   if (!z.crawler) {
