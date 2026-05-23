@@ -1,0 +1,13 @@
+# Godot 4+ generated artefacts — re-created on import, no need to track.
+.godot/
+.import/
+*.import.tmp
+export.cfg
+export_presets.cfg
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local user-only state
+local.cfg
+*.translation
