@@ -2708,10 +2708,24 @@ function updatePeople(dt) {
 /* ─── weapon factory — six distinct archetypes + God's Hammer ─────────────── */
 const WEAPON_KINDS = ["greatsword", "cleaver", "axe", "saber", "halberd",
   "mace"];
-function buildWeapon(kind) {
+function buildWeapon(kind, rarity) {
+  // rarity is 0..4 — controls how ornate the weapon looks. The base mesh
+  // is the same; we layer extra metalwork, gems, runes and glow as the
+  // tier rises so a Legendary staff visibly outclasses a Common one.
+  rarity = clamp(rarity | 0, 0, 4);
   const g = new THREE.Group();
-  const gold = metalMat(0xc9a23a, 0.6);
-  const gripMat = mat(0x2a1c12, 0.9);
+  // tier-driven palettes — Common iron → Rare blue steel → Epic violet
+  // → Legendary gold → Mythic crimson void
+  const TIER_GOLD = [0x8a7a4a, 0xc9a23a, 0xd0c060, 0xffe06a, 0xff9adf];
+  const TIER_GEM  = [0x9aa6b4, 0x4aa3ff, 0xb85cff, 0xffd06a, 0xff5fb0];
+  const TIER_GRIP = [0x2a1c12, 0x2a1c12, 0x1a1828, 0x3a2810, 0x2a0a18];
+  const tierGold = TIER_GOLD[rarity];
+  const tierGem  = TIER_GEM[rarity];
+  const gold = metalMat(tierGold, 0.62);
+  const gem  = new THREE.MeshStandardMaterial({
+    color: tierGem, emissive: tierGem, emissiveIntensity: 0.6 + rarity * 0.25,
+    roughness: 0.25, metalness: 0.4 });
+  const gripMat = mat(TIER_GRIP[rarity], 0.9);
   const bladeMat = new THREE.MeshStandardMaterial({ color: 0xd6dce4,
     roughness: 0.26, metalness: 0.82, emissive: 0x000000,
     emissiveIntensity: 1.3 });
@@ -2722,6 +2736,61 @@ function buildWeapon(kind) {
     m.position.y = len / 2; g.add(m);
     const pom = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), gold);
     g.add(pom);
+    // pommel gem at Epic+
+    if (rarity >= 2) {
+      const pgem = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.16, 0), gem);
+      pgem.position.y = -0.02; g.add(pgem);
+    }
+  }
+  // tier ornamentation helpers — sprinkled at the end of each branch
+  function addTierOrnaments(opts) {
+    opts = opts || {};
+    // grip wraps for Rare+
+    if (rarity >= 1 && opts.gripLen) {
+      const rings = Math.min(2 + rarity, 5);
+      for (let i = 0; i < rings; i++) {
+        const r = new THREE.Mesh(
+          new THREE.TorusGeometry((opts.gripRad || 0.16) + 0.04,
+            0.03, 4, 8), gold);
+        r.position.y = opts.gripStart + (i + 0.5) * (opts.gripLen / rings);
+        r.rotation.x = Math.PI / 2; g.add(r);
+      }
+    }
+    // floating orbital orb at Legendary+ on a blade/head
+    if (rarity >= 3 && opts.orbY != null) {
+      const orb = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.16, 0), gem);
+      orb.position.y = opts.orbY;
+      orb.position.x = (opts.orbX || 0);
+      orb.position.z = (opts.orbZ || 0);
+      g.add(orb);
+      glowMats.push(orb.material);
+      // a faint halo
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: flareTex, color: tierGem, transparent: true,
+        opacity: 0.55, depthWrite: false,
+        blending: THREE.AdditiveBlending }));
+      halo.scale.set(0.9, 0.9, 1);
+      halo.position.copy(orb.position);
+      g.add(halo);
+    }
+    // shadow tendrils at Mythic — a few wispy cones around the weapon
+    if (rarity >= 4 && opts.tendrilY != null) {
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU;
+        const t = new THREE.Mesh(
+          new THREE.ConeGeometry(0.06, 0.5, 4),
+          new THREE.MeshBasicMaterial({ color: tierGem,
+            transparent: true, opacity: 0.6,
+            blending: THREE.AdditiveBlending, depthWrite: false }));
+        t.position.set(Math.cos(a) * 0.32, opts.tendrilY,
+          Math.sin(a) * 0.32);
+        t.rotation.z = Math.cos(a) * 0.5;
+        t.rotation.x = Math.sin(a) * 0.5;
+        g.add(t);
+      }
+    }
   }
 
   if (kind === "godhammer") {
@@ -3115,8 +3184,31 @@ function buildWeapon(kind) {
     const pom = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 5), gold);
     pom.position.set(0, 0.0, 0); g.add(pom);
   }
+  // tier ornamentation — each weapon kind gets its own anchor points
+  const ORN = {
+    greatsword: { gripStart: 0, gripLen: 1.7, gripRad: 0.16,
+                  orbY: 4.1, orbZ: 0.16, tendrilY: 4.1 },
+    cleaver:    { gripStart: 0, gripLen: 1.5, gripRad: 0.16,
+                  orbY: 3.6, orbX: 0.32, tendrilY: 3.6 },
+    axe:        { gripStart: 0, gripLen: 2.3, gripRad: 0.18,
+                  orbY: 3.9, orbX: 1.1, tendrilY: 3.9 },
+    saber:      { gripStart: 0, gripLen: 1.5, gripRad: 0.16,
+                  orbY: 1.6, tendrilY: 2.6 },
+    halberd:    { gripStart: 0, gripLen: 5.6, gripRad: 0.15,
+                  orbY: 5.0, orbX: 1.0, tendrilY: 5.0 },
+    mace:       { gripStart: 0, gripLen: 3.5, gripRad: 0.18,
+                  orbY: 4.2, tendrilY: 4.2 },
+    staff:      { gripStart: 0, gripLen: 6.0, gripRad: 0.13,
+                  orbY: 6.4, tendrilY: 6.4 },
+    pistol:     { gripStart: 0, gripLen: 0.8, gripRad: 0.26,
+                  orbY: 1.3, orbZ: 1.6, tendrilY: 1.3 },
+    bow:        { orbY: 0, orbX: 0.3, tendrilY: 0 },
+    daggers:    { orbY: 1.4, tendrilY: 1.4 },
+    dagger:     { orbY: 1.4, tendrilY: 1.4 },
+  };
+  if (ORN[kind]) addTierOrnaments(ORN[kind]);
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
-  g.userData = { kind, bladeMat, glowMats };
+  g.userData = { kind, bladeMat, glowMats, rarity };
   return g;
 }
 
@@ -4931,6 +5023,19 @@ const WEAPON_BASE = {
   saber:      ["Saber", "Falchion", "Curved Blade", "Scimitar"],
   halberd:    ["Halberd", "Glaive", "Warscythe", "Poleaxe"],
   mace:       ["Mace", "Morningstar", "Skullbreaker", "Bludgeon"],
+  staff:      ["Staff", "Spellrod", "Wizard's Cane", "Runed Pole"],
+  pistol:     ["Revolver", "Hand Cannon", "Sixshooter", "Iron Persuader"],
+  bow:        ["Longbow", "Warbow", "Recurve", "Yew Limb"],
+  daggers:    ["Twin Daggers", "Twin Fangs", "Twin Stings", "Twin Edges"],
+};
+// loot drops use the wielder's signature weapon kind so non-knight
+// classes get class-appropriate gear (a wizard finds Staves, not Sabers).
+const CLASS_LOOT_KINDS = {
+  knight:     ["greatsword", "cleaver", "axe", "saber", "halberd", "mace"],
+  wizard:     ["staff"],
+  gunslinger: ["pistol"],
+  hunter:     ["bow"],
+  rogue:      ["daggers"],
 };
 const ARMOR_BASE = {
   rags:    ["Rags", "Beggar's Wrap", "Frayed Mantle"],
@@ -4944,10 +5049,14 @@ const AVAL = [[14, 34], [40, 75], [85, 140], [160, 260], [310, 470]];
 function makeItem(slot, minR, maxR) {
   const rarity = irand(minR, maxR);
   if (slot === "weapon") {
-    const model = pick(WEAPON_KINDS);
+    // pick from THIS class's loot pool, not the global sword pool
+    const cls = (player && player.cls) || "knight";
+    const pool = CLASS_LOOT_KINDS[cls] || CLASS_LOOT_KINDS.knight;
+    const model = pick(pool);
     const r = WVAL[rarity];
     return { slot, rarity, model,
-      name: pick(WPREFIX[rarity]) + " " + pick(WEAPON_BASE[model]),
+      name: pick(WPREFIX[rarity]) + " " +
+        pick(WEAPON_BASE[model] || WEAPON_BASE.greatsword),
       value: irand(r[0], r[1]) };
   }
   let oi = rarity;
@@ -5380,19 +5489,32 @@ function applyGearVisual(obj) {
   const cls = (player && player.classDef) || CLASSES.knight;
   const ham = hasA("hammer");
   const wItem = player.gear.weapon;
-  // non-knight classes always wield their signature weapon (staff/pistol/
-  // bow/daggers). Picked-up swords still grant their rarity / glow / dmg
-  // value, but the model stays class-locked.
+  // loot drops are now class-appropriate (staff for wizards, pistol for
+  // gunslingers, etc), so the equipped item's model drives the visual
+  // directly. We still fall back to the class's signature weapon if for
+  // any reason the item model isn't a kind this class can wield.
+  const classKinds = CLASS_LOOT_KINDS[u.cls] || CLASS_LOOT_KINDS.knight;
   let wKind;
   if (ham && u.cls === "knight") wKind = "godhammer";
-  else if (u.cls && u.cls !== "knight") wKind = cls.weapon;
-  else wKind = (wItem && wItem.model) || "greatsword";
+  else if (wItem && wItem.model &&
+           (classKinds.indexOf(wItem.model) >= 0 || u.cls === "knight"))
+    wKind = wItem.model;
+  else wKind = cls.weapon;
   const wRar = wItem ? wItem.rarity : 0;
-  if (u.weaponKind !== wKind) {
+  // rebuild the weapon when either the KIND or the RARITY changes —
+  // each rarity tier adds visible ornaments (gems, runes, halos,
+  // shadow tendrils) so loot upgrades visibly upgrade your wielder.
+  if (u.weaponKind !== wKind || u.weaponRar !== wRar) {
     u.weaponMount.clear();
-    u.weapon = buildWeapon(wKind);
+    u.weapon = buildWeapon(wKind, wRar);
     u.weaponMount.add(u.weapon);
-    u.weaponKind = wKind;
+    u.weaponKind = wKind; u.weaponRar = wRar;
+    // rogue dual-wield — rebuild the off-hand to match
+    if (u.weaponMountL && u.weaponL) {
+      u.weaponMountL.clear();
+      u.weaponL = buildWeapon(wKind === "daggers" ? "dagger" : wKind, wRar);
+      u.weaponMountL.add(u.weaponL);
+    }
   }
   const scaleArr = [0.62, 0.82, 0.98, 1.16, 1.34];
   const tintArr = [0xb6bcc6, 0xccd6e0, 0xd8c4ec, 0xf2d68a, 0xff9adf];
