@@ -935,9 +935,40 @@ const Sound = (() => {
               tone("sine", 540, 150, 0.22, 0.09); },
     hurt()  { noise(0.22, 0.42, "lowpass", 1000, 300);
               tone("sawtooth", 250, 80, 0.3, 0.3); },
+    // varied undead vocalisations — picked at random by the calling code
     groan() { const f = 58 + Math.random() * 26;
-              tone("sawtooth", f, f * 0.55, 0.95, 0.07, 0, 0.55);
-              tone("sine", f * 1.5, f, 0.7, 0.04, 0.05, 0.45); },
+              tone("sawtooth", f, f * 0.55, 0.95, 0.10, 0, 0.55);
+              tone("sine", f * 1.5, f, 0.7, 0.06, 0.05, 0.45); },
+    // deep guttural growl — bigger, more menacing
+    growl() {
+      const f = 38 + Math.random() * 18;
+      tone("sawtooth", f, f * 0.5, 1.2, 0.12, 0, 0.6);
+      tone("triangle", f * 2, f * 1.2, 0.9, 0.05, 0.05, 0.5);
+      noise(0.5, 0.16, "lowpass", 240, 110, 0, 0.5);
+    },
+    // wet raspy moan — sickly, in pain
+    rasp() {
+      const f = 70 + Math.random() * 30;
+      noise(0.7, 0.22, "bandpass", 320, 1100, 1.5, 0.55);
+      tone("sawtooth", f, f * 0.6, 0.85, 0.08, 0.04, 0.5);
+    },
+    // shrill scream — used sparingly, near the player
+    scream() {
+      const f = 360 + Math.random() * 80;
+      tone("sawtooth", f, f * 0.4, 0.9, 0.16, 0, 0.5);
+      noise(0.55, 0.28, "bandpass", 900, 2400, 1.2, 0.5);
+      tone("sine", f * 2, f, 0.5, 0.08, 0.08, 0.4);
+    },
+    // wet flesh gurgle
+    gurgle() {
+      noise(0.42, 0.2, "bandpass", 220, 760, 1.4, 0.45);
+      tone("sawtooth", 90, 50, 0.4, 0.08, 0, 0.5);
+    },
+    // bite / chomp on attack
+    bite() {
+      noise(0.08, 0.36, "highpass", 1800, 3600, 0, 0.2);
+      tone("sawtooth", 220, 80, 0.12, 0.18, 0, 0.3);
+    },
     die()   { noise(0.38, 0.34, "lowpass", 800, 180); thud(66, 0.4, 0.4);
               tone("sawtooth", 140, 36, 0.42, 0.12, 0, 0.4); },
     rise()  { noise(0.75, 0.36, "lowpass", 420, 110, 0, 0.4);
@@ -1062,63 +1093,45 @@ const Ambience = (() => {
   return { start, update, stop };
 })();
 
-/* generative gothic score — soft drone, bass, pad chords, lead & counter */
+/* background music — Lantern Horde: Undead Drifters, played softly in
+   a loop while you're in the world. Falls back gracefully if the MP3
+   isn't reachable. Volume eases in/out so transitions feel natural.    */
 const Music = (() => {
-  let on = false, master = null, drone = [], t = 0, step = 0;
-  const prog = [                                // Am – F – C – G
-    [220, 261.63, 329.63], [174.61, 220, 261.63],
-    [261.63, 329.63, 392.00], [196.00, 246.94, 392.00],
-  ];
-  const lead = [440, 523.25, 659.25, 587.33, 523.25, 659.25, 783.99, 587.33];
-  function note(freq, dur, vol, type, wet) {
-    const c = Sound.actx(); if (!c || !master) return;
-    const tt = c.currentTime;
-    const o = c.createOscillator(); o.type = type || "triangle";
-    o.frequency.value = freq;
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.0001, tt);
-    g.gain.linearRampToValueAtTime(vol, tt + 0.07);
-    g.gain.exponentialRampToValueAtTime(0.0001, tt + dur);
-    o.connect(g); g.connect(master);
-    if (wet) { const s = c.createGain(); s.gain.value = wet;
-      g.connect(s); s.connect(master); }
-    o.start(tt); o.stop(tt + dur + 0.05);
-  }
+  const TARGET_VOL = 0.22;             // soft, lets the SFX breathe
+  const FADE = 1.6;
+  const audio = new Audio("assets/audio/lantern-horde.mp3");
+  audio.loop = true;
+  audio.preload = "auto";
+  audio.volume = 0;
+  let on = false, fadeT = 0, dir = 0;
+  audio.addEventListener("error", () => {
+    // file missing or blocked — silently stop trying
+    on = false;
+  });
   function start() {
-    const c = Sound.actx(); if (!c || on) return;
-    on = true; t = 0; step = 0;
-    master = c.createGain(); master.gain.value = 0.0001;
-    master.gain.linearRampToValueAtTime(0.92, c.currentTime + 7);
-    master.connect(Sound.master());
-    [55, 110].forEach(f => {                    // soft sine drone, no buzz
-      const o = c.createOscillator(); o.type = "sine"; o.frequency.value = f;
-      const g = c.createGain(); g.gain.value = 0.06;
-      o.connect(g).connect(master); o.start(); drone.push(o);
-    });
-  }
-  function update(dt) {
-    if (!on) return;
-    t += dt;
-    while (t >= 0.6) {
-      t -= 0.6; step++;
-      const chord = prog[((step / 8) | 0) % prog.length];
-      if (step % 8 === 0) chord.forEach(f => note(f, 4.2, 0.07, "sine", 0.3));
-      if (step % 2 === 0) note(chord[0] / 2, 1.4, 0.09, "triangle");
-      if (Math.random() < 0.62)
-        note(lead[step % lead.length], 0.85, 0.066, "triangle", 0.35);
-      if (step % 4 === 2 && Math.random() < 0.6)
-        note(chord[1] * 2, 0.5, 0.04, "sine", 0.4);   // soft counter-bell
-    }
+    if (on) return;
+    on = true; dir = +1; fadeT = 0;
+    // browsers gate autoplay; play() returns a Promise we can swallow.
+    const p = audio.play();
+    if (p && p.catch) p.catch(() => { /* user must interact again */ });
   }
   function stop() {
-    if (!on) return; on = false;
-    const c = Sound.actx();
-    if (c && master) master.gain.linearRampToValueAtTime(0.0001,
-      c.currentTime + 1.6);
-    const d = drone; drone = [];
-    setTimeout(() => d.forEach(o => { try { o.stop(); } catch (e) {} }), 1900);
+    if (!on) return;
+    on = false; dir = -1; fadeT = 0;
   }
-  return { start, update, stop };
+  function update(dt) {
+    if (dir > 0) {
+      fadeT = Math.min(FADE, fadeT + dt);
+      audio.volume = (fadeT / FADE) * TARGET_VOL;
+      if (fadeT >= FADE) dir = 0;
+    } else if (dir < 0) {
+      fadeT = Math.min(FADE, fadeT + dt);
+      audio.volume = (1 - fadeT / FADE) * TARGET_VOL;
+      if (fadeT >= FADE) { dir = 0; try { audio.pause(); } catch (e) {} }
+    }
+  }
+  // expose audio so the title click can prime playback (autoplay rules)
+  return { start, update, stop, _audio: audio };
 })();
 
 /* ─── terrain — a rolling land that sinks to a southern shore ─────────────── */
@@ -4498,6 +4511,30 @@ const shieldAura = (() => {
   scene.add(s);
   return s;
 })();
+// permanent class aura — a soft halo at the hero's feet that recolours per
+// class. Knight: warm gold; Wizard: arcane blue; Gunslinger: amber ember;
+// Hunter: forest green; Rogue: deep magenta.
+const classAura = (() => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: 0xffffff, transparent: true,
+    opacity: 0.5, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  s.scale.set(5.5, 5.5, 1);
+  scene.add(s);
+  return s;
+})();
+// secondary aura ring at the chest — slower pulse, opposite phase
+const classAuraHi = (() => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: 0xffffff, transparent: true,
+    opacity: 0.3, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  s.scale.set(3.4, 3.4, 1);
+  scene.add(s);
+  return s;
+})();
+// per-class ember/rune trail — particles drift up around the player
+let classEmberT = 0;
 
 /* ─── pooled flash lights ─────────────────────────────────────────────────── */
 const flashPool = [];
@@ -5770,7 +5807,12 @@ function holyCharge(baseDmg) {
   const e = player;
   const dmg = baseDmg * 0.9;
   Sound.boom(); Sound.tone && Sound.tone("triangle", 320, 220, 0.42, 0.18);
-  shake(1.0); screenFlash("#fff2b0", 0.32);
+  Sound.smash(); Sound.tone && Sound.tone("sine", 540, 920, 0.32, 0.16);
+  shake(1.5); screenFlash("#fff2b0", 0.5);
+  // a giant golden glyph scorches into the ground at the start
+  scorch(e.x, e.z, 10);
+  smashRing.setColor(0xffd06a);
+  smashRing.show(e.x, e.y + 0.2, e.z, 8, 0.5);
   // path: 12 yards forward
   const ang = e.aim;
   const dist = 12;
@@ -6380,11 +6422,19 @@ function meleeStrike() {
       }
       gainRage(RAGE_HIT);
       hitStop = 0.025; shake(0.1);
-      // a tiny crimson flash for the dagger hit
+      // a magenta crescent slash flash on each jab
       const fx = (player.x + best.x) * 0.5;
       const fz = (player.z + best.z) * 0.5;
-      spawnParts(fx, player.y + 1.6, fz, 5,
-        { color: 0xf06aff, speed: 10, life: 0.22 });
+      spawnParts(fx, player.y + 1.6, fz, 14,
+        { color: 0xf06aff, speed: 16, life: 0.28 });
+      spawnParts(fx, player.y + 1.6, fz, 6,
+        { color: 0xff9adf, speed: 22, life: 0.18 });
+      flare(fx, player.y + 1.6, fz, crit ? 3.5 : 2.4,
+        crit ? 0xff9adf : 0xf06aff, crit ? 0.45 : 0.32);
+      if (crit) {
+        screenFlash("#f06aff", 0.1);
+        flashLight(fx, player.y + 1.6, fz, 0.16, 0xf06aff);
+      }
     }
     return;
   }
@@ -6418,6 +6468,16 @@ function meleeStrike() {
     hitStop = 0.05; shake(0.16 + hits * 0.05);
     const fx = player.x + Math.sin(player.aim) * range * 0.62;
     const fz = player.z + Math.cos(player.aim) * range * 0.62;
+    // base cleave VFX — sweep of motion lines + sparks regardless of ability
+    spawnParts(fx, player.y + 1.6, fz, 18 + hits * 6,
+      { color: 0xfff2dc, speed: 16, life: 0.4 });
+    for (let i = 0; i < 4; i++) {
+      const fa = player.aim + rand(-arc * 0.7, arc * 0.7);
+      flare(player.x + Math.sin(fa) * rand(2, range * 0.8),
+        player.y + rand(1.0, 2.6),
+        player.z + Math.cos(fa) * rand(2, range * 0.8),
+        rand(3, 5), 0xfff2dc, rand(0.3, 0.5));
+    }
     if (fire) {
       pulseAbil("fire"); Sound.fire(); screenFlash("#ff6a2a", 0.2);
       for (let i = 0; i < 5; i++) {       // a searing fan of flame
@@ -6695,18 +6755,37 @@ function updateHeroProjectiles(dt) {
           if (hasA("frost")) applyChill(z);
         }
         gainRage(RAGE_HIT);
-        // hit FX — arcane bolts get a juicier explosion
+        // hit FX — arcane bolts pop a real arcane burst
         if (p.kind === "bolt") {
+          screenFlash("#9adfff", 0.12);
+          smashRing.setColor(0x9adfff);
+          smashRing.show(p.x, p.y, p.z, 3.2, 0.42);
+          spawnParts(p.x, p.y, p.z, 40,
+            { color: 0x9adfff, speed: 26, up: 4, life: 0.6 });
           spawnParts(p.x, p.y, p.z, 22,
-            { color: 0x9adfff, speed: 22, up: 4, life: 0.55 });
-          spawnParts(p.x, p.y, p.z, 12,
-            { color: 0x6aaaff, speed: 14, life: 0.7 });
-          for (let f = 0; f < 4; f++)
-            flare(p.x + rand(-0.8, 0.8), p.y + rand(-0.4, 0.6),
-              p.z + rand(-0.8, 0.8), rand(2.5, 4.5),
-              pick([0x6aaaff, 0x9adfff, 0xc0e8ff]), 0.45);
-          flashLight(p.x, p.y, p.z, 0.28, 0x6aaaff);
+            { color: 0x6aaaff, speed: 16, life: 0.8 });
+          spawnParts(p.x, p.y, p.z, 14,
+            { color: 0xe0ffff, speed: 32, up: 6, life: 0.4 });
+          for (let f = 0; f < 7; f++)
+            flare(p.x + rand(-1.4, 1.4), p.y + rand(-0.6, 0.9),
+              p.z + rand(-1.4, 1.4), rand(3.5, 6),
+              pick([0x6aaaff, 0x9adfff, 0xc0e8ff, 0xe0ffff]), 0.55);
+          flashLight(p.x, p.y, p.z, 0.42, 0x6aaaff);
           Sound.tone && Sound.tone("sine", 1340, 50, 0.16, 0.12);
+          Sound.tone && Sound.tone("triangle", 720, 1200, 0.16, 0.1);
+        } else if (p.kind === "bullet") {
+          // bullet impact — sparks + a tight ring of dust
+          spawnParts(p.x, p.y, p.z, 16,
+            { color: 0xffd06a, speed: 22, life: 0.4 });
+          spawnParts(p.x, p.y, p.z, 8,
+            { color: 0x6a4a2a, speed: 10, up: 3, life: 0.55 });
+          flare(p.x, p.y, p.z, 4, 0xffd06a, 0.45);
+          flashLight(p.x, p.y, p.z, 0.18, 0xffd06a);
+        } else if (p.kind === "arrow") {
+          // arrow stick — a tight burst, less explosive
+          spawnParts(p.x, p.y, p.z, 8,
+            { color: 0x9aeac0, speed: 12, life: 0.3 });
+          flare(p.x, p.y, p.z, 3.5, 0x9aeac0, 0.4);
         } else {
           flare(p.x, p.y, p.z, 3, p.def.col, 0.45);
         }
@@ -8319,6 +8398,9 @@ UI.title.addEventListener("click", () => {
   if (state === ST.TITLE) {
     UI.title.classList.add("hidden");
     UI.classSelect.classList.remove("hidden");
+    // a user gesture unlocks autoplay — prime the music here so it's
+    // already playing softly behind the class-select screen.
+    Sound.actx(); Music.start();
   }
 });
 // each class card on the select screen — pick this hero and begin the run
@@ -8607,6 +8689,43 @@ function poseSurvivor() {
   } else {
     shieldAura.material.opacity = 0;
   }
+  // ── persistent class aura: feet-halo + chest-halo + drifting embers
+  const auraCol = cls === "wizard"     ? 0x6aaaff :
+                  cls === "gunslinger" ? 0xffa84a :
+                  cls === "hunter"     ? 0x9aeac0 :
+                  cls === "rogue"      ? 0xf06aff :
+                                         0xffd06a;
+  classAura.material.color.setHex(auraCol);
+  classAuraHi.material.color.setHex(auraCol);
+  classAura.position.set(e.x, e.y + 0.1, e.z);
+  classAuraHi.position.set(e.x, e.y + 1.7 + Math.sin(e.t * 1.4) * 0.18, e.z);
+  const pulse = 0.42 + Math.sin(e.t * 2.8) * 0.10;
+  const pulseHi = 0.24 + Math.sin(e.t * 2.0 + 1.5) * 0.08;
+  classAura.material.opacity = pulse;
+  classAuraHi.material.opacity = pulseHi;
+  const auraSz = 5.5 + Math.sin(e.t * 2.4) * 0.3;
+  classAura.scale.set(auraSz, auraSz, 1);
+  const hiSz = 3.6 + Math.sin(e.t * 3.1) * 0.18;
+  classAuraHi.scale.set(hiSz, hiSz, 1);
+  // class-themed drifting embers around the player
+  classEmberT += 0.04;
+  if (classEmberT > 1 && Math.random() < 0.7) {
+    classEmberT = 0;
+    const a = Math.random() * TAU, d = rand(0.6, 1.6);
+    spawnParts(e.x + Math.cos(a) * d, e.y + rand(0.2, 2.4),
+      e.z + Math.sin(a) * d, 1,
+      { color: auraCol, speed: 0.5, life: rand(0.9, 1.6), grav: -1.4 });
+  }
+  // active-cooldown sparkle: a quick burst of light around the hero
+  // when an ability resets (smash or dash). Subtle hint of readiness.
+  if (e._smashJustReady) {
+    e._smashJustReady = false;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU;
+      flare(e.x + Math.cos(a) * 1.6, e.y + 1.4, e.z + Math.sin(a) * 1.6,
+        rand(3, 4), auraCol, 0.4);
+    }
+  }
 }
 
 /* ─── obstacle avoidance — the dead steer around walls, cars and rubble
@@ -8754,8 +8873,11 @@ function updateZombies(dt) {
             z.walkP += dt * 6; z.state = "chase";
           } else { z.state = "attack"; z.atkCd -= dt;
             if (z.atkCd <= 0) { z.atkCd = 1.2;
-              if (!lineBlocked(z.x, z.z, player.x, player.z))
-                hurtPlayer(d.dmg * dmgScale); } }
+              if (!lineBlocked(z.x, z.z, player.x, player.z)) {
+                hurtPlayer(d.dmg * dmgScale);
+                if (Math.hypot(player.x - z.x, player.z - z.z) < 10)
+                  Sound.bite();
+              } } }
         }
       } else if (z.type === "lunger") {
         // hurls its whole body at you in a low, fast arc
@@ -8787,8 +8909,11 @@ function updateZombies(dt) {
             z.walkP += dt * 9; z.state = "chase";
           } else { z.state = "attack"; z.atkCd -= dt;
             if (z.atkCd <= 0) { z.atkCd = 0.9;
-              if (!lineBlocked(z.x, z.z, player.x, player.z))
-                hurtPlayer(d.dmg * dmgScale); } }
+              if (!lineBlocked(z.x, z.z, player.x, player.z)) {
+                hurtPlayer(d.dmg * dmgScale);
+                if (Math.hypot(player.x - z.x, player.z - z.z) < 10)
+                  Sound.bite();
+              } } }
         }
       } else if (z.type === "boss") {
         // a slow colossus — closes in, then a ground-shattering slam
@@ -8855,8 +8980,28 @@ function updateZombies(dt) {
 
     z.groanT -= dt;
     if (z.groanT <= 0) {
-      if (Math.hypot(player.x - z.x, player.z - z.z) < 64) Sound.groan();
-      z.groanT = rand(5, 13);
+      const dist = Math.hypot(player.x - z.x, player.z - z.z);
+      if (dist < 70) {
+        // pick a vocalisation based on archetype + distance — close
+        // zombies get sharper sounds, far ones lower / fewer.
+        const t = z.type;
+        if (t === "boss" || t === "giant" || t === "brute") {
+          Math.random() < 0.5 ? Sound.growl() : Sound.groan();
+        } else if (t === "runner" || t === "lunger") {
+          if (dist < 18 && Math.random() < 0.35) Sound.scream();
+          else Math.random() < 0.5 ? Sound.rasp() : Sound.groan();
+        } else if (t === "revenant") {
+          Math.random() < 0.5 ? Sound.rasp() : Sound.gurgle();
+        } else {
+          // shamblers / chargers — mix of groan / rasp / gurgle
+          const r = Math.random();
+          if (r < 0.5) Sound.groan();
+          else if (r < 0.8) Sound.rasp();
+          else Sound.gurgle();
+        }
+      }
+      // shorter random interval → noticeably more horde noise
+      z.groanT = rand(2.4, 6.4);
     }
     poseZombie(z, d, chillMul);
   }
