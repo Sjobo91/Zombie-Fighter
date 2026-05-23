@@ -72,10 +72,12 @@ func make_colossus() -> void:
 	_tint_all(Color(0.46, 0.30, 0.14, 1), Color(0.8, 0.18, 0.05, 1), 0.7)
 	_announce()
 
-# ── Wave-20 final boss: MORTIMER, THE FORSAKEN ENGINEER
+# ── Wave-20 final boss: PROTOTYPE-01 — the first construct that ever
+#    rolled off the workshop's assembly line. The progenitor of the
+#    rogue protocol. (Renamed from Mortimer; the human inventor is gone.)
 func make_mortimer() -> void:
 	is_boss = true
-	boss_name = "MORTIMER, THE FORSAKEN ENGINEER"
+	boss_name = "PROTOTYPE-01 · THE PROGENITOR"
 	max_hp = 3500
 	hp = max_hp
 	damage = 58

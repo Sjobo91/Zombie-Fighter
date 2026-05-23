@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="Mortimer's Horde"
-config/description="Top-down zombie survival ARPG — Godot 4 port"
+config/name="DREAD: Rogue Protocol"
+config/description="A tiny rebellious robot fighting his way through a giant workshop overrun by his rogue siblings."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 # cap framerate to stop GPU coil-whine on uncapped frame rates

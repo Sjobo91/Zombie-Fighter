@@ -65,6 +65,6 @@ func show_death() -> void:
 	death.visible = true
 
 func show_victory() -> void:
-	death.text = "MORTIMER FALLS\nTHE HORDE GOES SILENT"
+	death.text = "PROTOCOL ENDED\nTHE WORKSHOP GOES SILENT"
 	death.modulate = Color(1.0, 0.86, 0.4, 1)
 	death.visible = true
