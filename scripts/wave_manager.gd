@@ -16,7 +16,14 @@
 
 extends Node
 
-@export var zombie_scene:    PackedScene
+# The basic enemy scene (and the chassis for the bosses — wave_manager
+# always uses zombie_scene for the wave-10/20 last spawn so the boss
+# methods on zombie.gd hit the imported model.)
+@export var zombie_scene:           PackedScene
+@export var zombie_warrior_scene:   PackedScene
+@export var zombie_runner_scene:    PackedScene
+@export var zombie_x10_scene:       PackedScene
+@export var zombie_lugnut_scene:    PackedScene
 @export var spawn_radius:    float = 19.0
 @export var spawn_radius_jitter: float = 10.0
 @export var spawn_interval:  float = 0.45
@@ -99,18 +106,61 @@ func _spawn_one() -> void:
 	var d: float = spawn_radius + randf() * spawn_radius_jitter
 	var pos: Vector3 = player.global_position + \
 		Vector3(cos(a) * d, 1.0, sin(a) * d)
-	var z: Node = zombie_scene.instantiate()
+	var is_last: bool = (spawned == to_spawn - 1)
+	# Bosses always use the basic chassis (zombie.gd's make_colossus /
+	# make_mortimer tint and scale it). All other spawns pick a variant
+	# weighted by act.
+	var scn: PackedScene = zombie_scene
+	if not is_last:
+		scn = _pick_variant_scene()
+	if scn == null:
+		return
+	var z: Node = scn.instantiate()
 	if not (z is Node3D):
 		return
 	get_parent().add_child(z)
 	(z as Node3D).global_position = pos
-	# the LAST spawn of wave 10 is the Colossus; wave 20 is Prototype-01
-	var is_last: bool = (spawned == to_spawn - 1)
 	if is_last and wave == 10 and z.has_method("make_colossus"):
 		z.make_colossus()
 	elif is_last and wave == 20 and z.has_method("make_mortimer"):
 		z.make_mortimer()
 	spawned += 1
+
+# Weighted variant pick. Per-act tables — weights are integers and
+# don't need to sum to 100. Falls back to the basic scene if the
+# referenced variant scene isn't assigned (so the level still spawns
+# something even mid-setup).
+func _pick_variant_scene() -> PackedScene:
+	# weights: [basic, warrior, runner, x10, lugnut]
+	var w: PackedInt32Array
+	if wave >= 14:        # Act III — the lab, all chaos
+		w = PackedInt32Array([30, 25, 20, 15, 10])
+	elif wave >= 8:       # Act II — logistics bay
+		w = PackedInt32Array([50, 15, 25,  0, 10])
+	else:                  # Act I — assembly floor
+		w = PackedInt32Array([80,  0,  5,  0, 15])
+	# weighted draw
+	var total: int = w[0] + w[1] + w[2] + w[3] + w[4]
+	var r: int = randi() % max(1, total)
+	var acc: int = 0
+	for i in range(w.size()):
+		acc += w[i]
+		if r < acc:
+			return _variant_by_index(i)
+	return zombie_scene
+
+func _variant_by_index(i: int) -> PackedScene:
+	match i:
+		1:
+			return zombie_warrior_scene if zombie_warrior_scene else zombie_scene
+		2:
+			return zombie_runner_scene  if zombie_runner_scene  else zombie_scene
+		3:
+			return zombie_x10_scene     if zombie_x10_scene     else zombie_scene
+		4:
+			return zombie_lugnut_scene  if zombie_lugnut_scene  else zombie_scene
+		_:
+			return zombie_scene
 
 # how many regular enemies to spawn this wave
 func wave_size(n: int) -> int:

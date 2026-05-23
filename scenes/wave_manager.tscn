@@ -1,8 +1,16 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=7 format=3]
 
-[ext_resource type="Script" path="res://scripts/wave_manager.gd" id="1"]
-[ext_resource type="PackedScene" path="res://scenes/zombie.tscn" id="2"]
+[ext_resource type="Script"      path="res://scripts/wave_manager.gd"   id="1"]
+[ext_resource type="PackedScene" path="res://scenes/zombie.tscn"        id="2"]
+[ext_resource type="PackedScene" path="res://scenes/zombie_warrior.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/zombie_runner.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/zombie_x10.tscn"    id="5"]
+[ext_resource type="PackedScene" path="res://scenes/zombie_lugnut.tscn" id="6"]
 
 [node name="WaveManager" type="Node"]
 script = ExtResource("1")
-zombie_scene = ExtResource("2")
+zombie_scene         = ExtResource("2")
+zombie_warrior_scene = ExtResource("3")
+zombie_runner_scene  = ExtResource("4")
+zombie_x10_scene     = ExtResource("5")
+zombie_lugnut_scene  = ExtResource("6")
