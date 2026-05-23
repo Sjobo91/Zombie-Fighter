@@ -5211,30 +5211,131 @@ function updateOrbs(dt) {
 }
 
 /* ─── abilities ───────────────────────────────────────────────────────────── */
-const ABILITIES = [
-  { id: "fire", n: "FIRE SWORD", glyph: "\u{1F525}", col: 0xff5a1e,
-    hex: "#ff6a2e",
-    d: "Every cleave sears a fire arc — struck foes burn over time." },
-  { id: "lightning", n: "LIGHTNING SWORD", glyph: "⚡", col: 0x6fd0ff,
-    hex: "#6fd0ff",
-    d: "Hits arc chain-lightning to 4 nearby foes for heavy damage." },
-  { id: "wind", n: "WIND SWORD", glyph: "\u{1F32A}", col: 0xbfe9c0,
-    hex: "#bfe9c0",
-    d: "Each swing blasts the horde several meters backwards." },
+/* ABILITIES — every ability is class-tagged so the choice screen
+   only ever offers picks that fit the hero you're playing. Mechanics
+   are shared (the same `fire` id sets burn DoT regardless of class),
+   but the displayed NAME / DESCRIPTION is tuned per class.  */
+const ABILITY_NAMES = {
+  fire: {
+    knight:     { n: "FIRE SWORD",
+                  d: "Every cleave sears a fire arc — struck foes burn over time." },
+    wizard:     { n: "INFERNO BOLT",
+                  d: "Your arcane bolts ignite — struck foes burn over time." },
+    gunslinger: { n: "INCENDIARY ROUNDS",
+                  d: "Bullets ignite their target — burning damage over time." },
+    hunter:     { n: "FLAME ARROWS",
+                  d: "Arrows light their target ablaze — burning damage over time." },
+    rogue:      { n: "VENOM BLADES",
+                  d: "Every jab applies a searing toxin — damage over time." },
+  },
+  lightning: {
+    knight:     { n: "LIGHTNING SWORD",
+                  d: "Hits arc chain-lightning to 4 nearby foes for heavy damage." },
+    wizard:     { n: "CHAIN LIGHTNING",
+                  d: "Bolt impacts fork chain-lightning to 4 nearby foes." },
+    gunslinger: { n: "STORM ROUNDS",
+                  d: "Bullets fork chain-lightning to 4 nearby foes on hit." },
+    hunter:     { n: "STORMSHOT",
+                  d: "Arrow hits fork chain-lightning to 4 nearby foes." },
+    rogue:      { n: "STORM BLADES",
+                  d: "Dagger jabs fork chain-lightning to 4 nearby foes." },
+  },
+  frost: {
+    knight:     { n: "FROST SWORD",
+                  d: "Hits chill foes; three chills freeze them solid." },
+    wizard:     { n: "FROSTBOLT",
+                  d: "Bolts chill foes on hit; three chills freeze them solid." },
+    gunslinger: { n: "COLD STEEL",
+                  d: "Bullets chill foes; three chills freeze them solid." },
+    hunter:     { n: "FROST ARROWS",
+                  d: "Arrows chill foes on hit; three chills freeze them solid." },
+    rogue:      { n: "FROZEN STEEL",
+                  d: "Every jab chills; three chills freeze the target solid." },
+  },
+  wind: {
+    knight:     { n: "WIND SWORD",
+                  d: "Each swing blasts the horde several meters backwards." },
+    wizard:     { n: "GALE BOLT",
+                  d: "Each arcane nova blasts the horde several meters back." },
+    gunslinger: { n: "CONCUSSIVE SHOT",
+                  d: "Bullets knock foes hard backwards on impact." },
+    hunter:     { n: "WINDPIERCE",
+                  d: "Arrows knock foes hard backwards on impact." },
+    rogue:      { n: "WIND DASH",
+                  d: "Every jab blasts the horde several meters backwards." },
+  },
+  execute: {
+    knight:     { n: "DEATHBLOW",
+                  d: "Your strikes behead any foe already below a third of its health." },
+    wizard:     { n: "ARCANE BANISHMENT",
+                  d: "Your bolts vaporise any foe already below a third of its health." },
+    gunslinger: { n: "FINISHER",
+                  d: "Bullets execute any foe already below a third of its health." },
+    hunter:     { n: "KILLING SHOT",
+                  d: "Arrows execute any foe already below a third of its health." },
+    rogue:      { n: "ASSASSINATE",
+                  d: "Jabs execute any foe already below a third of its health." },
+  },
+  soul: {
+    knight:     { n: "SOUL REAPER",
+                  d: "Every slain foe erupts in a soul blast, harrowing the dead nearby." },
+    wizard:     { n: "VOID HARVEST",
+                  d: "Every slain foe erupts in a soul blast, harrowing the dead nearby." },
+    gunslinger: { n: "GHOST BULLETS",
+                  d: "Every kill erupts in a soul blast, harrowing the dead nearby." },
+    hunter:     { n: "SPIRIT ARROWS",
+                  d: "Every kill erupts in a soul blast, harrowing the dead nearby." },
+    rogue:      { n: "SOUL DRAIN",
+                  d: "Every kill erupts in a soul blast, harrowing the dead nearby." },
+  },
+};
+const ABILITIES_BASE = [
+  { id: "fire", glyph: "\u{1F525}", col: 0xff5a1e, hex: "#ff6a2e",
+    classes: ["knight", "wizard", "gunslinger", "hunter", "rogue"] },
+  { id: "lightning", glyph: "⚡", col: 0x6fd0ff, hex: "#6fd0ff",
+    classes: ["knight", "wizard", "gunslinger", "hunter", "rogue"] },
+  { id: "wind", glyph: "\u{1F32A}", col: 0xbfe9c0, hex: "#bfe9c0",
+    // wind only knocks back in melee_strike right now — restrict to
+    // classes whose damage actually flows through that path
+    classes: ["knight", "rogue"] },
+  // hammer literally swaps your sword for a hammer — knight only
   { id: "hammer", n: "GOD'S HAMMER", glyph: "\u{1F528}", col: 0xf0c040,
     hex: "#f0c040",
-    d: "Your blade becomes a colossal hammer — Smash stuns all it strikes." },
-  { id: "execute", n: "DEATHBLOW", glyph: "\u{1F5E1}", col: 0xff5a4a,
-    hex: "#ff5a4a",
-    d: "Your strikes behead any foe already below a third of its health." },
-  { id: "frost", n: "FROST SWORD", glyph: "❄", col: 0x9fe4ff,
-    hex: "#9fe4ff",
-    d: "Hits chill foes; three chills freeze them solid." },
-  { id: "soul", n: "SOUL REAPER", glyph: "\u{1F480}", col: 0xc06bff,
-    hex: "#c06bff",
-    d: "Every slain foe erupts in a soul blast, harrowing the dead nearby." },
+    d: "Your blade becomes a colossal hammer — Smash stuns all it strikes.",
+    classes: ["knight"] },
+  { id: "execute", glyph: "\u{1F5E1}", col: 0xff5a4a, hex: "#ff5a4a",
+    classes: ["knight", "wizard", "gunslinger", "hunter", "rogue"] },
+  { id: "frost", glyph: "❄", col: 0x9fe4ff, hex: "#9fe4ff",
+    classes: ["knight", "wizard", "gunslinger", "hunter", "rogue"] },
+  { id: "soul", glyph: "\u{1F480}", col: 0xc06bff, hex: "#c06bff",
+    classes: ["knight", "wizard", "gunslinger", "hunter", "rogue"] },
 ];
-function abilityById(id) { return ABILITIES.find(a => a.id === id); }
+// rebuild a class-aware ABILITIES list — each entry gets the right
+// name + description for the current hero, and only includes abilities
+// flagged for that class.
+function classAbilities() {
+  const cls = (player && player.cls) || "knight";
+  return ABILITIES_BASE
+    .filter(a => !a.classes || a.classes.indexOf(cls) >= 0)
+    .map(a => {
+      const named = ABILITY_NAMES[a.id] && ABILITY_NAMES[a.id][cls];
+      return Object.assign({}, a,
+        named ? { n: named.n, d: named.d } : {});
+    });
+}
+// legacy ABILITIES alias — points at the knight set for back-compat with
+// code that reads ABILITIES at module-load. Real choice / glow logic
+// uses classAbilities() at runtime.
+const ABILITIES = ABILITIES_BASE.map(a => Object.assign({}, a,
+  ABILITY_NAMES[a.id] && ABILITY_NAMES[a.id].knight || {}));
+function abilityById(id) {
+  // resolve the displayed-name copy for the CURRENT class
+  const cls = (player && player.cls) || "knight";
+  const base = ABILITIES_BASE.find(a => a.id === id);
+  if (!base) return null;
+  const named = ABILITY_NAMES[id] && ABILITY_NAMES[id][cls];
+  return Object.assign({}, base, named ? { n: named.n, d: named.d } : {});
+}
 /* ─── outfits — the armour you equip reskins the warrior ──────────────────── */
 const OUTFITS = {
   rags:    { label: "Rags",      chest: 0x4a4038, pauld: 0x3f372f,
@@ -8872,7 +8973,7 @@ document.getElementById("discardJunk").addEventListener("click", () => {
 /* ─── ability choice (every 5 waves) ──────────────────────────────────────── */
 let choiceArmTimer = null;
 function pick3Abilities() {
-  const avail = ABILITIES.filter(a => !hasA(a.id));
+  const avail = classAbilities().filter(a => !hasA(a.id));
   const c = avail.slice(), out = [];
   for (let i = 0; i < 3 && c.length; i++)
     out.push(c.splice((Math.random() * c.length) | 0, 1)[0]);
@@ -8880,7 +8981,7 @@ function pick3Abilities() {
 }
 function onWaveCleared() {
   if (pendingUlt) { pendingUlt = false; openUltimateChoice(); return; }
-  if (wave % 5 === 0 && ABILITIES.some(a => !hasA(a.id)))
+  if (wave % 5 === 0 && classAbilities().some(a => !hasA(a.id)))
     openAbilityChoice();
   else
     openChar(true, true);
