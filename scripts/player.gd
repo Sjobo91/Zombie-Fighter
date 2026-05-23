@@ -13,9 +13,15 @@ extends CharacterBody3D
 # combat
 @export var max_hp:       int   = 140
 @export var attack_dmg:   int   = 22
+# legacy melee numbers (smash falls back to these)
 @export var attack_range: float = 5.0
-@export var attack_arc:   float = 1.0     # radians (half-arc)
-@export var attack_cd:    float = 0.45
+@export var attack_arc:   float = 1.0
+@export var attack_cd:    float = 0.20   # gun fire rate
+# gun
+@export var gun_range:    float = 60.0
+@export var smash_dmg:    int   = 48
+@export var smash_range:  float = 4.0
+@export var smash_cd:     float = 1.2
 @export var iframes_dur:  float = 0.4
 
 @onready var rig:    Node3D    = $CameraRig
@@ -26,8 +32,9 @@ extends CharacterBody3D
 var hp:        int   = 140
 var yaw:       float = 0.0
 var pitch:     float = -0.55
-var attack_t:  float = 999.0      # time since last attack start
-var attacking: bool  = false
+var attack_t:  float = 999.0      # time since last shot
+var smash_t:   float = 999.0      # time since last smash
+var attacking: bool  = false      # only true during smash anim window
 var attack_hits: Array = []
 var iframes:   float = 0.0
 var dead:      bool  = false
@@ -57,12 +64,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
 			else Input.MOUSE_MODE_CAPTURED
 	if event.is_action_pressed("attack") and not dead:
-		_try_attack()
+		_fire_gun()
+	if event.is_action_pressed("smash") and not dead:
+		_smash()
 
 func _physics_process(delta: float) -> void:
 	if dead:
 		return
 	attack_t += delta
+	smash_t  += delta
 	if iframes > 0.0:
 		iframes -= delta
 	var input := Input.get_vector("move_left", "move_right",
@@ -73,9 +83,9 @@ func _physics_process(delta: float) -> void:
 	if dir.length() > 0.0001:
 		dir = dir.normalized()
 	var sp := speed * (sprint_mul if Input.is_action_pressed("sprint") else 1.0)
-	# slow down a touch while swinging so the strike commits
+	# brace through the smash anim
 	if attacking:
-		sp *= 0.65
+		sp *= 0.55
 	velocity.x = dir.x * sp
 	velocity.z = dir.z * sp
 	if is_on_floor():
@@ -83,16 +93,14 @@ func _physics_process(delta: float) -> void:
 			velocity.y = jump_speed
 	else:
 		velocity.y -= gravity * delta
-	# body faces movement direction
-	if dir.length() > 0.0001:
-		var target_y: float = atan2(dir.x, dir.z)
-		mesh.rotation.y = lerp_angle(mesh.rotation.y, target_y, 16.0 * delta)
+	# Dread always faces where the camera looks (third-person aim).
+	# This keeps the gun pointing into the reticle.
+	mesh.rotation.y = lerp_angle(mesh.rotation.y, yaw, 16.0 * delta)
 	move_and_slide()
-	_pose_sword(delta)
-	# strike window — about a third of the way through the swing
-	if attacking and attack_t >= 0.10 and attack_t < 0.22:
-		_strike_check()
-	if attacking and attack_t >= 0.55:
+	# smash hit window — partway through the swing
+	if attacking and smash_t >= 0.10 and smash_t < 0.22:
+		_smash_strike()
+	if attacking and smash_t >= 0.45:
 		attacking = false
 		attack_hits.clear()
 	# HUD push
@@ -101,19 +109,52 @@ func _physics_process(delta: float) -> void:
 	if hud and hud.has_method("set_mechparts"):
 		hud.set_mechparts(mechparts)
 
-# sword animation removed — the robot wields a sci-fi rifle that's part
-# of the imported model. Visual attack pose will be added later.
-func _pose_sword(_delta: float) -> void:
-	pass
+# ── LMB: fire a single round from Dread's rifle. Hitscan, with a
+# visible tracer + muzzle flash + impact spark.
+func _fire_gun() -> void:
+	if attack_t < attack_cd:
+		return
+	attack_t = 0.0
+	var cam_xf := camera.global_transform
+	var origin: Vector3 = cam_xf.origin
+	var forward: Vector3 = -cam_xf.basis.z
+	# muzzle position: slightly down-right of the camera, in front of
+	# Dread's chest. This is purely cosmetic — damage uses camera ray.
+	var muzzle: Vector3 = origin + cam_xf.basis.x * 0.35 \
+		+ cam_xf.basis.y * -0.30 + forward * 0.6
+	var query := PhysicsRayQueryParameters3D.create(
+		origin, origin + forward * gun_range)
+	query.exclude = [get_rid()]
+	query.collide_with_areas = false
+	var hit: Dictionary = get_world_3d().direct_space_state \
+		.intersect_ray(query)
+	var end_point: Vector3 = origin + forward * gun_range
+	if hit:
+		end_point = hit.position
+		var col: Object = hit.collider
+		# climb up from the collision shape's body to find the
+		# enemy script if needed
+		if col and col is Node:
+			var n: Node = col as Node
+			if n.is_in_group("zombie") and n.has_method("take_damage"):
+				n.take_damage(attack_dmg, global_position)
+			elif n.get_parent() and n.get_parent().is_in_group("zombie"):
+				var p: Node = n.get_parent()
+				if p.has_method("take_damage"):
+					p.take_damage(attack_dmg, global_position)
+		_spawn_spark(end_point)
+	_spawn_tracer(muzzle, end_point, 0.06)
+	_spawn_flash(muzzle, 0.05)
 
-func _try_attack() -> void:
-	if attacking or attack_t < attack_cd:
+# ── RMB: heavier melee smash — slow but big AoE.
+func _smash() -> void:
+	if attacking or smash_t < smash_cd:
 		return
 	attacking = true
-	attack_t = 0.0
+	smash_t = 0.0
 	attack_hits.clear()
 
-func _strike_check() -> void:
+func _smash_strike() -> void:
 	var face: float = mesh.rotation.y
 	for z in get_tree().get_nodes_in_group("zombie"):
 		if attack_hits.has(z):
@@ -121,7 +162,7 @@ func _strike_check() -> void:
 		var to: Vector3 = z.global_position - global_position
 		to.y = 0
 		var d := to.length()
-		if d > attack_range:
+		if d > smash_range:
 			continue
 		var ang := atan2(to.x, to.z)
 		var diff: float = abs(wrapf(ang - face, -PI, PI))
@@ -129,7 +170,74 @@ func _strike_check() -> void:
 			continue
 		attack_hits.append(z)
 		if z.has_method("take_damage"):
-			z.take_damage(attack_dmg, global_position)
+			z.take_damage(smash_dmg, global_position)
+
+# ── Visual helpers (no separate scenes — everything is built in code).
+func _spawn_tracer(a: Vector3, b: Vector3, ttl: float) -> void:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	var length: float = (b - a).length()
+	cm.top_radius = 0.025
+	cm.bottom_radius = 0.025
+	cm.height = max(0.01, length)
+	mi.mesh = cm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.85, 0.4, 1)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.75, 0.25, 1)
+	mat.emission_energy_multiplier = 3.0
+	mi.material_override = mat
+	get_tree().current_scene.add_child(mi)
+	# orient cylinder along (a→b) — cylinder's default axis is +Y
+	var mid: Vector3 = (a + b) * 0.5
+	mi.global_position = mid
+	var dir: Vector3 = (b - a)
+	if dir.length() > 0.001:
+		mi.look_at(mi.global_position + dir, Vector3.UP, true)
+		# look_at points +Z forward; rotate so +Y points down dir
+		mi.rotate_object_local(Vector3.RIGHT, PI * 0.5)
+	get_tree().create_timer(ttl).timeout.connect(func ():
+		if is_instance_valid(mi):
+			mi.queue_free())
+
+func _spawn_flash(pos: Vector3, ttl: float) -> void:
+	var mi := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.18
+	sm.height = 0.36
+	mi.mesh = sm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.95, 0.6, 1)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.85, 0.4, 1)
+	mat.emission_energy_multiplier = 5.0
+	mi.material_override = mat
+	get_tree().current_scene.add_child(mi)
+	mi.global_position = pos
+	get_tree().create_timer(ttl).timeout.connect(func ():
+		if is_instance_valid(mi):
+			mi.queue_free())
+
+func _spawn_spark(pos: Vector3) -> void:
+	var mi := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.12
+	sm.height = 0.24
+	mi.mesh = sm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.65, 0.2, 1)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.45, 0.1, 1)
+	mat.emission_energy_multiplier = 4.0
+	mi.material_override = mat
+	get_tree().current_scene.add_child(mi)
+	mi.global_position = pos
+	get_tree().create_timer(0.10).timeout.connect(func ():
+		if is_instance_valid(mi):
+			mi.queue_free())
 
 func take_damage(amt: int) -> void:
 	if dead or iframes > 0.0:
