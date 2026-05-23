@@ -2988,7 +2988,8 @@ function buildWeapon(kind) {
     g.add(head);
 
   } else if (kind === "daggers") {
-    // twin daggers — short, lethal, paired
+    // twin daggers — kept as a legacy display-only model for the
+    // doll preview. Rogue now uses TWO single "dagger" weapons (below).
     for (const off of [-0.5, 0.5]) {
       const gripD = new THREE.Mesh(
         new THREE.BoxGeometry(0.14, 0.7, 0.14),
@@ -3006,6 +3007,24 @@ function buildWeapon(kind) {
       const pom = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 5), gold);
       pom.position.set(off, 0.0, 0); g.add(pom);
     }
+
+  } else if (kind === "dagger") {
+    // single dagger — short reverse-grip blade for one hand of the rogue
+    const gripD = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.7, 0.14),
+      mat(0x1a0e0c, 0.95));
+    gripD.position.set(0, 0.35, 0); g.add(gripD);
+    const guard = new THREE.Mesh(
+      new THREE.BoxGeometry(0.46, 0.1, 0.18), gold);
+    guard.position.set(0, 0.7, 0); g.add(guard);
+    const blade = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 1.4, 0.06), bladeMat);
+    blade.position.set(0, 1.4, 0); g.add(blade);
+    const tip = new THREE.Mesh(
+      new THREE.ConeGeometry(0.12, 0.4, 4), bladeMat);
+    tip.position.set(0, 2.2, 0); g.add(tip);
+    const pom = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 5), gold);
+    pom.position.set(0, 0.0, 0); g.add(pom);
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   g.userData = { kind, bladeMat, glowMats };
@@ -3730,9 +3749,13 @@ function buildRogue() {
       new THREE.MeshBasicMaterial({ color: 0xf06aff }));
     e.position.set(sx, 2.62, 0.34); upper.add(e); eyes.push(e);
   }
-  // ══ arms ══
-  const arm = new THREE.Group(); arm.position.set(0, 1.52, 0.16); upper.add(arm);
-  for (const sx of [-1, 1]) {
+  // ══ arms ══ TWO independent arm groups so the daggers can swing one
+  // at a time. Each arm owns its own meshes, its own weaponMount, and
+  // its own single dagger. The userData `arm` field stays = armR for
+  // back-compat with any code that still expects one arm.
+  function makeRogueArm(sx) {
+    const arm = new THREE.Group();
+    arm.position.set(0, 1.52, 0.16);
     const upperArm = new THREE.Mesh(
       new THREE.BoxGeometry(0.38, 0.74, 0.42), sk.aChest);
     upperArm.position.set(sx * 0.7, 0.04, 0.1); arm.add(upperArm);
@@ -3743,19 +3766,28 @@ function buildRogue() {
     const hand = new THREE.Mesh(
       new THREE.BoxGeometry(0.34, 0.3, 0.34), dark);
     hand.position.set(sx * 0.22, -0.18, 1.2); arm.add(hand);
+    const mount = new THREE.Group();
+    mount.position.set(sx * 0.22, -0.14, 1.34);
+    mount.rotation.x = Math.PI / 2;
+    arm.add(mount);
+    const dagger = buildWeapon("dagger");
+    mount.add(dagger);
+    upper.add(arm);
+    arm.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    return { arm, mount, dagger };
   }
-  const weaponMount = new THREE.Group();
-  weaponMount.position.set(0, -0.14, 1.34);
-  weaponMount.rotation.x = Math.PI / 2;
-  arm.add(weaponMount);
-  const weapon = buildWeapon("daggers");
-  weaponMount.add(weapon);
+  const left = makeRogueArm(-1);
+  const right = makeRogueArm(+1);
   const torch = new THREE.PointLight(0xf06aff, 0.6, 22, 1.7);
   torch.position.set(0, 3.4, 0); g.add(torch);
   upper.traverse(m => { if (m.isMesh) m.castShadow = true; });
-  arm.traverse(m => { if (m.isMesh) m.castShadow = true; });
-  g.userData = { upper, cloak, arm, weaponMount, legs, head, eyes, torch,
-    weapon, weaponKind: "daggers", cls: "rogue",
+  g.userData = { upper, cloak,
+    arm: right.arm, weaponMount: right.mount, weapon: right.dagger,
+    armL: left.arm, armR: right.arm,
+    weaponMountL: left.mount, weaponMountR: right.mount,
+    weaponL: left.dagger, weaponR: right.dagger,
+    legs, head, eyes, torch,
+    weaponKind: "daggers", cls: "rogue",
     armor: { chest: sk.aChest, pauld: sk.aPauld, helm: sk.aHelm,
       trim: sk.aTrim, torso: sk.aTorso, cape: sk.capeMat,
       pauldrons, spikes: [] } };
@@ -5172,21 +5204,28 @@ function applyGearVisual(obj) {
   }
   const scaleArr = [0.62, 0.82, 0.98, 1.16, 1.34];
   const tintArr = [0xb6bcc6, 0xccd6e0, 0xd8c4ec, 0xf2d68a, 0xff9adf];
-  u.weaponMount.scale.setScalar(ham && u.cls === "knight" ? 1 :
-    scaleArr[Math.min(wRar, 4)]);
-  if (u.weapon.userData.bladeMat) {
-    u.weapon.userData.bladeMat.color.setHex(
-      ham && u.cls === "knight" ? 0x4a4a54 : tintArr[Math.min(wRar, 4)]);
-  }
+  const scaleVal = ham && u.cls === "knight" ? 1 : scaleArr[Math.min(wRar, 4)];
+  const tintVal = ham && u.cls === "knight" ? 0x4a4a54 : tintArr[Math.min(wRar, 4)];
+  u.weaponMount.scale.setScalar(scaleVal);
+  if (u.weapon.userData.bladeMat)
+    u.weapon.userData.bladeMat.color.setHex(tintVal);
+  // rogue uses two mounts (one per hand) — mirror the scale/tint to both
+  if (u.weaponMountL) u.weaponMountL.scale.setScalar(scaleVal);
+  if (u.weaponL && u.weaponL.userData.bladeMat)
+    u.weaponL.userData.bladeMat.color.setHex(tintVal);
   const order = ["fire", "lightning", "frost", "wind", "soul"];
   let glow = null;
   for (const id of order) if (hasA(id)) { glow = abilityById(id).col; break; }
-  for (const m of u.weapon.userData.glowMats) {
-    if (!m.emissive) continue;
-    if (glow != null) { m.emissive.setHex(glow); m.emissiveIntensity = 1.15; }
-    else if (ham) { m.emissive.setHex(0xf0c040); m.emissiveIntensity = 1.0; }
-    else m.emissive.setHex(0x000000);
+  function tintGlow(wpn) {
+    for (const m of wpn.userData.glowMats) {
+      if (!m.emissive) continue;
+      if (glow != null) { m.emissive.setHex(glow); m.emissiveIntensity = 1.15; }
+      else if (ham) { m.emissive.setHex(0xf0c040); m.emissiveIntensity = 1.0; }
+      else m.emissive.setHex(0x000000);
+    }
   }
+  tintGlow(u.weapon);
+  if (u.weaponL) tintGlow(u.weaponL);
   if (obj === player.obj) swingArc.material.color.setHex(glow || 0xfff2dc);
   applyOutfit(obj, (player.gear.armor && player.gear.armor.outfit) || "rags");
 }
@@ -8661,7 +8700,23 @@ function poseSurvivor() {
   } else if (e.ultActive && e.ultId === "whirlwind") {
     pX = 0.05; pY = 0; pZ = 0;            // weapon held out, sweeping wide
   }
-  u.arm.rotation.set(pX, pY, pZ);
+  if (cls === "rogue" && u.armL && u.armR) {
+    // rogue alternates hands: the active arm performs the jab, the
+    // inactive arm sits in its idle pose so it doesn't ghost-swing.
+    const active = e.daggerHand ? u.armR : u.armL;
+    const passive = e.daggerHand ? u.armL : u.armR;
+    if (e.atk) {
+      active.rotation.set(pX, pY, pZ);
+      // passive hand keeps idle — slightly lowered for swagger
+      passive.rotation.set(idleP[0] + 0.15, idleP[1] * 0.4, idleP[2] * 0.4);
+    } else {
+      // both arms idle when not attacking
+      u.armL.rotation.set(pX, pY, pZ);
+      u.armR.rotation.set(pX, pY, pZ);
+    }
+  } else {
+    u.arm.rotation.set(pX, pY, pZ);
+  }
   for (const eye of u.eyes)
     eye.material.color.setHex(e.hurt > 0 ? 0xff5a3a : 0xffd06a);
   // slash arc — for the quick slash and the sword smash
