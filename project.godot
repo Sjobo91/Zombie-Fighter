@@ -12,10 +12,14 @@ config_version=5
 
 config/name="DREAD: Rogue Protocol"
 config/description="A tiny rebellious robot fighting his way through a giant workshop overrun by his rogue siblings."
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/title.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 # cap framerate to stop GPU coil-whine on uncapped frame rates
 run/max_fps=60
+
+[autoload]
+
+Mechbank="*res://scripts/mechbank.gd"
 
 [display]
 

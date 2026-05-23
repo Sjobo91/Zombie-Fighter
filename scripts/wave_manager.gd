@@ -78,9 +78,16 @@ func _end_wave() -> void:
 	wave_active = false
 	if wave >= total_waves:
 		victory = true
+		var bank := get_node_or_null("/root/Mechbank")
+		if bank and bank.has_method("on_run_end"):
+			bank.on_run_end(true)
 		var hud := get_node_or_null("/root/Main/HUD")
 		if hud and hud.has_method("show_victory"):
 			hud.show_victory()
+		# after the victory banner, return to title so the bank
+		# upgrades become spendable
+		await get_tree().create_timer(6.0).timeout
+		get_tree().change_scene_to_file("res://scenes/title.tscn")
 		return
 	rest_t = breather_seconds
 	var hud := get_node_or_null("/root/Main/HUD")

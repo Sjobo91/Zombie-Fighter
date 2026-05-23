@@ -36,8 +36,12 @@ var dead:      bool  = false
 var mechparts: int  = 0
 
 func _ready() -> void:
-	hp = max_hp
 	add_to_group("player")
+	# pull in any permanent upgrades the player bought between runs
+	var bank := get_node_or_null("/root/Mechbank")
+	if bank and bank.has_method("apply_to_player"):
+		bank.apply_to_player(self)
+	hp = max_hp
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -147,8 +151,11 @@ func collect_mechparts(amt: int) -> void:
 		bank.add_run_earn(amt)
 
 func _die() -> void:
-	# brief banner via the HUD then reload
+	# bank what we earned (death = 50%) and return to title.
+	var bank := get_node_or_null("/root/Mechbank")
+	if bank and bank.has_method("on_run_end"):
+		bank.on_run_end(false)
 	if hud and hud.has_method("show_death"):
 		hud.show_death()
-	await get_tree().create_timer(2.2).timeout
-	get_tree().reload_current_scene()
+	await get_tree().create_timer(2.6).timeout
+	get_tree().change_scene_to_file("res://scenes/title.tscn")
