@@ -394,7 +394,8 @@
 
   /* ---- mobile touch controls ---- */
   #game { touch-action: none; }
-  body.touch #hint, body.touch #abilities { display: none; }
+  body.touch #hint, body.touch #abilities,
+  body.touch #minimap { display: none; }
   #touchUI { position: fixed; inset: 0; z-index: 30; display: none;
     pointer-events: none; }
   #touchUI.on { display: block; }
@@ -4786,18 +4787,23 @@ function spawnZombie(type, rare) {
   if (!ok) { x = clamp(x, -ARENA + 12, ARENA - 12);
     z = clamp(z, -ARENA + 12, ZSHORE - 8); }
   const gy = groundHeight(x, z);
+  // distant spawns skip the rising delay — they're already up and hunting
+  const farSpawn = Math.hypot(x - player.x, z - player.z) > 55;
   // the horde swells in stature as the waves climb
   const sizeMul = 1 + Math.min(wave, 24) * (type === "boss" ? 0.008 : 0.014);
   const obj = buildZombie(type, rare);
   obj.scale.setScalar(sizeMul);
-  obj.position.set(x, gy - d.h * 0.95 * sizeMul, z);
+  obj.position.set(x, farSpawn ? gy : gy - d.h * 0.95 * sizeMul, z);
   scene.add(obj);
-  const mound = new THREE.Mesh(moundGeo,
-    new THREE.MeshStandardMaterial({ color: 0x2c2114, roughness: 1 }));
-  mound.position.set(x, gy + 0.1, z);
-  mound.scale.set(d.r * 1.5 * sizeMul, 1, d.r * 1.5 * sizeMul);
-  mound.receiveShadow = true;
-  scene.add(mound);
+  let mound = null;
+  if (!farSpawn) {
+    mound = new THREE.Mesh(moundGeo,
+      new THREE.MeshStandardMaterial({ color: 0x2c2114, roughness: 1 }));
+    mound.position.set(x, gy + 0.1, z);
+    mound.scale.set(d.r * 1.5 * sizeMul, 1, d.r * 1.5 * sizeMul);
+    mound.receiveShadow = true;
+    scene.add(mound);
+  }
   // wave 1 stays a 2-hit warm-up; the horde toughens noticeably each wave
   const hpScale = type === "boss"
     ? 1 + Math.max(0, wave - 5) * 0.3
@@ -4810,7 +4816,8 @@ function spawnZombie(type, rare) {
     hp: hp, maxHp: hp, sizeMul: sizeMul, crawler,
     speed: d.speed * (1 + Math.min(wave, 26) * 0.016) * (crawler ? 0.5 : 1),
     r: d.r * sizeMul,
-    state: "rising", riseT: 0, walkP: rand(0, TAU), t: rand(0, 9),
+    state: farSpawn ? "chase" : "rising",
+    riseT: farSpawn ? RISE_DUR : 0, walkP: rand(0, TAU), t: rand(0, 9),
     flash: 0, atkCd: rand(0.3, 1.2), stagger: 0, kx: 0, kz: 0,
     groanT: rand(2, 9), dieT: 0,
     burn: 0, burnDps: 0, chill: 0, chillHits: 0, stun: 0, frozen: false,
@@ -6291,6 +6298,8 @@ function updateZombies(dt) {
     const dist = Math.hypot(dx, dz) || 1;
     const reach = z.r + P.r + 0.6;
     const dmgScale = Math.pow(DMG_SCALE, wave - 1) * (1 + (level - 1) * 0.3);
+    // magnet — the further the corpse, the harder it homes in on the hero
+    const magnetMul = clamp(1 + Math.max(0, dist - 30) * 0.022, 1, 2.4);
     if (z.stagger > 0) z.stagger -= dt;
     else if (!stunned) {
       if (z.type === "charger") {
@@ -6319,7 +6328,7 @@ function updateZombies(dt) {
           if (z.spCd <= 0 && dist > 11 && dist < 50) {
             z.spState = 1; z.spT = 0.6; Sound.groan();
           } else if (dist > reach) {
-            const sp = z.speed * chillMul;
+            const sp = z.speed * chillMul * magnetMul;
             const ca = steerAround(z, Math.atan2(dx, dz));
             z.x += Math.sin(ca) * sp * dt; z.z += Math.cos(ca) * sp * dt;
             z.walkP += dt * 6; z.state = "chase";
@@ -6353,7 +6362,7 @@ function updateZombies(dt) {
           } else if (dist > reach) {
             const a = steerAround(z,
               Math.atan2(dx, dz) + Math.sin(z.t * 3) * 0.3);
-            const sp = z.speed * chillMul;
+            const sp = z.speed * chillMul * magnetMul;
             z.x += Math.sin(a) * sp * dt; z.z += Math.cos(a) * sp * dt;
             z.walkP += dt * 9; z.state = "chase";
           } else { z.state = "attack"; z.atkCd -= dt;
@@ -6364,7 +6373,7 @@ function updateZombies(dt) {
       } else if (z.type === "boss") {
         // a slow colossus — closes in, then a ground-shattering slam
         if (dist > z.r + P.r + 2) {
-          const sp = z.speed * chillMul;
+          const sp = z.speed * chillMul * magnetMul;
           const ba = steerAround(z, Math.atan2(dx, dz));
           z.x += Math.sin(ba) * sp * dt; z.z += Math.cos(ba) * sp * dt;
           z.walkP += dt * 4; z.state = "chase";
@@ -6392,7 +6401,7 @@ function updateZombies(dt) {
           if (z.type === "runner")
             ang += Math.sin(z.t * 3 + z.walkP) * 0.4;
           ang = steerAround(z, ang);
-          const sp = z.speed * chillMul;
+          const sp = z.speed * chillMul * magnetMul;
           z.x += Math.sin(ang) * sp * dt;
           z.z += Math.cos(ang) * sp * dt;
           z.walkP += dt * (4 + z.speed * 0.4) * (chillMul > 0 ? 1 : 0.001);
