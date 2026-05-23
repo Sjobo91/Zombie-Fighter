@@ -10,7 +10,7 @@ extends CharacterBody3D
 @export var damage:    int   = 14
 @export var atk_cd:    float = 1.1
 @export var atk_range: float = 2.0
-@export var soulshards: int  = 1
+@export var mechparts:  int  = 1
 
 @onready var mesh_root: Node3D = $Mesh
 
@@ -66,7 +66,7 @@ func make_colossus() -> void:
 	speed = 3.2
 	atk_range = 3.6
 	atk_cd = 1.7
-	soulshards = 40
+	mechparts = 40
 	scale = Vector3(2.6, 2.6, 2.6)
 	# bronze-and-coal — heavy industrial juggernaut
 	_tint_all(Color(0.46, 0.30, 0.14, 1), Color(0.8, 0.18, 0.05, 1), 0.7)
@@ -84,7 +84,7 @@ func make_mortimer() -> void:
 	speed = 4.4
 	atk_range = 3.2
 	atk_cd = 1.1
-	soulshards = 120
+	mechparts = 120
 	scale = Vector3(2.1, 2.1, 2.1)
 	# brass + spectral steam-violet
 	_tint_all(Color(0.30, 0.20, 0.12, 1), Color(0.7, 0.35, 0.95, 1), 0.85)
@@ -166,8 +166,8 @@ func take_damage(amt: int, _from: Vector3 = Vector3.ZERO) -> void:
 		dying = true
 		die_t = 0.0
 		var pl := get_tree().get_first_node_in_group("player")
-		if pl and pl.has_method("collect_soulshards"):
-			pl.collect_soulshards(soulshards)
+		if pl and pl.has_method("collect_mechparts"):
+			pl.collect_mechparts(mechparts)
 		if is_boss:
 			var hud := get_node_or_null("/root/Main/HUD")
 			if hud and hud.has_method("clear_boss_hp"):

@@ -1,4 +1,4 @@
-# HUD — HP bar, wave info, soulshards counter, boss bar, banners.
+# HUD — HP bar, wave info, Mechparts counter, boss bar, banners.
 extends CanvasLayer
 
 @onready var hp_fill:    ColorRect = $Root/HpBar/Fill
@@ -6,7 +6,7 @@ extends CanvasLayer
 @onready var death:      Label     = $Root/Death
 @onready var wave_text:  Label     = $Root/WaveInfo/WaveText
 @onready var act_text:   Label     = $Root/WaveInfo/ActText
-@onready var soul_label: Label     = $Root/Soulshards/Label
+@onready var mp_label:   Label     = $Root/Mechparts/Label
 @onready var banner:     Label     = $Root/Banner
 @onready var boss_root:  Control   = $Root/BossBar
 @onready var boss_fill:  ColorRect = $Root/BossBar/Fill
@@ -32,8 +32,8 @@ func set_hp(hp: int, max_hp: int) -> void:
 	hp_fill.scale.x = k
 	hp_label.text = "%d / %d" % [hp, max_hp]
 
-func set_soulshards(n: int) -> void:
-	soul_label.text = "✦ %d" % n
+func set_mechparts(n: int) -> void:
+	mp_label.text = "⚙ %d" % n
 
 func show_wave_banner(n: int, total: int, act: String) -> void:
 	wave_text.text = "WAVE %d / %d" % [n, total]

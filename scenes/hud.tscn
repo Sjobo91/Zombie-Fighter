@@ -80,7 +80,7 @@ offset_bottom = 60.0
 text = "ACT I · THE GRAVEYARD"
 horizontal_alignment = 1
 
-[node name="Soulshards" type="Control" parent="Root"]
+[node name="Mechparts" type="Control" parent="Root"]
 anchor_left = 1.0
 anchor_right = 1.0
 offset_left = -210.0
@@ -88,10 +88,10 @@ offset_top = 18.0
 offset_right = -22.0
 offset_bottom = 60.0
 
-[node name="Label" type="Label" parent="Root/Soulshards"]
+[node name="Label" type="Label" parent="Root/Mechparts"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-text = "✦ 0"
+text = "⚙ 0"
 horizontal_alignment = 2
 vertical_alignment = 1
 label_settings = SubResource("wave_settings")

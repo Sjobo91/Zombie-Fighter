@@ -1,4 +1,6 @@
-# Player — knight with WASD + mouse-look + sword swing on LMB.
+# Player — Dread, a tiny rebellious robot. WASD + mouse-look,
+# LMB fires projectiles from its sci-fi rifle, RMB triggers a
+# heavy smash, R calls in a Ringworker ally.
 extends CharacterBody3D
 
 @export var speed:        float = 9.0
@@ -29,8 +31,9 @@ var attacking: bool  = false
 var attack_hits: Array = []
 var iframes:   float = 0.0
 var dead:      bool  = false
-# soulshards earned this run — kept across deaths via Soulbank autoload
-var soulshards: int  = 0
+# Mechparts earned this run — the workshop's loose currency. Salvaged from
+# fallen rogue units. Survives death via the Mechbank autoload.
+var mechparts: int  = 0
 
 func _ready() -> void:
 	hp = max_hp
@@ -91,8 +94,8 @@ func _physics_process(delta: float) -> void:
 	# HUD push
 	if hud and hud.has_method("set_hp"):
 		hud.set_hp(hp, max_hp)
-	if hud and hud.has_method("set_soulshards"):
-		hud.set_soulshards(soulshards)
+	if hud and hud.has_method("set_mechparts"):
+		hud.set_mechparts(mechparts)
 
 # sword animation removed — the robot wields a sci-fi rifle that's part
 # of the imported model. Visual attack pose will be added later.
@@ -134,10 +137,14 @@ func take_damage(amt: int) -> void:
 		dead = true
 		_die()
 
-func collect_soulshards(amt: int) -> void:
-	soulshards += amt
-	if hud and hud.has_method("set_soulshards"):
-		hud.set_soulshards(soulshards)
+func collect_mechparts(amt: int) -> void:
+	mechparts += amt
+	if hud and hud.has_method("set_mechparts"):
+		hud.set_mechparts(mechparts)
+	# accumulate into the persistent bank so they survive death
+	var bank := get_node_or_null("/root/Mechbank")
+	if bank and bank.has_method("add_run_earn"):
+		bank.add_run_earn(amt)
 
 func _die() -> void:
 	# brief banner via the HUD then reload
