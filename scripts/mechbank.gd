@@ -61,9 +61,10 @@ func reset_run() -> void:
 func apply_to_player(player: Node) -> void:
 	if player == null:
 		return
-	var lvl_hp:   int = int(upgrades.get("max_hp", 0))
-	var lvl_dmg:  int = int(upgrades.get("damage", 0))
-	var lvl_rate: int = int(upgrades.get("fire_rate", 0))
+	var lvl_hp:    int = int(upgrades.get("max_hp", 0))
+	var lvl_dmg:   int = int(upgrades.get("damage", 0))
+	var lvl_rate:  int = int(upgrades.get("fire_rate", 0))
+	var lvl_summon: int = int(upgrades.get("summon_cd", 0))
 	if "max_hp" in player and lvl_hp > 0:
 		player.max_hp = int(player.max_hp) + lvl_hp * 20
 		player.hp = player.max_hp
@@ -72,6 +73,10 @@ func apply_to_player(player: Node) -> void:
 	if "attack_cd" in player and lvl_rate > 0:
 		var mul := pow(0.9, lvl_rate)
 		player.attack_cd = float(player.attack_cd) * mul
+	if "summon_cd" in player and lvl_summon > 0:
+		var new_cd: float = max(5.0,
+			float(player.summon_cd) - 5.0 * float(lvl_summon))
+		player.summon_cd = new_cd
 
 # ── persistence
 func _save() -> void:

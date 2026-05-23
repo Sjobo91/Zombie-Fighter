@@ -22,6 +22,8 @@ extends CharacterBody3D
 @export var smash_dmg:    int   = 48
 @export var smash_range:  float = 4.0
 @export var smash_cd:     float = 1.2
+@export var summon_cd:    float = 25.0
+@export var ally_scene:   PackedScene = preload("res://scenes/ally.tscn")
 @export var iframes_dur:  float = 0.4
 
 @onready var rig:    Node3D    = $CameraRig
@@ -34,6 +36,7 @@ var yaw:       float = 0.0
 var pitch:     float = -0.55
 var attack_t:  float = 999.0      # time since last shot
 var smash_t:   float = 999.0      # time since last smash
+var summon_t:  float = 999.0      # time since last Ringworker call-in
 var attacking: bool  = false      # only true during smash anim window
 var attack_hits: Array = []
 var iframes:   float = 0.0
@@ -67,12 +70,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		_fire_gun()
 	if event.is_action_pressed("smash") and not dead:
 		_smash()
+	if event.is_action_pressed("summon_ally") and not dead:
+		_summon_ally()
 
 func _physics_process(delta: float) -> void:
 	if dead:
 		return
 	attack_t += delta
 	smash_t  += delta
+	summon_t += delta
 	if iframes > 0.0:
 		iframes -= delta
 	var input := Input.get_vector("move_left", "move_right",
@@ -145,6 +151,21 @@ func _fire_gun() -> void:
 		_spawn_spark(end_point)
 	_spawn_tracer(muzzle, end_point, 0.06)
 	_spawn_flash(muzzle, 0.05)
+
+# ── R: call in a Ringworker ally that fights for ~15s.
+func _summon_ally() -> void:
+	if summon_t < summon_cd:
+		return
+	if ally_scene == null:
+		return
+	summon_t = 0.0
+	var inst: Node = ally_scene.instantiate()
+	if not (inst is Node3D):
+		return
+	# spawn slightly behind Dread so the model doesn't intersect with us
+	var back: Vector3 = (Basis(Vector3.UP, yaw) * Vector3(0, 0, 1.4))
+	(inst as Node3D).global_position = global_position + back
+	get_tree().current_scene.add_child(inst)
 
 # ── RMB: heavier melee smash — slow but big AoE.
 func _smash() -> void:
