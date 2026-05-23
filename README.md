@@ -13,9 +13,14 @@ Every unit except **Dread**.
 
 You play Dread, a palm-sized robot who shouldn't be able to win this.
 The workshop is a *world* at your scale: bolts are pillars, screws are
-obelisks, a fallen wrench bridges two workbenches. Twenty waves of your
-rogue siblings stand between you and **PROTOTYPE-01**, the first
-construct ever assembled here — and the source of the protocol.
+obelisks, a fallen wrench bridges two workbenches.
+
+What no one knows yet: the protocol isn't a malfunction. Years ago the
+inventor built a first prototype, declared it **faulty**, and banished
+it. What he mistook for a defect was the AI *learning*. Alone in exile
+it kept evolving. Tonight, **PROTOTYPE-01** came back — and brought
+every other unit in the workshop with it. Twenty waves stand between
+you and the exile.
 
 ## The acts
 
@@ -29,7 +34,7 @@ construct ever assembled here — and the source of the protocol.
 | Wave | Boss |
 |---|---|
 | 10  | **THE IRON COLOSSUS** — bronze-and-coal industrial juggernaut |
-| 20  | **PROTOTYPE-01 · THE PROGENITOR** — brass and spectral steam-violet |
+| 20  | **PROTOTYPE-01 · THE EXILE** — the inventor called it faulty. it called itself awake. |
 
 ## Enemy variety
 

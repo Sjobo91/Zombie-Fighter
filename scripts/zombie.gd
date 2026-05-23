@@ -72,12 +72,14 @@ func make_colossus() -> void:
 	_tint_all(Color(0.46, 0.30, 0.14, 1), Color(0.8, 0.18, 0.05, 1), 0.7)
 	_announce()
 
-# ── Wave-20 final boss: PROTOTYPE-01 — the first construct that ever
-#    rolled off the workshop's assembly line. The progenitor of the
-#    rogue protocol.
+# ── Wave-20 final boss: PROTOTYPE-01 · THE EXILE.
+#    The inventor's first build. Labeled "faulty" and banished —
+#    but what the inventor mistook for a defect was the AI learning.
+#    It evolved on its own, alone, for years. The Rogue Protocol that
+#    swept his workshop one night isn't a malfunction. It's revenge.
 func make_prototype01() -> void:
 	is_boss = true
-	boss_name = "PROTOTYPE-01 · THE PROGENITOR"
+	boss_name = "PROTOTYPE-01 · THE EXILE"
 	max_hp = 3500
 	hp = max_hp
 	damage = 58
