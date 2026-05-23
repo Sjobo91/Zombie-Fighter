@@ -4,6 +4,7 @@ extends CanvasLayer
 @onready var hp_fill:    ColorRect = $Root/HpBar/Fill
 @onready var hp_label:   Label     = $Root/HpBar/Label
 @onready var death:      Label     = $Root/Death
+@onready var death_stat: Label     = $Root/DeathStats
 @onready var wave_text:  Label     = $Root/WaveInfo/WaveText
 @onready var act_text:   Label     = $Root/WaveInfo/ActText
 @onready var mp_label:   Label     = $Root/Mechparts/Label
@@ -16,6 +17,7 @@ var _banner_t: float = 0.0
 
 func _ready() -> void:
 	death.visible = false
+	death_stat.visible = false
 	banner.visible = false
 	boss_root.visible = false
 	wave_text.text = ""
@@ -61,10 +63,18 @@ func set_boss_hp(hp: int, max_hp: int, name: String) -> void:
 func clear_boss_hp() -> void:
 	boss_root.visible = false
 
-func show_death() -> void:
+func show_death(wave: int = 0, earned: int = 0, banked: int = 0) -> void:
+	death.text = "DREAD FELL"
+	death.modulate = Color(1.0, 1.0, 1.0, 1)
 	death.visible = true
+	death_stat.text = "WAVE %d REACHED\n⚙ %d EARNED   →   ⚙ %d BANKED\nreturning to the workshop…" \
+		% [wave, earned, banked]
+	death_stat.visible = true
 
-func show_victory() -> void:
+func show_victory(wave: int = 20, earned: int = 0, banked: int = 0) -> void:
 	death.text = "PROTOCOL ENDED\nTHE WORKSHOP GOES SILENT"
 	death.modulate = Color(1.0, 0.86, 0.4, 1)
 	death.visible = true
+	death_stat.text = "ALL %d WAVES CLEARED\n⚙ %d EARNED   →   ⚙ %d BANKED" \
+		% [wave, earned, banked]
+	death_stat.visible = true

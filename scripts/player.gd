@@ -280,11 +280,17 @@ func collect_mechparts(amt: int) -> void:
 		bank.add_run_earn(amt)
 
 func _die() -> void:
-	# bank what we earned (death = 50%) and return to title.
+	# bank what we earned (death = 50%) and return to title with stats.
 	var bank := get_node_or_null("/root/Mechbank")
+	var earned: int = 0 if bank == null else int(bank.run_earned)
+	var banked: int = int(round(float(earned) * 0.5))
 	if bank and bank.has_method("on_run_end"):
 		bank.on_run_end(false)
+	var wave_reached: int = 0
+	var wm := get_node_or_null("/root/Main/WaveManager")
+	if wm:
+		wave_reached = int(wm.wave)
 	if hud and hud.has_method("show_death"):
-		hud.show_death()
-	await get_tree().create_timer(2.6).timeout
+		hud.show_death(wave_reached, earned, banked)
+	await get_tree().create_timer(3.4).timeout
 	get_tree().change_scene_to_file("res://scenes/title.tscn")
