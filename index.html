@@ -2454,23 +2454,26 @@ function buildTown() {
     ["H", "A", "C", "A", "R"],
   ];
   const roadMat = mat(0x26221d, 1);
+  // road boxes are now thicker (5 units) and centred LOWER so the
+  // top still sits at the right walk-height but the bottom extends
+  // well below the terrain — no more "floating" road slabs over the
+  // natural terrain dips along their length.
+  const ROAD_H = 5;
   for (const sx of lines) {
     const m = new THREE.Mesh(
-      new THREE.BoxGeometry(ROADW, 0.4, SPAN * 2 + ROADW), roadMat);
-    const yc = groundHeight(sx, 0) + 0.08;
-    m.position.set(sx, yc, 0);
+      new THREE.BoxGeometry(ROADW, ROAD_H, SPAN * 2 + ROADW), roadMat);
+    const topY = groundHeight(sx, 0) + 0.28;
+    m.position.set(sx, topY - ROAD_H / 2, 0);
     m.receiveShadow = true; scene.add(m);
-    // top of the road is the walkable surface for any body that
-    // crosses it — zombies can no longer strut through it
-    addWalkSlab(sx, 0, ROADW / 2, SPAN + ROADW / 2, yc + 0.2);
+    addWalkSlab(sx, 0, ROADW / 2, SPAN + ROADW / 2, topY);
   }
   for (const sz of lines) {
     const m = new THREE.Mesh(
-      new THREE.BoxGeometry(SPAN * 2 + ROADW, 0.4, ROADW), roadMat);
-    const yc = groundHeight(0, sz) + 0.08;
-    m.position.set(0, yc, sz);
+      new THREE.BoxGeometry(SPAN * 2 + ROADW, ROAD_H, ROADW), roadMat);
+    const topY = groundHeight(0, sz) + 0.28;
+    m.position.set(0, topY - ROAD_H / 2, sz);
     m.receiveShadow = true; scene.add(m);
-    addWalkSlab(0, sz, SPAN + ROADW / 2, ROADW / 2, yc + 0.2);
+    addWalkSlab(0, sz, SPAN + ROADW / 2, ROADW / 2, topY);
   }
   addLaneMarks(0, -SPAN, 0, SPAN);
   addLaneMarks(-SPAN, 0, SPAN, 0);
@@ -2513,13 +2516,15 @@ function buildTown() {
     const cx = BC[cI], cz = BC[r], type = layout[r][cI];
     if (type === "H") { addHill(cx, cz, 25, 9); townGreen(cx, cz, 19);
       continue; }
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(44, 0.5, 44), swMat);
-    const slabY = groundHeight(cx, cz) + 0.12;
-    slab.position.set(cx, slabY, cz);
+    // thick slab (was 0.5; now 6) so the bottom is deep below any
+    // terrain dip nearby — the slab no longer appears to float
+    const SLAB_H = 6;
+    const slabTopY = groundHeight(cx, cz) + 0.37;
+    const slab = new THREE.Mesh(
+      new THREE.BoxGeometry(44, SLAB_H, 44), swMat);
+    slab.position.set(cx, slabTopY - SLAB_H / 2, cz);
     slab.receiveShadow = true; scene.add(slab);
-    // walkable top surface so zombies / player stand ON the slab,
-    // not through it. Top of the box = centre + 0.25.
-    addWalkSlab(cx, cz, 22, 22, slabY + 0.25);
+    addWalkSlab(cx, cz, 22, 22, slabTopY);
     if (type === "S") townSquare(cx, cz);
     else if (type === "P") addPark(cx, cz);
     else fillBlock(cx, cz, type);
@@ -8075,25 +8080,19 @@ function updateHeroProjectiles(dt) {
           Sound.tone && Sound.tone("sine", 1340, 50, 0.16, 0.12);
           Sound.tone && Sound.tone("triangle", 720, 1200, 0.16, 0.1);
         } else if (p.kind === "bullet") {
-          // bullet impact — heavy meaty hit. Triple particle layers,
-          // bone/blood ejecta from behind the zombie, plus a small
-          // shock-ring telegraph and a dynamic light flash.
-          spawnParts(p.x, p.y, p.z, 36,
-            { color: 0xffd06a, speed: 32, life: 0.45 });
-          spawnParts(p.x, p.y, p.z, 22,
-            { color: 0x7c1109, speed: 18, up: 2, life: 0.55 });
+          // bullet impact — meaty but PERF-AWARE. The hitZombie call
+          // already lays the bloody base layer; we only add the
+          // bullet-flavour extras here so multi-zombie pierce hits
+          // don't spam the particle pool dry.
+          spawnParts(p.x, p.y, p.z, 14,
+            { color: 0xffd06a, speed: 26, life: 0.35 });
           // exit-spray on the far side along the bullet's direction
           const ex = p.x + (p.vx / Math.max(40, Math.hypot(p.vx, p.vz))) * 0.8;
           const ez = p.z + (p.vz / Math.max(40, Math.hypot(p.vx, p.vz))) * 0.8;
-          spawnParts(ex, p.y, ez, 18,
-            { color: 0x7c1109, speed: 22, up: 3, life: 0.6 });
-          for (let f = 0; f < 5; f++)
-            flare(p.x + rand(-0.6, 0.6), p.y + rand(-0.4, 0.6),
-              p.z + rand(-0.6, 0.6), rand(3, 5),
-              pick([0xffd06a, 0xff9030, 0xff5a3a]), 0.55);
-          smashRing.setColor(0xffd06a);
-          smashRing.show(p.x, p.y, p.z, 1.8, 0.3);
-          flashLight(p.x, p.y, p.z, 0.32, 0xffd06a);
+          spawnParts(ex, p.y, ez, 10,
+            { color: 0x7c1109, speed: 18, up: 2, life: 0.5 });
+          flare(p.x, p.y, p.z, 3.5, 0xffd06a, 0.45);
+          if (crit) flashLight(p.x, p.y, p.z, 0.22, 0xffd06a);
         } else if (p.kind === "arrow") {
           // arrow stick — a tight burst, less explosive
           spawnParts(p.x, p.y, p.z, 8,
