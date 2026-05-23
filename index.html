@@ -524,6 +524,17 @@
   </div>
 
   <div id="hint"></div>
+  <div id="annHud" style="display:none;position:absolute;top:118px;left:50%;
+    transform:translateX(-50%);background:linear-gradient(180deg,
+    rgba(60,8,16,.92),rgba(20,2,6,.95));border:2px solid #ff5a4a;
+    border-radius:10px;padding:10px 22px;text-align:center;color:#ffe9a0;
+    font-weight:800;letter-spacing:3px;font-size:14px;pointer-events:none;
+    box-shadow:0 0 32px rgba(255,90,74,.6),0 0 12px rgba(255,210,90,.4)
+      inset;">
+    <div style="color:#ff5a4a;font-size:11px;letter-spacing:5px;
+      margin-bottom:3px">ANNIHILATOR &mdash; ONE USE</div>
+    <div style="font-size:18px;color:#ffe9a0">PRESS [ 1 ] TO UNLEASH</div>
+  </div>
   <div id="permaCap" class="seccap" style="display:none">PERMANENT POWERS</div>
   <div id="permabuffs"></div>
   <div id="buffsCap" class="seccap" style="display:none">TEMPORARY BUFFS</div>
@@ -5249,6 +5260,345 @@ function clearBuffDrops() {
   for (const o of buffDrops) scene.remove(o.obj);
   buffDrops = [];
 }
+
+/* ─── OBJECTIVES ──────────────────────────────────────────────────────
+   Three kinds of out-in-the-world contracts that replace mob loot drops.
+   Each marker stands at a fixed map location with a coloured beacon and
+   a ring on the ground.
+
+     CLEAR — kill every zombie that enters the marked radius. Small reward.
+     BOUNTY — a unique elite spawns inside; kill it for a bigger reward.
+     CACHE  — just walk into the ring to claim. The reward for exploring.
+
+   Rewards are class-themed: a permanent stat bump PLUS a class-appropriate
+   weapon. Objectives respawn elsewhere on the map after a delay so the
+   player is always pulled outward.
+  ─────────────────────────────────────────────────────────────────── */
+let objectives = [];
+const OBJ_COLOR = { clear: 0xff7a3a, bounty: 0xc850a8, cache: 0x6aaaff };
+const OBJ_LABEL = { clear: "CLEAR ZONE", bounty: "BOUNTY",
+  cache: "INVESTIGATE" };
+function pickObjectiveSpot() {
+  // pick a point outside the immediate combat ring (>40yd from player),
+  // walkable, not inside a building
+  for (let i = 0; i < 30; i++) {
+    const a = Math.random() * TAU;
+    const d = rand(48, 110);
+    const x = clamp(player.x + Math.cos(a) * d, -ARENA + 18, ARENA - 18);
+    const z = clamp(player.z + Math.sin(a) * d, -ARENA + 18, ZSHORE - 18);
+    if (!blocked(x, z, 4)) return { x, z };
+  }
+  return { x: rand(-ARENA + 24, ARENA - 24),
+           z: rand(-ARENA + 24, ZSHORE - 24) };
+}
+function spawnObjective(kind) {
+  const spot = pickObjectiveSpot();
+  const col = OBJ_COLOR[kind] || 0xffffff;
+  const ry = walkHeight(spot.x, spot.z);
+  const g = new THREE.Group();
+  // ground ring
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(7.6, 8.6, 36),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true,
+      opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(0, 0.2, 0); g.add(ring);
+  // pillar of light
+  const beacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.6, 1.4, 50, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true,
+      opacity: 0.32, depthWrite: false, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending }));
+  beacon.position.y = 25; g.add(beacon);
+  // core glow sprite
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: col, transparent: true, opacity: 0.95,
+    depthWrite: false, blending: THREE.AdditiveBlending }));
+  core.scale.set(4, 4, 1); core.position.y = 3.6; g.add(core);
+  const light = new THREE.PointLight(col, 2.8, 24, 2);
+  light.position.y = 3; g.add(light);
+  g.position.set(spot.x, ry, spot.z);
+  scene.add(g);
+  const obj = { kind, x: spot.x, z: spot.z, r: 8, g, core, ring, beacon,
+    light, t: 0, progress: 0, target: 0, complete: false };
+  if (kind === "clear") {
+    obj.target = 14;       // 14 kills inside the zone
+    obj.name = "Clear the cursed glade";
+  } else if (kind === "bounty") {
+    obj.name = "Bounty: slay the Revenant";
+    obj.target = 1;
+    spawnBountyTarget(obj);
+  } else if (kind === "cache") {
+    obj.name = "Investigate the strange light";
+    obj.target = 1;        // walk-in to claim
+  }
+  objectives.push(obj);
+  banner(obj.name.toUpperCase(), "NEW OBJECTIVE");
+  return obj;
+}
+function spawnBountyTarget(obj) {
+  // spawn a beefy revenant at the zone, marked for the bounty
+  const d = ETYPES.revenant;
+  const gy = walkHeight(obj.x, obj.z);
+  const sz = 1 + Math.min(wave, 14) * 0.02;
+  const z3 = buildZombie("revenant", true);
+  z3.scale.setScalar(sz);
+  z3.position.set(obj.x, gy + FOOT_LIFT, obj.z);
+  scene.add(z3);
+  // big aura around the bounty target
+  const auraS = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: 0xc850a8, transparent: true,
+    opacity: 0.6, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  auraS.scale.set(7, 7, 1); auraS.position.y = d.h * 0.5; z3.add(auraS);
+  const hp = d.hp * 4 * (1 + (wave - 1) * 0.25) * (1 + (level - 1) * 0.55);
+  zombies.push({
+    obj: z3, mound: null, type: "revenant", rare: true, boss: false,
+    x: obj.x, z: obj.z, y: gy, hp, maxHp: hp, sizeMul: sz, crawler: false,
+    speed: d.speed * 1.15, r: d.r * sz,
+    state: "chase", riseT: RISE_DUR, walkP: rand(0, TAU), t: rand(0, 9),
+    flash: 0, atkCd: rand(0.3, 1.2), stagger: 0, kx: 0, kz: 0,
+    groanT: rand(2, 9), dieT: 0,
+    burn: 0, burnDps: 0, chill: 0, chillHits: 0, stun: 0, frozen: false,
+    quake: 0, dodgeT: 0, dodgeAng: 0,
+    spCd: rand(2.5, 5), spState: 0, spT: 0, spAng: 0, spH: 0,
+    lsx: 0, lsz: 0, ltx: 0, ltz: 0,
+    steerBias: Math.random() < 0.5 ? 1 : -1,
+    bounty: obj,                 // flag this zombie as the bounty target
+  });
+  zombiesAlive++;
+}
+function objectiveOnKill(z) {
+  for (const obj of objectives) {
+    if (obj.complete) continue;
+    if (obj.kind === "bounty" && z.bounty === obj) {
+      obj.progress = obj.target;
+      completeObjective(obj);
+      continue;
+    }
+    if (obj.kind === "clear") {
+      // count kills inside the zone radius
+      if (Math.hypot(z.x - obj.x, z.z - obj.z) < obj.r * 1.6) {
+        obj.progress++;
+        if (obj.progress >= obj.target) completeObjective(obj);
+      }
+    }
+  }
+}
+function completeObjective(obj) {
+  obj.complete = true;
+  // reward — class-themed permanent stat boost + an item drop
+  const tier = obj.kind === "bounty" ? 3 :
+               obj.kind === "clear"  ? 2 :
+                                       1;
+  // PERMA — small but real
+  const cls = player && player.cls;
+  if (obj.kind === "bounty") {
+    player.perma.dmg += 4; player.perma.hp += 12;
+    banner("+4 POWER · +12 HP · BOUNTY COMPLETE", obj.name.toUpperCase());
+  } else if (obj.kind === "clear") {
+    player.perma.dmg += 2; player.perma.hp += 6;
+    banner("+2 POWER · +6 HP · ZONE CLEARED", obj.name.toUpperCase());
+  } else {
+    player.perma.spd += 0.04; player.perma.hp += 3;
+    banner("+4% SPEED · +3 HP · CACHE FOUND", obj.name.toUpperCase());
+  }
+  recalc();
+  // gear drop — class-appropriate
+  spawnLoot(obj.x + 1.6, obj.z + 1.6, makeItem(
+    Math.random() < 0.5 ? "weapon" : "armor", tier, Math.min(4, tier + 1)));
+  // VFX burst
+  screenFlash("#fff8dc", 0.32);
+  shake(0.6);
+  Sound.levelup && Sound.levelup();
+  smashRing.setColor(OBJ_COLOR[obj.kind]);
+  smashRing.show(obj.x, obj.g.position.y + 0.3, obj.z, 12, 0.55);
+  spawnParts(obj.x, obj.g.position.y + 1, obj.z, 60,
+    { color: OBJ_COLOR[obj.kind], speed: 20, up: 12, life: 0.9 });
+  for (let i = 0; i < 8; i++)
+    flare(obj.x + rand(-4, 4), obj.g.position.y + rand(0, 5),
+      obj.z + rand(-4, 4), rand(5, 9), OBJ_COLOR[obj.kind], 0.6);
+  // schedule a replacement objective so the world keeps pulling you out
+  setTimeout(() => {
+    if (!player || !player.alive || state !== ST.PLAYING) return;
+    const next = pick(["clear", "bounty", "cache"]);
+    spawnObjective(next);
+  }, 4000);
+}
+function updateObjectives(dt) {
+  for (let i = objectives.length - 1; i >= 0; i--) {
+    const obj = objectives[i];
+    obj.t += dt;
+    // animate the beacon — gentle pulse
+    if (obj.core) {
+      const s = 4 + Math.sin(obj.t * 3) * 0.4;
+      obj.core.scale.set(s, s, 1);
+    }
+    if (obj.ring) obj.ring.rotation.z = obj.t * 0.6;
+    // CACHE: claimed by walking in
+    if (obj.kind === "cache" && !obj.complete &&
+        Math.hypot(player.x - obj.x, player.z - obj.z) < obj.r) {
+      completeObjective(obj);
+    }
+    // dispose completed beacons after a short fade
+    if (obj.complete) {
+      obj._fade = (obj._fade || 0) + dt;
+      const k = Math.max(0, 1 - obj._fade / 1.2);
+      if (obj.beacon) obj.beacon.material.opacity = 0.32 * k;
+      if (obj.ring) obj.ring.material.opacity = 0.6 * k;
+      if (obj.core) obj.core.material.opacity = 0.95 * k;
+      if (obj.light) obj.light.intensity = 2.8 * k;
+      if (obj._fade > 1.3) {
+        scene.remove(obj.g); objectives.splice(i, 1);
+      }
+    }
+  }
+}
+function clearObjectives() {
+  for (const o of objectives) scene.remove(o.g);
+  objectives = [];
+}
+function seedObjectives() {
+  clearObjectives();
+  // start with one of each — the player chooses what to chase
+  spawnObjective("clear");
+  spawnObjective("bounty");
+  spawnObjective("cache");
+}
+
+/* ─── ANNIHILATOR — a single hidden artifact. Walk into it to pick up.
+   Press 1 to detonate: every zombie on the map dies in a screen-wide
+   explosion. Single use per run.  ─────────────────────────────────── */
+let annihilator = null;
+function spawnAnnihilator() {
+  if (annihilator) { scene.remove(annihilator.g); annihilator = null; }
+  // pick a remote spot far from origin
+  let x, z, tries = 0;
+  do {
+    const a = Math.random() * TAU;
+    const d = rand(110, ARENA - 30);
+    x = Math.cos(a) * d;
+    z = Math.sin(a) * d;
+    if (z > ZSHORE - 20) z = ZSHORE - 20;
+    tries++;
+  } while (blocked(x, z, 3) && tries < 40);
+  const y = walkHeight(x, z) + 1.4;
+  const g = new THREE.Group();
+  // floating obsidian core — slowly rotates
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.7, 0),
+    new THREE.MeshStandardMaterial({ color: 0x080018,
+      emissive: 0xff2a4a, emissiveIntensity: 2.2,
+      metalness: 0.4, roughness: 0.2 }));
+  g.add(core);
+  // wireframe shell
+  const shell = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.2, 1),
+    new THREE.MeshBasicMaterial({ color: 0xff5a4a, wireframe: true,
+      transparent: true, opacity: 0.7 }));
+  g.add(shell);
+  // big sky-beacon column visible from far away
+  const beacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.6, 1.6, 80, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xff3a4a, transparent: true,
+      opacity: 0.45, depthWrite: false, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending }));
+  beacon.position.y = 40; g.add(beacon);
+  // huge halo sprite
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: 0xff5a4a, transparent: true, opacity: 0.95,
+    depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.scale.set(10, 10, 1); g.add(halo);
+  const light = new THREE.PointLight(0xff3a4a, 5, 60, 2);
+  g.add(light);
+  g.position.set(x, y, z);
+  scene.add(g);
+  annihilator = { g, core, shell, halo, light, x, z, y, t: 0,
+    held: false, used: false };
+}
+function updateAnnihilator(dt) {
+  if (!annihilator) return;
+  annihilator.t += dt;
+  if (!annihilator.held) {
+    annihilator.g.position.y = annihilator.y +
+      Math.sin(annihilator.t * 1.6) * 0.35;
+    annihilator.core.rotation.set(annihilator.t * 0.8,
+      annihilator.t * 0.9, annihilator.t * 0.6);
+    annihilator.shell.rotation.set(-annihilator.t * 0.5,
+      annihilator.t * 0.4, annihilator.t * 0.7);
+    // pickup check
+    if (Math.hypot(player.x - annihilator.x,
+                   player.z - annihilator.z) < 3.2 && player.alive) {
+      annihilator.held = true;
+      // hide the world artifact
+      annihilator.g.visible = false;
+      banner("PRESS [1] TO UNLEASH", "ANNIHILATOR CLAIMED");
+      screenFlash("#ff3a4a", 0.45);
+      shake(0.8);
+      Sound.boom && Sound.boom();
+      spawnParts(annihilator.x, annihilator.y, annihilator.z, 80,
+        { color: 0xff5a4a, speed: 24, up: 10, life: 0.9 });
+      for (let i = 0; i < 14; i++)
+        flare(annihilator.x + rand(-3, 3),
+          annihilator.y + rand(0, 4),
+          annihilator.z + rand(-3, 3), rand(5, 9), 0xff5a4a, 0.7);
+    }
+  }
+  // HUD chip
+  if (UI.annHud) {
+    if (annihilator.held && !annihilator.used) {
+      UI.annHud.style.display = "block";
+    } else {
+      UI.annHud.style.display = "none";
+    }
+  }
+}
+function detonateAnnihilator() {
+  if (!annihilator || !annihilator.held || annihilator.used) return;
+  annihilator.used = true;
+  screenFlash("#ffffff", 0.95);
+  shake(3.2); hitStop = 0.18;
+  Sound.boom && Sound.boom();
+  Sound.quake && Sound.quake();
+  Sound.thunder && Sound.thunder();
+  // a colossal triple ring centered on the player
+  smashRing.setColor(0xff5a4a);
+  smashRing.show(player.x, player.y + 0.2, player.z, 200, 1.4);
+  boomRing.setColor(0xff8a4a);
+  boomRing.show(player.x, player.y + 0.2, player.z, 280, 1.7);
+  windRing.setColor(0xffd06a);
+  windRing.show(player.x, player.y + 0.5, player.z, 360, 2.0);
+  flashLight(player.x, player.y + 4, player.z, 1.5, 0xff5a4a);
+  // kill every alive zombie with a huge gibs explosion staggered by
+  // distance so the wave reads as it sweeps outward
+  for (const z of zombies) {
+    if (z.state === "die" || z.state === "rising") continue;
+    const d = Math.hypot(z.x - player.x, z.z - player.z);
+    setTimeout(() => {
+      if (!z || z.state === "die") return;
+      const dmg = z.hp + 1;
+      hitZombie(z, dmg, true,
+        Math.atan2(z.x - player.x, z.z - player.z), 8);
+    }, d * 6);              // 6ms per yard — feels like a shockwave
+  }
+  spawnParts(player.x, player.y + 1, player.z, 300,
+    { color: 0xff5a4a, speed: 60, up: 14, life: 1.5 });
+  for (let i = 0; i < 50; i++) {
+    const a = (i / 50) * TAU;
+    flare(player.x + Math.cos(a) * rand(4, 30),
+      player.y + rand(0, 10),
+      player.z + Math.sin(a) * rand(4, 30),
+      rand(8, 16), pick([0xff5a4a, 0xff8a4a, 0xffd06a]), 1.0);
+  }
+  if (UI.annHud) UI.annHud.style.display = "none";
+  banner("THE HORDE BREAKS", "ANNIHILATOR UNLEASHED");
+  if (annihilator.g) scene.remove(annihilator.g);
+  annihilator = null;
+}
+function clearAnnihilator() {
+  if (annihilator) { scene.remove(annihilator.g); annihilator = null; }
+  if (UI && UI.annHud) UI.annHud.style.display = "none";
+}
 function applyBuff(buff) {
   if (buff.perma) {
     const m = buff.mod, pm = player.perma;
@@ -7799,24 +8149,13 @@ function killZombie(z) {
     }
     pulseAbil("soul");
   }
-  // drops thin out as you level — late game is mastery, not a loot flood
-  const dm = dropMul();
-  if (z.rare || z.boss || z.type === "giant") {
-    if (z.boss || Math.random() < 0.55) {
-      // tougher stages unlock Mythic gear from elites and bosses
-      const rMin = Math.min(2 + Math.max(0, level - 1), 4);
-      const rMax = Math.min(3 + Math.max(0, level - 1), 4);
-      spawnLoot(z.x, z.z, makeItem(
-        Math.random() < 0.5 ? "weapon" : "armor", rMin, rMax));
-    }
-    if (z.boss || Math.random() < 0.5 * dm)
-      spawnBuffDrop(z.x + rand(-3, 3), z.z + rand(-3, 3), true);
-  } else if (Math.random() < 0.022 * dm) {
-    spawnBuffDrop(z.x, z.z, false);
-  }
+  // Mob loot drops are off — rewards come from OBJECTIVES now.
+  // XP orbs still drop generously so progression feels normal.
   if (Math.random() < (z.boss || z.type === "giant" || z.rare ? 1 :
       z.type === "brute" ? 0.4 : 0.1))
     spawnOrb(z.x, z.z);
+  // notify the objective system that a zombie has fallen
+  if (typeof objectiveOnKill === "function") objectiveOnKill(z);
 }
 
 /* ─── progression & waves ─────────────────────────────────────────────────── */
@@ -8113,6 +8452,8 @@ addEventListener("keydown", (e) => {
     if (e.code === "KeyQ") tryUltimate();
     if (e.code === "KeyC") openChar(false);
     if (e.code === "KeyI") openInv();
+    // ANNIHILATOR — one-shot, only if you've picked it up
+    if (e.code === "Digit1") detonateAnnihilator();
   } else if (state === ST.CHAR) {
     if (e.code === "KeyC" || e.code === "Escape") closeChar();
     if (e.code === "KeyI") openInv();
@@ -8356,6 +8697,7 @@ const UI = {
   bossbar: document.getElementById("bossbar"),
   bossFill: document.querySelector("#bossbar .bfill"),
   minimap: document.getElementById("minimap"),
+  annHud: document.getElementById("annHud"),
 };
 const miniCtx = UI.minimap.getContext("2d");
 let bannerT = 0;
@@ -8702,6 +9044,26 @@ function drawMinimap() {
     ctx.fillStyle = z.rare ? "#3affc0" : "#d8483a";
     ctx.beginPath(); ctx.arc(mx(z.x), mz(z.z), z.rare ? 3.2 : 2, 0, TAU);
     ctx.fill();
+  }
+  // objective beacons — a bright ring + the kind in a single letter
+  for (const obj of objectives) {
+    if (obj.complete) continue;
+    const ox = mx(obj.x), oz = mz(obj.z);
+    const cHex = obj.kind === "clear" ? "#ff7a3a" :
+                 obj.kind === "bounty" ? "#c850a8" : "#6aaaff";
+    ctx.strokeStyle = cHex; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(ox, oz, 6.5, 0, TAU); ctx.stroke();
+    ctx.fillStyle = cHex;
+    ctx.beginPath(); ctx.arc(ox, oz, 2.4, 0, TAU); ctx.fill();
+  }
+  // the ANNIHILATOR — a pulsing crimson diamond if not collected
+  if (annihilator && !annihilator.held) {
+    const ax = mx(annihilator.x), az = mz(annihilator.z);
+    const pulse = 0.6 + Math.sin(annihilator.t * 4) * 0.4;
+    ctx.fillStyle = "#ff3a4a"; ctx.globalAlpha = pulse;
+    ctx.save(); ctx.translate(ax, az); ctx.rotate(Math.PI / 4);
+    ctx.fillRect(-4, -4, 8, 8); ctx.restore();
+    ctx.globalAlpha = 1;
   }
   // the player — an arrow pointing where you aim
   const px = mx(player.x), pz = mz(player.z), a = player.aim;
@@ -9302,6 +9664,10 @@ function resetGame() {
   grassFlatten = null; levelFx = 0;
   updateWeaponVisual();
   buildAbilityHUD();
+  // objectives + the hidden annihilator are fresh every run
+  clearObjectives(); clearAnnihilator();
+  seedObjectives();
+  spawnAnnihilator();
 }
 function startGame() {
   resetGame();
@@ -10362,6 +10728,8 @@ function update(dt) {
   updateOrbs(dt);
   updateLoot(dt);
   updateBuffDrops(dt);
+  updateObjectives(dt);
+  updateAnnihilator(dt);
   updateInteractables(dt);
   updatePortal(dt);
   updateBuffs(dt);
