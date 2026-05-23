@@ -778,6 +778,18 @@ const P = {
   staminaMax: 100, staminaDrain: 30, staminaRegen: 22,
 };
 const ATK_SLOW_DUR = 0.5, ATK_SLOW_AMT = 0.26;
+/* aim helper — converts the camera pitch into a projectile elevation
+   in RADIANS. Most of the time you want shots to fly roughly flat so
+   regular aiming isn't twitchy; only when you really angle the camera
+   up (looking for rooftop divers) should the arc lift significantly.
+   A small dead-zone near horizontal + a softer multiplier give that. */
+function aimPitchAngle() {
+  const off = 0.5 - camPitch;           // +ve = looking up, -ve = down
+  // dead zone of ±0.1 — small tilts don't change aim
+  const sign = off < 0 ? -1 : 1;
+  const mag = Math.max(0, Math.abs(off) - 0.1);
+  return sign * mag * 0.7;              // 0.7 multiplier — was 1.35
+}
 const RISE_DUR = 1.45;
 // stat-point yields — deliberately small. Your real power comes from the
 // weapons and ability powers you find; placed points are gentle increments.
@@ -1200,6 +1212,16 @@ function walkHeight(x, z) {
     if (wy != null && wy > h) h = wy;
   }
   return h;
+}
+/* register a flat rectangular surface as walkable — used for the city
+   roads and sidewalk slabs so zombies climb onto them instead of
+   strolling through them at terrain height.  */
+function addWalkSlab(cx, cz, hw, hd, topY) {
+  walkZones.push((x, z) => {
+    if (x < cx - hw || x > cx + hw) return null;
+    if (z < cz - hd || z > cz + hd) return null;
+    return topY;
+  });
 }
 function addHill(hx, hz, r, hh) {
   const sm = (d) => { const k = 1 - d / r; return k * k * (3 - 2 * k); };
@@ -2435,14 +2457,20 @@ function buildTown() {
   for (const sx of lines) {
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(ROADW, 0.4, SPAN * 2 + ROADW), roadMat);
-    m.position.set(sx, groundHeight(sx, 0) + 0.08, 0);
+    const yc = groundHeight(sx, 0) + 0.08;
+    m.position.set(sx, yc, 0);
     m.receiveShadow = true; scene.add(m);
+    // top of the road is the walkable surface for any body that
+    // crosses it — zombies can no longer strut through it
+    addWalkSlab(sx, 0, ROADW / 2, SPAN + ROADW / 2, yc + 0.2);
   }
   for (const sz of lines) {
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(SPAN * 2 + ROADW, 0.4, ROADW), roadMat);
-    m.position.set(0, groundHeight(0, sz) + 0.08, sz);
+    const yc = groundHeight(0, sz) + 0.08;
+    m.position.set(0, yc, sz);
     m.receiveShadow = true; scene.add(m);
+    addWalkSlab(0, sz, SPAN + ROADW / 2, ROADW / 2, yc + 0.2);
   }
   addLaneMarks(0, -SPAN, 0, SPAN);
   addLaneMarks(-SPAN, 0, SPAN, 0);
@@ -2486,8 +2514,12 @@ function buildTown() {
     if (type === "H") { addHill(cx, cz, 25, 9); townGreen(cx, cz, 19);
       continue; }
     const slab = new THREE.Mesh(new THREE.BoxGeometry(44, 0.5, 44), swMat);
-    slab.position.set(cx, groundHeight(cx, cz) + 0.12, cz);
+    const slabY = groundHeight(cx, cz) + 0.12;
+    slab.position.set(cx, slabY, cz);
     slab.receiveShadow = true; scene.add(slab);
+    // walkable top surface so zombies / player stand ON the slab,
+    // not through it. Top of the box = centre + 0.25.
+    addWalkSlab(cx, cz, 22, 22, slabY + 0.25);
     if (type === "S") townSquare(cx, cz);
     else if (type === "P") addPark(cx, cz);
     else fillBlock(cx, cz, type);
@@ -6717,7 +6749,7 @@ function releaseBowShot() {
   const charge = clamp(player.drawT / player.drawMax, 0.15, 1);
   player.drawing = false; player.drawT = 0;
   const pt = PROJ_TYPES.arrow;
-  const pitchAng = (0.5 - camPitch) * 1.35;
+  const pitchAng = aimPitchAngle();
   const cP = Math.cos(pitchAng), sP = Math.sin(pitchAng);
   const aimDirX = Math.sin(player.aim) * cP;
   const aimDirZ = Math.cos(player.aim) * cP;
@@ -7006,7 +7038,7 @@ function revolverFan(baseDmg) {
   const pt = PROJ_TYPES.bullet;
   Sound.gunshot && Sound.gunshot();
   shake(0.8); screenFlash("#ffd06a", 0.28);
-  const pitchAng = (0.5 - camPitch) * 1.35;
+  const pitchAng = aimPitchAngle();
   const cP = Math.cos(pitchAng), sP = Math.sin(pitchAng);
   const spread = 0.15;
   let shotIdx = 0;
@@ -7062,7 +7094,7 @@ function multishot(baseDmg) {
   shake(0.4);
   // abort any draw in progress when this fires
   if (e.drawing) { e.drawing = false; e.drawT = 0; }
-  const pitchAng = (0.5 - camPitch) * 1.35;
+  const pitchAng = aimPitchAngle();
   const cP = Math.cos(pitchAng), sP = Math.sin(pitchAng);
   const ARROWS = 7;
   const arcSpan = 1.05;                             // ~60° wide cone
@@ -7698,7 +7730,7 @@ function rangedFire() {
   // ── aim direction — yaw from player.aim, pitch from camPitch
   //    so dragging the camera UP makes projectiles arc upward.
   //    camPitch ≈ 0.5 is level horizon; lower = looking up.
-  const pitchAng = (0.5 - camPitch) * 1.35;
+  const pitchAng = aimPitchAngle();
   const cP = Math.cos(pitchAng), sP = Math.sin(pitchAng);
   const aimDirX = Math.sin(player.aim) * cP;
   const aimDirZ = Math.cos(player.aim) * cP;
@@ -8228,14 +8260,14 @@ function updateWaves(dt) {
   if (waveState !== "fight") return;
   if (toSpawn.length) {
     spawnT -= dt;
-    if (spawnT <= 0 && zombiesAlive < 130) {       // perf-safe cap
+    if (spawnT <= 0 && zombiesAlive < 100) {       // tightened from 130
       const t = toSpawn.pop();
       if (wave >= 3 && Math.random() < 0.05) spawnZombie("revenant", true);
       else if ((t === "shambler" || t === "runner") && occluders.length &&
                Math.random() < 0.22 && spawnDiver(t)) {
         /* a rooftop diver took its place */
       } else spawnZombie(t);
-      spawnT = Math.max(0.04, 0.22 - wave * 0.01);
+      spawnT = Math.max(0.05, 0.26 - wave * 0.01);
     }
   } else if (zombiesAlive <= 0) {
     waveState = "cleared";
@@ -10363,26 +10395,27 @@ function poseZombie(z, d, chillMul) {
   const gy = walkHeight(z.x, z.z);
   z.y = gy;
   o.rotation.y = Math.atan2(player.x - z.x, player.z - z.z);
-  // PERF: zombies beyond ~28yd don't cast shadows. This is the single
-  // biggest performance win — the shadowmap stops rendering 100+
-  // animated rigs every frame.
+  // PERF: zombies beyond ~22yd don't cast shadows. Tightened from 28.
+  // The shadowmap stops rendering most of the horde each frame.
   const dToPlayer = Math.hypot(z.x - player.x, z.z - player.z);
-  const shadowOn = dToPlayer < 28;
+  const shadowOn = dToPlayer < 22;
   if (z._shadowOn !== shadowOn) {
     z._shadowOn = shadowOn;
     o.traverse(m => { if (m.isMesh) m.castShadow = shadowOn; });
   }
-  // PERF: also fully hide zombies past 160yd so the GPU doesn't waste
-  // draws on things you can't see. The fog already blackens them anyway.
-  const visibleOn = dToPlayer < 160;
+  // PERF: hide zombies past 140yd — fog hides them anyway.
+  const visibleOn = dToPlayer < 140;
   if (z._visibleOn !== visibleOn) {
     z._visibleOn = visibleOn;
     o.visible = visibleOn;
   }
   if (!visibleOn) return;
+  // PERF: distant zombies skip the arm-pose work — they're tiny on
+  // screen so the static silhouette is fine.
+  const fullPose = dToPlayer < 50;
   const moving = (z.state === "chase" || z.dodgeT > 0) && chillMul > 0;
   const amp = moving ? 0.82 : 0.12;
-  if (!z.crawler) {
+  if (!z.crawler && fullPose) {
     u.legs[0].rotation.x = Math.sin(z.walkP) * amp;
     u.legs[1].rotation.x = Math.sin(z.walkP + Math.PI) * amp;
   }
@@ -10391,14 +10424,17 @@ function poseZombie(z, d, chillMul) {
     gy + FOOT_LIFT + dragY + (moving ? Math.abs(Math.sin(z.walkP)) *
       (z.crawler ? 0.04 : 0.18) : 0)
     + (z.spH || 0) + Math.sin(z.t * 2) * 0.05, z.z);
-  const lunge = z.state === "attack" ? Math.max(0, Math.sin(z.t * 13)) : 0;
-  if (z.crawler) {
-    // dragging — arms claw forward in alternation
-    u.arms[0].rotation.x = -0.55 + Math.sin(z.walkP * 1.5) * 0.55;
-    u.arms[1].rotation.x = -0.55 + Math.sin(z.walkP * 1.5 + Math.PI) * 0.55;
-  } else {
-    u.arms[0].rotation.x = -1.0 - lunge * 0.75 + Math.sin(z.walkP) * 0.2;
-    u.arms[1].rotation.x = -1.0 - lunge * 0.75 - Math.sin(z.walkP) * 0.2;
+  // PERF: only animate the arms for nearby zombies — distant ones get
+  // a static silhouette since you can't see the detail anyway.
+  if (fullPose) {
+    const lunge = z.state === "attack" ? Math.max(0, Math.sin(z.t * 13)) : 0;
+    if (z.crawler) {
+      u.arms[0].rotation.x = -0.55 + Math.sin(z.walkP * 1.5) * 0.55;
+      u.arms[1].rotation.x = -0.55 + Math.sin(z.walkP * 1.5 + Math.PI) * 0.55;
+    } else {
+      u.arms[0].rotation.x = -1.0 - lunge * 0.75 + Math.sin(z.walkP) * 0.2;
+      u.arms[1].rotation.x = -1.0 - lunge * 0.75 - Math.sin(z.walkP) * 0.2;
+    }
   }
   // damage flash + status tints
   let er = 0, eg = 0, eb = 0;
