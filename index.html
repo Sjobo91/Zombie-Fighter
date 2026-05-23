@@ -786,14 +786,14 @@ const ULT_LEVEL = 9;            // the ultimate is unlocked at level 9
 
 // archetypes — the horde compounds in strength every wave
 const ETYPES = {
-  shambler: { hp: 38,   speed: 4.3,  dmg: 12, r: 1.25, h: 3.6,  xp: 11 },
-  runner:   { hp: 26,   speed: 10.4, dmg: 9,  r: 1.05, h: 3.1,  xp: 15 },
-  charger:  { hp: 82,   speed: 5.0,  dmg: 26, r: 1.45, h: 4.0,  xp: 32 },
-  lunger:   { hp: 48,   speed: 8.4,  dmg: 20, r: 1.15, h: 3.3,  xp: 27 },
-  brute:    { hp: 160,  speed: 4.2,  dmg: 30, r: 2.1,  h: 5.0,  xp: 48 },
-  giant:    { hp: 560,  speed: 3.2,  dmg: 54, r: 3.5,  h: 7.6,  xp: 200 },
-  revenant: { hp: 380,  speed: 6.8,  dmg: 34, r: 1.85, h: 4.7,  xp: 160 },
-  boss:     { hp: 1700, speed: 3.0,  dmg: 46, r: 5.4,  h: 12.5, xp: 950 },
+  shambler: { hp: 38,   speed: 7.2,  dmg: 12, r: 1.25, h: 3.6,  xp: 11 },
+  runner:   { hp: 26,   speed: 17.5, dmg: 9,  r: 1.05, h: 3.1,  xp: 15 },
+  charger:  { hp: 82,   speed: 8.4,  dmg: 26, r: 1.45, h: 4.0,  xp: 32 },
+  lunger:   { hp: 48,   speed: 14.0, dmg: 20, r: 1.15, h: 3.3,  xp: 27 },
+  brute:    { hp: 160,  speed: 7.0,  dmg: 30, r: 2.1,  h: 5.0,  xp: 48 },
+  giant:    { hp: 560,  speed: 5.4,  dmg: 54, r: 3.5,  h: 7.6,  xp: 200 },
+  revenant: { hp: 380,  speed: 11.4, dmg: 34, r: 1.85, h: 4.7,  xp: 160 },
+  boss:     { hp: 1700, speed: 5.0,  dmg: 46, r: 5.4,  h: 12.5, xp: 950 },
 };
 // per-wave compounding — late waves become a true test
 const DMG_SCALE = 1.075;    // gentle per-wave damage ramp
@@ -4657,6 +4657,8 @@ function cannonExplode(x, z) {
 
 /* ─── player + horde state ────────────────────────────────────────────────── */
 let player = null, zombies = [];
+// last-frame player position — used by zombies for predictive aim
+let _plPrevX = 0, _plPrevZ = 0, _plVx = 0, _plVz = 0;
 
 /* CLASSES — the five heroes. Each tweaks base stats, starting weapon,
    primary attack mode, and a few class-specific tunables. */
@@ -5249,28 +5251,28 @@ function grantAbility(id) {
    or the instant you press Q again. There is no cooldown. ─────────────────── */
 let pendingUlt = false, tornadoes = [];
 // melee-class ultimates (knight, rogue) — sword/dagger fantasy
-const ULTIMATES_MELEE = [
-  { id: "whirlwind", n: "WHIRLWIND", glyph: "\u{1F300}", col: 0xff8a4a,
-    hex: "#ff8a4a",
-    d: "Spin like a berserker — immune to all harm while you carve 3x " +
-       "your attack damage into everything around you. Drains RAGE; " +
-       "press Q to end." },
-  { id: "feather", n: "FEATHERWEIGHT", glyph: "\u{1FAB6}", col: 0x9fe4ff,
-    hex: "#9fe4ff",
-    d: "Your weapon weighs nothing: +150% attack speed, +50% damage, " +
-       "immune to all harm. Drains RAGE; press Q to end." },
-  { id: "storm", n: "ELEMENTAL STORM", glyph: "\u{1F329}", col: 0xc06bff,
-    hex: "#c06bff",
-    d: "Thunder hammers nearby foes and roaming fire tornadoes scour " +
-       "the field — and you keep full control. Drains RAGE; press Q to end." },
+// ── PER-CLASS ULTIMATES — each hero has three signature spells that
+// fit their fantasy. ULTIMATES_BY_CLASS is keyed by player.cls.
+const ULTIMATES_KNIGHT = [
+  { id: "judgment", n: "JUDGMENT", glyph: "✝", col: 0xffd06a,
+    hex: "#ffd06a",
+    d: "Plant your sword — pillars of holy light crucify every zombie " +
+       "within 30 yards while you stand immune. Drains RAGE; press Q to end." },
+  { id: "avenger", n: "AVENGER'S FORM", glyph: "\u{1F451}", col: 0xfff2b0,
+    hex: "#fff2b0",
+    d: "Swell into a 2× colossus — every swing is 3× damage and you " +
+       "shrug off all wounds. Drains RAGE; press Q to end." },
+  { id: "sanctum", n: "SACRED GROUND", glyph: "\u{2728}", col: 0xfff8dc,
+    hex: "#fff8dc",
+    d: "Hallow the ground around you: a golden field that burns the " +
+       "horde and heals you each second. Drains RAGE; press Q to end." },
 ];
-// wizard ultimates — pure spell fantasy
 const ULTIMATES_WIZARD = [
-  { id: "meteor", n: "METEOR SHOWER", glyph: "☄️", col: 0xff6a3a,
+  { id: "meteor", n: "METEOR SHOWER", glyph: "☄", col: 0xff6a3a,
     hex: "#ff6a3a",
     d: "Pull down flaming meteors from the sky — each strike erupts in " +
        "fire, smashing whatever it touches. Drains RAGE; press Q to end." },
-  { id: "blizzard", n: "ABSOLUTE ZERO", glyph: "❄️", col: 0x9adfff,
+  { id: "blizzard", n: "ABSOLUTE ZERO", glyph: "❄", col: 0x9adfff,
     hex: "#9adfff",
     d: "A blizzard freezes the battlefield — every undead within 32 yards " +
        "slows to a crawl as ice shards rain down. Drains RAGE; press Q to end." },
@@ -5279,14 +5281,63 @@ const ULTIMATES_WIZARD = [
     d: "Tear open a hungry rift in space that drags the horde toward it " +
        "and tears them apart. Drains RAGE; press Q to end." },
 ];
-// wizard ultimates list, default to melee for everyone else
+const ULTIMATES_GUNSLINGER = [
+  { id: "deadeye", n: "DEAD EYE", glyph: "\u{1F441}", col: 0xffd06a,
+    hex: "#ffd06a",
+    d: "The world slows to a crawl — every bullet crits, the cylinder " +
+       "never empties. Drains RAGE; press Q to end." },
+  { id: "highnoon", n: "HIGH NOON", glyph: "\u{2600}", col: 0xffe24a,
+    hex: "#ffe24a",
+    d: "Brand every zombie in sight with a sun mark — moments later, " +
+       "a phantom bullet drops each one. Drains RAGE; press Q to end." },
+  { id: "bulletstorm", n: "BULLET STORM", glyph: "\u{1F4A2}", col: 0xff7a30,
+    hex: "#ff7a30",
+    d: "Spin and spray a 360° hail of lead around you. No aiming — just " +
+       "death in every direction. Drains RAGE; press Q to end." },
+];
+const ULTIMATES_HUNTER = [
+  { id: "arrowstorm", n: "STORM OF ARROWS", glyph: "\u{1F3F9}", col: 0x9aeac0,
+    hex: "#9aeac0",
+    d: "Rain arrows from the sky on every visible foe — they fall faster " +
+       "the more of them there are. Drains RAGE; press Q to end." },
+  { id: "eagleeye", n: "EAGLE EYE", glyph: "\u{1F985}", col: 0xc0ffd0,
+    hex: "#c0ffd0",
+    d: "Time slows to a half-pace; every arrow you loose pierces all and " +
+       "hits twice as hard. Drains RAGE; press Q to end." },
+  { id: "natures", n: "NATURE'S GRASP", glyph: "\u{1F33F}", col: 0x4aaa5a,
+    hex: "#4aaa5a",
+    d: "Thorned roots erupt under the horde, snaring and shredding them " +
+       "where they stand. Drains RAGE; press Q to end." },
+];
+const ULTIMATES_ROGUE = [
+  { id: "shadowdance", n: "SHADOW DANCE", glyph: "\u{1F5E1}", col: 0xf06aff,
+    hex: "#f06aff",
+    d: "Become untouchable — every dagger jab blinks you to the next " +
+       "victim with a guaranteed crit. Drains RAGE; press Q to end." },
+  { id: "bloodlust", n: "BLOODLUST", glyph: "\u{1FA78}", col: 0xff3a4a,
+    hex: "#ff3a4a",
+    d: "Every kill heals you for 30% HP; +200% attack speed and full " +
+       "lifesteal. Drains RAGE; press Q to end." },
+  { id: "nightfall", n: "NIGHTFALL", glyph: "\u{1F319}", col: 0x6a3aaa,
+    hex: "#6a3aaa",
+    d: "Drown the world in shadow — zombies forget you exist, your every " +
+       "hit crits, and wounded foes die in one strike. Drains RAGE; press Q to end." },
+];
+const ULTIMATES_BY_CLASS = {
+  knight: ULTIMATES_KNIGHT,
+  wizard: ULTIMATES_WIZARD,
+  gunslinger: ULTIMATES_GUNSLINGER,
+  hunter: ULTIMATES_HUNTER,
+  rogue: ULTIMATES_ROGUE,
+};
 function classUltList() {
-  return (player && player.cls === "wizard") ? ULTIMATES_WIZARD
-                                              : ULTIMATES_MELEE;
+  return ULTIMATES_BY_CLASS[player && player.cls] || ULTIMATES_KNIGHT;
 }
-const ULTIMATES = ULTIMATES_MELEE;        // legacy alias for older callers
+const ULTIMATES = ULTIMATES_KNIGHT;        // legacy alias for older callers
 function ultDef(id) {
-  return ULTIMATES_MELEE.concat(ULTIMATES_WIZARD).find(u => u.id === id);
+  for (const list of Object.values(ULTIMATES_BY_CLASS))
+    for (const u of list) if (u.id === id) return u;
+  return null;
 }
 function featherOn() { return player.ultActive && player.ultId === "feather"; }
 function tryUltimate() {
@@ -5299,10 +5350,19 @@ function tryUltimate() {
   }
   e.ultActive = true; e.ultHitT = 0;
   const u = ultDef(e.ultId);
-  if (e.ultId === "whirlwind" || e.ultId === "feather") e.ultImmune = true;
+  // immunity flag — set for ultimates that grant invulnerability
+  if (e.ultId === "whirlwind" || e.ultId === "feather" ||
+      e.ultId === "judgment"  || e.ultId === "avenger" ||
+      e.ultId === "sanctum"   || e.ultId === "blizzard" ||
+      e.ultId === "deadeye"   || e.ultId === "shadowdance" ||
+      e.ultId === "nightfall")
+    e.ultImmune = true;
   if (e.ultId === "storm") spawnTornadoes();
   if (e.ultId === "voidrift") spawnVoidRift();
-  if (e.ultId === "blizzard") { e.ultImmune = true; }
+  if (e.ultId === "judgment") spawnJudgmentPillars();
+  if (e.ultId === "highnoon") fireHighNoon();
+  // HUNTER NATURE'S GRASP — root every nearby zombie at cast time
+  if (e.ultId === "natures") natureGrasp();
   recalc();
   Sound.ability(); shake(1.4); screenFlash(u.hex, 0.5);
   flashLight(e.x, e.y + 2, e.z, 0.7, u.col);
@@ -5316,6 +5376,7 @@ function endUltimate() {
   player.ultActive = false; player.ultImmune = false;
   clearTornadoes();
   clearVoidRift();
+  clearJudgmentPillars();
   recalc();
   banner("the power fades", "ULTIMATE SPENT");
 }
@@ -5417,6 +5478,199 @@ function updateUltimate(dt) {
         rand(3, 5), 0x9adfff, 0.35);
   } else if (e.ultId === "voidrift") {
     updateVoidRift(dt);
+  }
+  // ─── KNIGHT ULTIMATES ──────────────────────────────────────────────
+  else if (e.ultId === "judgment") {
+    updateJudgmentPillars(dt);
+    // continuous light flare around the caster
+    if (Math.random() < dt * 28)
+      flare(e.x + rand(-4, 4), e.y + rand(0.5, 3), e.z + rand(-4, 4),
+        rand(3, 5), 0xffd06a, 0.4);
+  } else if (e.ultId === "avenger") {
+    // colossus form — passive aura, periodic ground slam ticks
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.5;
+      const sd = e.dmg * e.dmgMul * 1.8;
+      for (const z of zombies) {
+        if (z.state === "die" || z.state === "rising") continue;
+        if (Math.hypot(z.x - e.x, z.z - e.z) < 7 + z.r) {
+          hitZombie(z, sd, Math.random() < 0.4,
+            Math.atan2(z.x - e.x, z.z - e.z), 3);
+        }
+      }
+      windRing.setColor(0xffd06a);
+      windRing.show(e.x, e.y + 0.2, e.z, 7, 0.32);
+    }
+    if (Math.random() < dt * 26)
+      flare(e.x + rand(-3, 3), e.y + rand(1, 4), e.z + rand(-3, 3),
+        rand(4, 7), 0xfff2b0, 0.5);
+  } else if (e.ultId === "sanctum") {
+    // sacred ground — heals you, hurts them, every second
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.45;
+      const sd = e.dmg * e.dmgMul * 1.4;
+      e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.04);
+      for (const z of zombies) {
+        if (z.state === "die" || z.state === "rising") continue;
+        if (Math.hypot(z.x - e.x, z.z - e.z) < 14 + z.r) {
+          hitZombie(z, sd, false,
+            Math.atan2(z.x - e.x, z.z - e.z), 1);
+          z.burn = Math.max(z.burn || 0, 2);
+          z.burnDps = Math.max(z.burnDps || 0, sd * 0.6);
+        }
+      }
+      smashRing.setColor(0xfff8dc);
+      smashRing.show(e.x, e.y + 0.15, e.z, 14, 0.32);
+    }
+    if (Math.random() < dt * 40)
+      flare(e.x + rand(-7, 7), e.y + rand(0.3, 2.4), e.z + rand(-7, 7),
+        rand(3, 6), 0xfff2b0, 0.5);
+  }
+  // ─── GUNSLINGER ULTIMATES ──────────────────────────────────────────
+  else if (e.ultId === "deadeye") {
+    // bullets are free (no reload) + every shot crits — wired in
+    // rangedFire/hitZombie via player.ultId checks.
+    if (e.reloadT > 0) e.reloadT = 0;
+    e.ammo = 6;
+    if (Math.random() < dt * 18)
+      flare(e.x + rand(-3, 3), e.y + rand(1, 3.4), e.z + rand(-3, 3),
+        rand(3, 5), 0xffd06a, 0.4);
+  } else if (e.ultId === "highnoon") {
+    // single big upfront fire (in fireHighNoon) — just spark embers
+    if (Math.random() < dt * 30)
+      flare(e.x + rand(-4, 4), e.y + rand(2, 5), e.z + rand(-4, 4),
+        rand(3, 5), 0xffe24a, 0.55);
+  } else if (e.ultId === "bulletstorm") {
+    // rapid spiral of bullets fired in every direction
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.06;
+      const pt = PROJ_TYPES.bullet;
+      const a = e.t * 12 + Math.random() * 0.4;
+      const aimDirX = Math.sin(a), aimDirZ = Math.cos(a);
+      const sx = e.x + aimDirX * 1.6, sz = e.z + aimDirZ * 1.6;
+      const sy = (e.y || 0) + 2.2;
+      const bg = new THREE.Group();
+      const slug = new THREE.Mesh(
+        new THREE.CylinderGeometry(pt.size * 0.7, pt.size, pt.size * 2.2, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffe9a0,
+          emissive: 0xffa030, emissiveIntensity: 1.4,
+          roughness: 0.3, metalness: 0.7 }));
+      slug.rotation.x = Math.PI / 2; bg.add(slug);
+      bg.position.set(sx, sy, sz);
+      bg.rotation.y = a;
+      scene.add(bg);
+      heroProjectiles.push({ obj: bg, kind: "bullet", x: sx, y: sy, z: sz,
+        vx: aimDirX * pt.speed, vy: 0, vz: aimDirZ * pt.speed,
+        life: 0.7, hits: new Set(), pierce: 1,
+        def: Object.assign({}, pt, { dmgMul: pt.dmgMul * 1.1 }) });
+      if (Math.random() < 0.5) Sound.gunshot && Sound.gunshot();
+    }
+  }
+  // ─── HUNTER ULTIMATES ──────────────────────────────────────────────
+  else if (e.ultId === "arrowstorm") {
+    // arrows rain from above on nearby zombies
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.18;
+      const targets = zombies.filter(z =>
+        z.state !== "die" && z.state !== "rising" &&
+        Math.hypot(z.x - e.x, z.z - e.z) < 40);
+      const n = Math.min(targets.length, 4);
+      for (let i = 0; i < n; i++) {
+        const t = pick(targets);
+        spawnRainArrow(t.x + rand(-1.5, 1.5), t.z + rand(-1.5, 1.5),
+          e.dmg * e.dmgMul * 1.4 + e.level * 4);
+      }
+    }
+  } else if (e.ultId === "eagleeye") {
+    // time-slow for enemies + bonus damage handled inline
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.2;
+      // chase-mark every nearby zombie so the hunter feels predatory
+      for (const z of zombies) {
+        if (z.state === "die" || z.state === "rising") continue;
+        if (Math.hypot(z.x - e.x, z.z - e.z) < 50)
+          player.markedZombies.add(z);
+      }
+    }
+    if (Math.random() < dt * 30)
+      flare(e.x + rand(-4, 4), e.y + rand(0.5, 3), e.z + rand(-4, 4),
+        rand(3, 5), 0xc0ffd0, 0.45);
+  } else if (e.ultId === "natures") {
+    // periodic thorns tick — anyone rooted bleeds
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.42;
+      const sd = e.dmg * e.dmgMul * 1.2;
+      for (const z of zombies) {
+        if (z.state === "die" || z.state === "rising") continue;
+        if (z._rootedT > 0 && Math.hypot(z.x - e.x, z.z - e.z) < 26) {
+          z._rootedT -= e.ultHitT;
+          if (z._rootedT > 0) z.stun = Math.max(z.stun, 0.6);
+          hitZombie(z, sd, Math.random() < 0.3,
+            Math.atan2(z.x - e.x, z.z - e.z), 0.5);
+        }
+      }
+    }
+    if (Math.random() < dt * 28)
+      flare(e.x + rand(-6, 6), e.y + rand(0.2, 1.6), e.z + rand(-6, 6),
+        rand(2.5, 4), 0x4aaa5a, 0.4);
+  }
+  // ─── ROGUE ULTIMATES ───────────────────────────────────────────────
+  else if (e.ultId === "shadowdance") {
+    // blink to the nearest zombie and crit every quarter second
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.18;
+      let best = null, bd = 28;
+      for (const z of zombies) {
+        if (z.state === "die" || z.state === "rising") continue;
+        const dd = Math.hypot(z.x - e.x, z.z - e.z);
+        if (dd < bd) { bd = dd; best = z; }
+      }
+      if (best) {
+        // blink behind the target
+        const dx = best.x - e.x, dz = best.z - e.z;
+        const dd = Math.hypot(dx, dz) || 1;
+        e.x = best.x + (dx / dd) * 1.6;
+        e.z = best.z + (dz / dd) * 1.6;
+        e.x = clamp(e.x, -ARENA + 4, ARENA - 4);
+        e.z = clamp(e.z, -ARENA + 4, ZSHORE - 3);
+        e.y = walkHeight(e.x, e.z);
+        // dump a crit
+        const dmg = e.dmg * e.dmgMul * e.critMul * 2.4;
+        hitZombie(best, dmg, true, Math.atan2(dx, dz), 3);
+        // smoke at both ends
+        spawnParts(e.x, e.y + 1.4, e.z, 16,
+          { color: 0xf06aff, speed: 14, life: 0.4 });
+        for (let i = 0; i < 2; i++)
+          flare(e.x + rand(-1, 1), e.y + rand(0.6, 2.6), e.z + rand(-1, 1),
+            rand(4, 6), 0xf06aff, 0.5);
+        Sound.blink && Sound.blink();
+      }
+    }
+  } else if (e.ultId === "bloodlust") {
+    // lifesteal applied each hit via hitZombie; also burst-heal on kill
+    // every tick we add tiny regen so it feels relentless
+    e.ultHitT -= dt;
+    if (e.ultHitT <= 0) {
+      e.ultHitT = 0.5;
+      e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.015);
+    }
+    if (Math.random() < dt * 28)
+      flare(e.x + rand(-2.5, 2.5), e.y + rand(0.8, 3),
+        e.z + rand(-2.5, 2.5), rand(3, 4.5), 0xff3a4a, 0.5);
+  } else if (e.ultId === "nightfall") {
+    // shadow flares dot the field; the zombies' attack telegraphs are
+    // effectively ignored because ultImmune is on, and assassinate is
+    // handled inline in hitZombie. Here we just decorate.
+    if (Math.random() < dt * 28)
+      flare(e.x + rand(-6, 6), e.y + rand(0.2, 2.6), e.z + rand(-6, 6),
+        rand(3, 6), 0x6a3aaa, 0.5);
   }
 }
 function spawnTornadoes() {
@@ -5635,6 +5889,132 @@ function updateVoidRift(dt) {
 }
 function clearVoidRift() {
   if (voidRift) { scene.remove(voidRift.g); voidRift = null; }
+}
+
+/* ─── JUDGMENT — knight ultimate. Six pillars of holy light orbit the
+   player, scorching zombies that step into them.  ─────────────────── */
+let judgmentPillars = [];
+function spawnJudgmentPillars() {
+  clearJudgmentPillars();
+  for (let i = 0; i < 6; i++) {
+    const g = new THREE.Group();
+    const col = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 1.0, 16, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffd06a,
+        transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+        depthWrite: false, blending: THREE.AdditiveBlending }));
+    col.position.y = 8; g.add(col);
+    const inner = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.4, 18, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffffff,
+        transparent: true, opacity: 0.85, depthWrite: false }));
+    inner.position.y = 9; g.add(inner);
+    scene.add(g);
+    judgmentPillars.push({ g, a: (i / 6) * TAU, hitT: 0 });
+  }
+}
+function updateJudgmentPillars(dt) {
+  for (const p of judgmentPillars) {
+    p.a += dt * 0.8;
+    p.x = player.x + Math.cos(p.a) * 11;
+    p.z = player.z + Math.sin(p.a) * 11;
+    p.g.position.set(p.x, walkHeight(p.x, p.z), p.z);
+    p.hitT -= dt;
+    if (p.hitT <= 0) {
+      p.hitT = 0.32;
+      for (const z of zombies) {
+        if (z.state === "die" || z.state === "rising") continue;
+        if (Math.hypot(z.x - p.x, z.z - p.z) < 2.4 + z.r) {
+          hitZombie(z, player.dmg * player.dmgMul * 1.4, true,
+            Math.atan2(z.x - p.x, z.z - p.z), 1);
+        }
+      }
+    }
+  }
+}
+function clearJudgmentPillars() {
+  for (const p of judgmentPillars) scene.remove(p.g);
+  judgmentPillars = [];
+}
+
+/* ─── HIGH NOON — gunslinger ultimate. One-shot upfront cast that
+   marks every visible zombie; a phantom bullet drops them 0.7s later. */
+function fireHighNoon() {
+  const marked = [];
+  for (const z of zombies) {
+    if (z.state === "die" || z.state === "rising") continue;
+    if (Math.hypot(z.x - player.x, z.z - player.z) > 60) continue;
+    if (lineBlocked(player.x, player.z, z.x, z.z)) continue;
+    marked.push(z);
+    // a sun mark above the zombie's head
+    flare(z.x, z.y + ETYPES[z.type].h + 1.6, z.z, 8, 0xffe24a, 0.85, 1.5);
+  }
+  screenFlash("#ffe24a", 0.32); shake(0.6);
+  setTimeout(() => {
+    if (!player.alive || !player.ultActive) return;
+    Sound.gunshot && Sound.gunshot();
+    Sound.gunshot && Sound.gunshot();
+    shake(1.0); screenFlash("#ffd06a", 0.5);
+    for (const z of marked) {
+      if (z.state === "die" || z.state === "rising") continue;
+      const dmg = player.dmg * player.dmgMul * 4 + player.level * 8;
+      // overhead muzzle flare + sky bullet streak
+      spawnParts(z.x, z.y + 12, z.z, 14,
+        { color: 0xffd06a, speed: 24, life: 0.45 });
+      flare(z.x, z.y + ETYPES[z.type].h * 0.5, z.z, 6, 0xffd06a, 0.6);
+      flashLight(z.x, z.y + 2, z.z, 0.32, 0xffd06a);
+      hitZombie(z, dmg, true,
+        Math.atan2(z.x - player.x, z.z - player.z), 4);
+    }
+  }, 700);
+}
+
+/* ─── ARROW STORM — hunter ultimate. Falling arrow that thunks into
+   a zombie. Just a quick scripted projectile. */
+function spawnRainArrow(tx, tz, dmg) {
+  const ty = walkHeight(tx, tz);
+  const g = new THREE.Group();
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.06, 1.6, 5),
+    new THREE.MeshStandardMaterial({ color: 0x6a4a2a,
+      emissive: 0x9aeac0, emissiveIntensity: 1.1 }));
+  shaft.rotation.x = Math.PI / 2; g.add(shaft);
+  const tip = new THREE.Mesh(
+    new THREE.ConeGeometry(0.13, 0.36, 5),
+    new THREE.MeshStandardMaterial({ color: 0xe6e2d0,
+      emissive: 0x9aeac0, emissiveIntensity: 1.1 }));
+  tip.position.z = 0.95; tip.rotation.x = Math.PI / 2; g.add(tip);
+  g.position.set(tx + rand(-2, 2), ty + 18, tz + rand(-2, 2));
+  // aim straight down at the target
+  g.rotation.x = -Math.PI * 0.42;
+  scene.add(g);
+  heroProjectiles.push({ obj: g, kind: "arrow",
+    x: g.position.x, y: g.position.y, z: g.position.z,
+    vx: (tx - g.position.x) * 0.7, vz: (tz - g.position.z) * 0.7,
+    vy: -38, life: 0.7, hits: new Set(), pierce: 2,
+    def: { col: 0x9aeac0, trail: 0x9aeac0, trailN: 1, dmgMul: 1.5 } });
+}
+
+/* ─── NATURE'S GRASP — hunter ultimate cast. Roots every nearby
+   zombie for 4 seconds. */
+function natureGrasp() {
+  screenFlash("#4aaa5a", 0.32); shake(0.8);
+  for (const z of zombies) {
+    if (z.state === "die" || z.state === "rising") continue;
+    if (Math.hypot(z.x - player.x, z.z - player.z) > 26) continue;
+    z._rootedT = 4.0;
+    z.stun = Math.max(z.stun, 0.8);
+    // thorn burst at each rooted zombie
+    spawnParts(z.x, z.y + 0.2, z.z, 18,
+      { color: 0x4aaa5a, speed: 18, up: 8, life: 0.7 });
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * TAU;
+      flare(z.x + Math.cos(a) * 1.2, z.y + 0.6, z.z + Math.sin(a) * 1.2,
+        rand(3, 4.5), 0x4aaa5a, 0.5);
+    }
+  }
+  windRing.setColor(0x4aaa5a);
+  windRing.show(player.x, player.y + 0.2, player.z, 22, 0.55);
 }
 function grantUltimate(id) {
   player.ultId = id; player.ultChosen = true;
@@ -6872,6 +7252,27 @@ function applyChill(z) {
 }
 function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
   registerCombat();                            // keep the combo alive
+  // ── ULTIMATE-driven damage modifiers ──
+  if (player && player.ultActive && !isChain) {
+    if (player.ultId === "deadeye" ||
+        player.ultId === "shadowdance" ||
+        player.ultId === "nightfall") {
+      // every hit crits
+      if (!crit) { crit = true; dmg *= player.critMul; }
+    }
+    if (player.ultId === "eagleeye") {
+      // arrows hit 2× during eagle eye
+      dmg *= 2;
+    }
+    if (player.ultId === "nightfall" && z.hp / z.maxHp < 0.6) {
+      // assassinate — instakill below 60%
+      dmg = z.hp + 1;
+    }
+    if (player.ultId === "bloodlust") {
+      // lifesteal — every hit restores 6% of max HP
+      player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.06);
+    }
+  }
   // ── class passives that modify the incoming hit ──
   if (player) {
     const cls = player.classDef || CLASSES.knight;
@@ -7063,8 +7464,8 @@ function startWave(n) {
   wave = n;
   toSpawn = [];
   let count;
-  if (n === 1) count = 26;
-  else count = Math.round(waveCountPrev * 1.22) + 7;
+  if (n === 1) count = 78;                       // was 26 (3× horde size)
+  else count = Math.round(waveCountPrev * 1.22) + 21;
   count = Math.round(count * (1 + (level - 1) * 0.4));
   waveCountPrev = count;
   for (let i = 0; i < count; i++) {
@@ -7089,7 +7490,7 @@ function updateWaves(dt) {
   if (waveState !== "fight") return;
   if (toSpawn.length) {
     spawnT -= dt;
-    if (spawnT <= 0 && zombiesAlive < 110) {
+    if (spawnT <= 0 && zombiesAlive < 220) {       // cap was 110 — tripled
       // about 1 in 5 spawns dives off a rooftop; the rest claw up from the ground
       const t = toSpawn.pop();
       if (wave >= 3 && Math.random() < 0.05) spawnZombie("revenant", true);
@@ -7097,7 +7498,8 @@ function updateWaves(dt) {
                Math.random() < 0.22 && spawnDiver(t)) {
         /* a rooftop diver took its place */
       } else spawnZombie(t);
-      spawnT = Math.max(0.06, 0.42 - wave * 0.022);
+      // much tighter spawn cadence — they pour in
+      spawnT = Math.max(0.02, 0.16 - wave * 0.008);
     }
   } else if (zombiesAlive <= 0) {
     waveState = "cleared";
@@ -7749,6 +8151,101 @@ function ultSVG(id) {
           'transform="rotate(20 50 50)"/>' +
         '<ellipse cx="50" cy="50" rx="28" ry="9" ' +
           'transform="rotate(20 50 50)"/></g>');
+  // ── KNIGHT ULTS
+  if (id === "judgment")
+    return svgEl(
+      '<rect x="46" y="12" width="8" height="76" fill="#ffd06a"/>' +
+      '<rect x="22" y="32" width="56" height="8" fill="#ffd06a"/>' +
+      '<polygon points="50,4 56,12 44,12" fill="#fff8dc"/>');
+  if (id === "avenger")
+    return svgEl(
+      '<polygon points="50,8 62,28 88,28 70,46 78,72 50,58 22,72 30,46 ' +
+        '12,28 38,28" fill="#fff2b0" stroke="#c89030" stroke-width="3"/>' +
+      '<circle cx="50" cy="40" r="6" fill="#ffd06a"/>');
+  if (id === "sanctum")
+    return svgEl(
+      '<circle cx="50" cy="50" r="36" fill="none" stroke="#fff8dc" ' +
+        'stroke-width="3" stroke-dasharray="4,4"/>' +
+      '<circle cx="50" cy="50" r="24" fill="none" stroke="#ffd06a" ' +
+        'stroke-width="3"/>' +
+      '<circle cx="50" cy="50" r="6" fill="#ffd06a"/>');
+  // ── GUNSLINGER ULTS
+  if (id === "deadeye")
+    return svgEl(
+      '<ellipse cx="50" cy="50" rx="38" ry="20" fill="none" ' +
+        'stroke="#ffd06a" stroke-width="4"/>' +
+      '<circle cx="50" cy="50" r="14" fill="#ff7a30"/>' +
+      '<circle cx="50" cy="50" r="5" fill="#000"/>');
+  if (id === "highnoon")
+    return svgEl(
+      '<circle cx="50" cy="50" r="20" fill="#ffe24a"/>' +
+      '<g stroke="#ffd06a" stroke-width="6" stroke-linecap="round">' +
+        '<line x1="50" y1="6" x2="50" y2="24"/>' +
+        '<line x1="50" y1="76" x2="50" y2="94"/>' +
+        '<line x1="6" y1="50" x2="24" y2="50"/>' +
+        '<line x1="76" y1="50" x2="94" y2="50"/>' +
+        '<line x1="20" y1="20" x2="32" y2="32"/>' +
+        '<line x1="68" y1="68" x2="80" y2="80"/>' +
+        '<line x1="80" y1="20" x2="68" y2="32"/>' +
+        '<line x1="32" y1="68" x2="20" y2="80"/></g>');
+  if (id === "bulletstorm")
+    return svgEl(
+      '<g fill="#ff7a30">' +
+        '<circle cx="50" cy="20" r="5"/><circle cx="50" cy="80" r="5"/>' +
+        '<circle cx="20" cy="50" r="5"/><circle cx="80" cy="50" r="5"/>' +
+        '<circle cx="28" cy="28" r="5"/><circle cx="72" cy="28" r="5"/>' +
+        '<circle cx="28" cy="72" r="5"/><circle cx="72" cy="72" r="5"/></g>' +
+      '<circle cx="50" cy="50" r="10" fill="#ffd06a"/>');
+  // ── HUNTER ULTS
+  if (id === "arrowstorm")
+    return svgEl(
+      '<g stroke="#9aeac0" stroke-width="3" stroke-linecap="round">' +
+        '<line x1="20" y1="10" x2="36" y2="56"/>' +
+        '<line x1="40" y1="6" x2="52" y2="50"/>' +
+        '<line x1="60" y1="12" x2="68" y2="58"/>' +
+        '<line x1="80" y1="8" x2="84" y2="54"/></g>' +
+      '<g fill="#e6e2d0">' +
+        '<polygon points="36,56 30,52 32,60"/>' +
+        '<polygon points="52,50 46,46 48,54"/>' +
+        '<polygon points="68,58 62,54 64,62"/>' +
+        '<polygon points="84,54 78,50 80,58"/></g>');
+  if (id === "eagleeye")
+    return svgEl(
+      '<ellipse cx="50" cy="50" rx="42" ry="22" fill="#fff" ' +
+        'stroke="#4aaa5a" stroke-width="3"/>' +
+      '<circle cx="50" cy="50" r="14" fill="#4aaa5a"/>' +
+      '<circle cx="50" cy="50" r="6" fill="#000"/>' +
+      '<circle cx="54" cy="46" r="2" fill="#fff"/>');
+  if (id === "natures")
+    return svgEl(
+      '<g fill="#4aaa5a">' +
+        '<path d="M50,90 C30,70 30,40 50,20 C70,40 70,70 50,90 Z"/></g>' +
+      '<g stroke="#2a6020" stroke-width="3" fill="none">' +
+        '<path d="M30,80 Q50,60 70,80"/>' +
+        '<path d="M22,86 Q50,52 78,86"/></g>');
+  // ── ROGUE ULTS
+  if (id === "shadowdance")
+    return svgEl(
+      '<g fill="#f06aff">' +
+        '<polygon points="20,80 40,40 36,80"/>' +
+        '<polygon points="80,80 60,40 64,80"/></g>' +
+      '<g stroke="#ff9adf" stroke-width="3" fill="none">' +
+        '<path d="M30,30 Q50,10 70,30"/></g>');
+  if (id === "bloodlust")
+    return svgEl(
+      '<path d="M50,90 C16,60 16,34 50,16 C84,34 84,60 50,90 Z" ' +
+        'fill="#ff3a4a" stroke="#7a0a18" stroke-width="3"/>' +
+      '<path d="M50,42 L42,58 L58,58 Z" fill="#7a0a18"/>');
+  if (id === "nightfall")
+    return svgEl(
+      '<circle cx="50" cy="50" r="36" fill="#1a0822"/>' +
+      '<path d="M62,30 A24,24 0 1 0 62,70 A18,18 0 1 1 62,30 Z" ' +
+        'fill="#c8a8ff"/>' +
+      '<g fill="#fff">' +
+        '<circle cx="22" cy="22" r="1.5"/>' +
+        '<circle cx="78" cy="36" r="1.5"/>' +
+        '<circle cx="86" cy="68" r="1.5"/>' +
+        '<circle cx="14" cy="76" r="1.5"/></g>');
   return ultLockedSVG();
 }
 function ultLockedSVG() {
@@ -8803,6 +9300,13 @@ function steerAround(z, ang) {
 }
 /* ─── update: horde (tougher, with dodge AI + status effects) ─────────────── */
 function updateZombies(dt) {
+  // sample the player's velocity so zombies can lead the chase
+  if (player) {
+    const idt = dt > 0.0001 ? 1 / dt : 0;
+    _plVx = (player.x - _plPrevX) * idt;
+    _plVz = (player.z - _plPrevZ) * idt;
+    _plPrevX = player.x; _plPrevZ = player.z;
+  }
   for (let i = zombies.length - 1; i >= 0; i--) {
     const z = zombies[i], d = ETYPES[z.type];
     z.t += dt;
@@ -8879,6 +9383,14 @@ function updateZombies(dt) {
     }
     let chillMul = 1;
     if (z.chill > 0) { z.chill -= dt; chillMul = z.frozen ? 0 : 0.45; }
+    // EAGLE EYE / DEAD EYE — these ults slow the world for the player
+    if (player && player.ultActive &&
+        (player.ultId === "eagleeye" || player.ultId === "deadeye")) {
+      chillMul *= 0.45;
+    }
+    // NIGHTFALL — zombies can't see the player, so they wander idly
+    if (player && player.ultActive && player.ultId === "nightfall")
+      chillMul *= 0.2;
     else z.frozen = false;
     if (z.quake > 0) { z.quake -= dt; chillMul *= 0.4; }   // tremor slow
     if (z.stun > 0) { z.stun -= dt; if (z.stun <= 0) z.frozen = false; }
@@ -8887,13 +9399,30 @@ function updateZombies(dt) {
     z.kx *= 0.84; z.kz *= 0.84;
 
     const stunned = z.stun > 0;
-    const dx = player.x - z.x, dz = player.z - z.z;
+    // ── SMARTER AIM ──
+    // 1. Predictive lead: aim where the player will be in ~0.6s, not
+    //    where they are now. Distant zombies lead more aggressively.
+    // 2. Flanking: each zombie gets a fixed bias offset perpendicular
+    //    to the chase line, so groups fan out into a surround.
+    const rawDist = Math.hypot(player.x - z.x, player.z - z.z) || 1;
+    const lead = clamp(rawDist * 0.04, 0.15, 0.9);
+    const aimX = player.x + _plVx * lead;
+    const aimZ = player.z + _plVz * lead;
+    // a small flanking offset perpendicular to the chase line, fixed
+    // per-zombie via steerBias, only applied when far enough to matter
+    const dxRaw = aimX - z.x, dzRaw = aimZ - z.z;
+    const distRaw = Math.hypot(dxRaw, dzRaw) || 1;
+    const flankAmt = clamp((rawDist - 8) * 0.4, 0, 7) *
+                     (z.steerBias > 0 ? 1 : -1);
+    const px = -dzRaw / distRaw, pz = dxRaw / distRaw;
+    const dx = (aimX + px * flankAmt) - z.x;
+    const dz = (aimZ + pz * flankAmt) - z.z;
     const dist = Math.hypot(dx, dz) || 1;
     const reach = z.r + P.r + 0.6;
     const dmgScale = Math.pow(DMG_SCALE, wave - 1) * (1 + (level - 1) * 0.3);
-    // magnet — distant corpses sprint toward the hero so the map-wide
-    // spawns reach you within seconds. Caps at 4.5× normal speed.
-    const magnetMul = clamp(1 + Math.max(0, dist - 20) * 0.06, 1, 4.5);
+    // magnet — far corpses now sprint MUCH harder. They're hunting you,
+    // not strolling. Caps at 6× their normal speed.
+    const magnetMul = clamp(1 + Math.max(0, rawDist - 14) * 0.085, 1, 6.0);
     if (z.stagger > 0) z.stagger -= dt;
     else if (!stunned) {
       if (z.type === "charger") {
