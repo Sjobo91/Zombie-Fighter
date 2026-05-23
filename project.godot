@@ -81,4 +81,4 @@ escape={
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
-environment/defaults/default_clear_color=Color(0.176, 0.188, 0.251, 1)
+environment/defaults/default_clear_color=Color(0.18, 0.13, 0.09, 1)

@@ -77,7 +77,7 @@ anchor_top = 0.0
 anchor_right = 1.0
 offset_top = 32.0
 offset_bottom = 60.0
-text = "ACT I · THE GRAVEYARD"
+text = "ACT I · THE ASSEMBLY FLOOR"
 horizontal_alignment = 1
 
 [node name="Mechparts" type="Control" parent="Root"]

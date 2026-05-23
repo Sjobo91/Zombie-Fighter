@@ -4,13 +4,17 @@
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn"    id="h"]
 [ext_resource type="PackedScene" path="res://scenes/wave_manager.tscn" id="w"]
 
+; Inside a giant inventor's workshop — warm amber smog above, oil-
+; stained concrete underfoot. Sun is replaced by industrial floodlights
+; bleeding through the haze, so we keep one DirectionalLight but tint
+; it to that sodium-bulb yellow.
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
-sky_top_color = Color(0.12, 0.14, 0.22, 1)
-sky_horizon_color = Color(0.35, 0.32, 0.31, 1)
-ground_bottom_color = Color(0.05, 0.05, 0.08, 1)
-ground_horizon_color = Color(0.22, 0.20, 0.18, 1)
-sun_angle_max = 28.0
-sun_curve = 0.18
+sky_top_color = Color(0.18, 0.13, 0.09, 1)
+sky_horizon_color = Color(0.55, 0.34, 0.16, 1)
+ground_bottom_color = Color(0.06, 0.05, 0.04, 1)
+ground_horizon_color = Color(0.28, 0.20, 0.13, 1)
+sun_angle_max = 30.0
+sun_curve = 0.15
 
 [sub_resource type="Sky" id="sky"]
 sky_material = SubResource("sky_mat")
@@ -19,16 +23,16 @@ sky_material = SubResource("sky_mat")
 background_mode = 2
 sky = SubResource("sky")
 ambient_light_source = 3
-ambient_light_color = Color(0.45, 0.45, 0.55, 1)
-ambient_light_energy = 0.45
+ambient_light_color = Color(0.55, 0.45, 0.34, 1)
+ambient_light_energy = 0.55
 tonemap_mode = 2
-tonemap_exposure = 1.1
+tonemap_exposure = 1.15
 fog_enabled = true
-fog_light_color = Color(0.27, 0.26, 0.31, 1)
-fog_density = 0.012
-fog_height = 4.0
+fog_light_color = Color(0.42, 0.30, 0.18, 1)
+fog_density = 0.014
+fog_height = 6.0
 glow_enabled = true
-glow_intensity = 0.4
+glow_intensity = 0.5
 
 [sub_resource type="BoxShape3D" id="ground_shape"]
 size = Vector3(400, 1, 400)
@@ -37,18 +41,22 @@ size = Vector3(400, 1, 400)
 size = Vector3(400, 1, 400)
 
 [sub_resource type="StandardMaterial3D" id="ground_mat"]
-albedo_color = Color(0.18, 0.20, 0.16, 1)
-roughness = 0.95
+; oil-stained workshop concrete — desaturated brown-grey, very rough.
+albedo_color = Color(0.22, 0.20, 0.18, 1)
+roughness = 0.96
+metallic = 0.05
 
 [node name="Main" type="Node3D"]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("env")
 
+; Industrial floodlight from above — warmer and a touch dimmer than
+; daylight to sell the indoor workshop look.
 [node name="Sun" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866, -0.42, 0.273, 0.0, 0.544, 0.839, -0.5, -0.727, 0.471, 0, 80, 0)
-light_color = Color(1.0, 0.92, 0.78, 1)
-light_energy = 1.1
+light_color = Color(1.0, 0.84, 0.58, 1)
+light_energy = 1.0
 shadow_enabled = true
 directional_shadow_max_distance = 80.0
 

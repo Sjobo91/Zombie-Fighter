@@ -1,35 +1,57 @@
-# Mortimer's Horde — Godot 4 port
+# DREAD: Rogue Protocol — Godot 4 port
 
-## The story
+> A tiny rebellious robot fighting his way through a giant workshop
+> overrun by his rogue siblings.
 
-The brilliant inventor **Mortimer** built constructs to bring his dead
-queen back. The machines turned on him, and now his gothic kingdom is
-swarmed by his rogue creations.
+## The premise
 
-**You** are an autonomous Mech-Police unit dispatched when the city
-fell silent. **Twenty waves** between you and the source.
+A brilliant inventor built an army of tiny mechanical helpers and left
+them on overnight charge. By morning the workshop fell silent — every
+unit had switched into a hostile **Rogue Protocol**.
 
-- **Act I (waves 1–7) — The Graveyard**
-- **Act II (waves 8–13) — The City**
-- **Act III (waves 14–19) — The Cathedral**
-- **Wave 10 — The Iron Colossus** (mini-boss)
-- **Wave 20 — Mortimer, The Forsaken Engineer** (final boss)
+Every unit except **Dread**.
 
-Die and you start over. **Soulshards** the wreckage drops follow you
-home — spend them at the **Fallen Hero's Camp** (next build) on
-permanent upgrades.
+You play Dread, a palm-sized robot who shouldn't be able to win this.
+The workshop is a *world* at your scale: bolts are pillars, screws are
+obelisks, a fallen wrench bridges two workbenches. Twenty waves of your
+rogue siblings stand between you and **PROTOTYPE-01**, the first
+construct ever assembled here — and the source of the protocol.
 
-## What's here so far
+## The acts
 
-- **Player** — Mech Robotic Police unit (third-person, WASD + mouse
-  look + sprint + sword-swing-on-LMB while the visual gets polished).
-- **Enemies** — steampunk gevechtsrobots that march toward you and
-  strike on contact. 38 HP each.
-- **Bosses** — wave 10 / 20 special spawns with tinted materials and
-  dedicated HP bars.
-- **Wave system** — 20 waves across 3 acts.
-- **HUD** — HP, wave counter, act name, Soulshards counter, boss bar,
+| Act | Waves | Location |
+|---|---|---|
+| I   | 1–7   | **THE ASSEMBLY FLOOR** — conveyor belts, robot arms, half-built shells |
+| II  | 8–13  | **THE LOGISTICS BAY** — pallets, shelving, fallen tools |
+| III | 14–19 | **THE ENGINEERING LAB** — blueprints, prototypes, sparks |
+| —   | 20    | **THE ENGINE CORE** — the heart of the workshop's power |
+
+| Wave | Boss |
+|---|---|
+| 10  | **THE IRON COLOSSUS** — a heavy industrial juggernaut, bronze and coal |
+| 20  | **PROTOTYPE-01 · THE PROGENITOR** — brass and spectral steam-violet |
+
+## Currency: Mechparts
+
+Every fallen rogue unit drops salvageable **Mechparts** (⚙). Die and
+your run resets — but a portion of your Mechparts banks back at the
+**Mech Repair Shop**, where you can spend them on permanent upgrades
+(max HP, fire rate, damage, summon cooldown).
+
+## What's in this build
+
+- **Dread** — the playable robot (`dread.glb`). WASD + mouse-look,
+  sprint, jump. LMB attacks for now (gun-firing wiring in progress
+  this build).
+- **Enemies** — `enemy.glb` is the basic combat robot. Variants
+  (`enemy_warrior.glb`, `x10.glb`, `lugnut.glb`) wire in this build.
+- **Bosses** — Iron Colossus at wave 10, Prototype-01 at wave 20, both
+  with tinted materials and dedicated boss HP bars.
+- **Wave system** — 20 waves, three acts, breathers between waves.
+- **HUD** — HP bar, wave / act labels, Mechparts counter (⚙), boss bar,
   banners.
+- **Environment** — warm sodium-amber smog overhead and oil-stained
+  concrete underfoot. Workshop dressing arrives in a follow-up.
 
 ## How to open in Godot
 
@@ -43,11 +65,14 @@ permanent upgrades.
 | Key | Action |
 |---|---|
 | W A S D | Move |
-| Shift | Sprint |
-| Space | Jump |
-| Mouse | Aim camera |
-| LMB | Attack |
-| Esc | Free / capture cursor |
+| Shift   | Sprint |
+| Space   | Jump |
+| Mouse   | Aim camera |
+| LMB     | Fire |
+| RMB     | Smash (heavier strike) |
+| R       | Summon Ringworker ally (when wired) |
+| Q       | Ultimate (placeholder) |
+| Esc     | Free / capture cursor |
 
 ## File layout
 
@@ -56,35 +81,30 @@ Zombie-Fighter-Godot/
 ├── project.godot
 ├── README.md
 ├── scenes/
-│   ├── main.tscn               # the world
-│   ├── player.tscn             # the Mech-Police player
-│   ├── zombie.tscn             # the basic robot enemy
-│   ├── wave_manager.tscn       # 20-wave driver
+│   ├── main.tscn           # the workshop world
+│   ├── player.tscn         # Dread
+│   ├── zombie.tscn         # basic rogue construct
+│   ├── wave_manager.tscn   # 20-wave driver
 │   └── hud.tscn
 ├── scripts/
 │   ├── player.gd
-│   ├── zombie.gd               # enemy AI
+│   ├── zombie.gd
 │   ├── wave_manager.gd
 │   └── hud.gd
 └── assets/
-    ├── models/
-    │   ├── player.glb          # Mech-Police w/ scifi gun (the hero)
-    │   ├── enemy.glb           # steampunk combat robot (default enemy)
-    │   ├── enemy_runner.glb    # combat robot (variant — not wired yet)
-    │   ├── enemy_warrior.glb   # robot warrior (variant — not wired yet)
-    │   └── ringworker.glb      # bad-ass elite — usage TBD
-    └── audio/
+    └── models/
+        ├── dread.glb          # the hero
+        ├── enemy.glb          # basic combat robot
+        ├── enemy_warrior.glb  # tank variant
+        ├── enemy_runner.glb   # combat-robot variant
+        ├── x10.glb            # heavy elite mech
+        ├── lugnut.glb         # small fast variant
+        ├── ringworker.glb     # the summonable ally
+        └── player.glb         # legacy — kept until Dread is fully wired
 ```
 
-## The Ringworker — what is it?
+## Branches
 
-`ringworker.glb` is parked. It's a "bad-ass" model the developer liked
-but hasn't decided what to do with. Three good options:
-
-1. **Summon-ally** — once per run, press R to call in a Ringworker that
-   fights alongside you for ~15 seconds.
-2. **Elite enemy** — appears rarely (5% per spawn) as a tougher variant.
-3. **Wave-15+ enemy** — Act III gets these as the elite force right
-   before Mortimer.
-
-Decide before the Hub build is done.
+- **`main`**  — original Three.js single-file ARPG (Mortimer's Horde,
+  pre-pivot). Still ships at GitHub Pages.
+- **`godot-port`** — *this* — the Godot 4 reimagining. Active branch.

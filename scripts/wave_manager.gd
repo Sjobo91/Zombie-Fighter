@@ -1,13 +1,18 @@
-# Wave Manager — drives the 20-wave campaign across three acts.
+# Wave Manager — drives the 20-wave campaign through the workshop.
 #
-#   Act I  (waves 1-7)   THE GRAVEYARD
-#   Act II (waves 8-13)  THE CITY
-#   Act III (waves 14-19) THE CATHEDRAL
-#   Wave 10  → THE BONE COLOSSUS (mini-boss)
-#   Wave 20  → MORTIMER, THE GRIEVING KING (final boss)
+# You are a tiny robot loose inside a giant inventor's workshop.
+# Every act is a different section of that workshop, and the rogue
+# constructs there march to silence you.
 #
-# Spawns zombies in a ring around the player. After all spawns are dead,
-# a short breather plays, then the next wave begins.
+#   Act I   (waves 1-7)   THE ASSEMBLY FLOOR
+#   Act II  (waves 8-13)  THE LOGISTICS BAY
+#   Act III (waves 14-19) THE ENGINEERING LAB
+#   Wave 10  → THE IRON COLOSSUS (mini-boss)
+#   Wave 20  → PROTOTYPE-01 · THE PROGENITOR (final boss, at the
+#              ENGINE CORE — heart of the workshop's power)
+#
+# Spawns enemies in a ring around the player. After all spawns are
+# dead, a short breather plays, then the next wave begins.
 
 extends Node
 
@@ -92,7 +97,7 @@ func _spawn_one() -> void:
 		return
 	get_parent().add_child(z)
 	(z as Node3D).global_position = pos
-	# the LAST spawn of wave 10 is the Colossus; wave 20 = Mortimer
+	# the LAST spawn of wave 10 is the Colossus; wave 20 is Prototype-01
 	var is_last: bool = (spawned == to_spawn - 1)
 	if is_last and wave == 10 and z.has_method("make_colossus"):
 		z.make_colossus()
@@ -100,16 +105,16 @@ func _spawn_one() -> void:
 		z.make_mortimer()
 	spawned += 1
 
-# how many regular zombies to spawn this wave
+# how many regular enemies to spawn this wave
 func wave_size(n: int) -> int:
 	if n == 10:
-		return 11    # 10 minions + the Bone Colossus
+		return 11    # 10 minions + the Iron Colossus
 	if n == 20:
-		return 21    # 20 minions + Mortimer
+		return 21    # 20 minions + Prototype-01
 	return 5 + n * 2
 
 func act_label(n: int) -> String:
-	if n >= 20: return "THE THRONE ROOM"
-	if n >= 14: return "ACT III · THE CATHEDRAL"
-	if n >= 8:  return "ACT II · THE CITY"
-	return "ACT I · THE GRAVEYARD"
+	if n >= 20: return "THE ENGINE CORE"
+	if n >= 14: return "ACT III · THE ENGINEERING LAB"
+	if n >= 8:  return "ACT II · THE LOGISTICS BAY"
+	return "ACT I · THE ASSEMBLY FLOOR"
