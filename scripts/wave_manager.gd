@@ -109,8 +109,8 @@ func _spawn_one() -> void:
 		Vector3(cos(a) * d, 1.0, sin(a) * d)
 	var is_last: bool = (spawned == to_spawn - 1)
 	# Bosses always use the basic chassis (zombie.gd's make_colossus /
-	# make_mortimer tint and scale it). All other spawns pick a variant
-	# weighted by act.
+	# make_prototype01 tint and scale it). All other spawns pick a
+	# variant weighted by act.
 	var scn: PackedScene = zombie_scene
 	if not is_last:
 		scn = _pick_variant_scene()
@@ -123,8 +123,8 @@ func _spawn_one() -> void:
 	(z as Node3D).global_position = pos
 	if is_last and wave == 10 and z.has_method("make_colossus"):
 		z.make_colossus()
-	elif is_last and wave == 20 and z.has_method("make_mortimer"):
-		z.make_mortimer()
+	elif is_last and wave == 20 and z.has_method("make_prototype01"):
+		z.make_prototype01()
 	spawned += 1
 
 # Weighted variant pick. Per-act tables — weights are integers and

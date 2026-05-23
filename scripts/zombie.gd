@@ -1,6 +1,6 @@
 # Enemy (a construct — file is still called zombie.gd for now). Marches
 # toward the player, strikes on contact, sparks and crumples on 0 HP.
-# make_colossus() / make_mortimer() turn this into a boss variant.
+# make_colossus() / make_prototype01() turn this into a boss variant.
 
 extends CharacterBody3D
 
@@ -74,8 +74,8 @@ func make_colossus() -> void:
 
 # ── Wave-20 final boss: PROTOTYPE-01 — the first construct that ever
 #    rolled off the workshop's assembly line. The progenitor of the
-#    rogue protocol. (Renamed from Mortimer; the human inventor is gone.)
-func make_mortimer() -> void:
+#    rogue protocol.
+func make_prototype01() -> void:
 	is_boss = true
 	boss_name = "PROTOTYPE-01 · THE PROGENITOR"
 	max_hp = 3500
