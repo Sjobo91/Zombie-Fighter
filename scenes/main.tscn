@@ -1,8 +1,9 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="p"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn"    id="h"]
 [ext_resource type="PackedScene" path="res://scenes/wave_manager.tscn" id="w"]
+[ext_resource type="Script" path="res://scripts/workshop_dressing.gd" id="d"]
 
 ; Inside a giant inventor's workshop — warm amber smog above, oil-
 ; stained concrete underfoot. Sun is replaced by industrial floodlights
@@ -72,6 +73,9 @@ shape = SubResource("ground_shape")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 mesh = SubResource("ground_mesh")
 surface_material_override/0 = SubResource("ground_mat")
+
+[node name="WorkshopDressing" type="Node3D" parent="."]
+script = ExtResource("d")
 
 [node name="Player" parent="." instance=ExtResource("p")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
