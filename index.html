@@ -2956,45 +2956,125 @@ function buildWeapon(kind) {
     trigGuard.rotation.set(Math.PI / 2, 0, 0); g.add(trigGuard);
 
   } else if (kind === "bow") {
-    // recurve longbow — two curved limbs + tight string
-    const woodMat = mat(0x6a3a1a, 0.92);
-    // upper limb
-    const up1 = new THREE.Mesh(
-      new THREE.BoxGeometry(0.14, 1.4, 0.18), woodMat);
-    up1.position.y = 0.9; up1.rotation.z = -0.4; g.add(up1);
-    const up2 = new THREE.Mesh(
-      new THREE.BoxGeometry(0.1, 0.8, 0.14), woodMat);
-    up2.position.set(-0.45, 1.85, 0); up2.rotation.z = -0.9; g.add(up2);
-    // lower limb (mirrored)
-    const dn1 = new THREE.Mesh(
-      new THREE.BoxGeometry(0.14, 1.4, 0.18), woodMat);
-    dn1.position.y = -0.9; dn1.rotation.z = 0.4; g.add(dn1);
-    const dn2 = new THREE.Mesh(
-      new THREE.BoxGeometry(0.1, 0.8, 0.14), woodMat);
-    dn2.position.set(-0.45, -1.85, 0); dn2.rotation.z = 0.9; g.add(dn2);
-    // central grip
-    const gripM = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.7, 0.24),
-      mat(0x2a1a10, 0.95));
-    gripM.position.y = 0; g.add(gripM);
-    // string — taut white line
+    // RECURVE LONGBOW — smooth curved limbs built from short segments
+    // so the silhouette actually arcs instead of zig-zagging.
+    const woodMat = new THREE.MeshStandardMaterial({
+      color: 0x6a3a1a, roughness: 0.85, metalness: 0.05 });
+    const darkWood = new THREE.MeshStandardMaterial({
+      color: 0x3a1a0a, roughness: 0.9 });
+    const leatherMat = new THREE.MeshStandardMaterial({
+      color: 0x2a1810, roughness: 0.95 });
+    // build one limb as a chain of tapered cylinders along a curve
+    function buildLimb(direction) {
+      const seg = new THREE.Group();
+      // 6 short cylinder segments, each rotated a little more than the last,
+      // and each tapering thinner toward the tip — recurve shape.
+      let pivot = new THREE.Group();
+      pivot.position.set(0, direction * 0.45, 0);
+      seg.add(pivot);
+      let cursor = pivot;
+      for (let i = 0; i < 6; i++) {
+        const t = i / 5;
+        // top half-curve bends outward then back inward at the tip
+        const bend = direction * (0.16 + t * (i < 4 ? 0.05 : -0.32));
+        const len = 0.42 - i * 0.025;
+        const r = 0.08 - i * 0.008;
+        const node = new THREE.Group();
+        const piece = new THREE.Mesh(
+          new THREE.CylinderGeometry(r, r * 0.9, len, 8), woodMat);
+        piece.position.y = direction * (len * 0.5);
+        node.add(piece);
+        // dark ribbon on each segment for grain
+        const grain = new THREE.Mesh(
+          new THREE.BoxGeometry(0.02, len * 0.96, r * 1.8), darkWood);
+        grain.position.y = direction * (len * 0.5);
+        grain.position.z = r * 0.7;
+        node.add(grain);
+        // place at end of previous cursor, rotated
+        node.position.y = cursor === pivot ? 0 : direction * (0.42 - (i - 1) * 0.025);
+        node.rotation.z = bend;
+        cursor.add(node);
+        cursor = node;
+        // tip cap on the last segment — a small horn nock
+        if (i === 5) {
+          const tip = new THREE.Mesh(
+            new THREE.ConeGeometry(r * 1.2, 0.18, 6),
+            darkWood);
+          tip.position.y = direction * (len * 0.5 + 0.08);
+          node.add(tip);
+          // notch where the string attaches
+          const nock = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.04, 0.04, 0.05, 6),
+            darkWood);
+          nock.position.y = direction * (len * 0.5 - 0.04);
+          nock.rotation.z = Math.PI / 2;
+          node.add(nock);
+        }
+      }
+      // remember the tip position so we can stretch a real string between
+      // the two tips after both limbs are built
+      seg.userData.tipNode = cursor;
+      return seg;
+    }
+    const upperLimb = buildLimb(+1);
+    const lowerLimb = buildLimb(-1);
+    g.add(upperLimb); g.add(lowerLimb);
+    // central GRIP — a thicker carved riser with a leather wrap
+    const riser = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 0.15, 0.9, 10), woodMat);
+    riser.position.y = 0; g.add(riser);
+    // arrow shelf jut
+    const shelf = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.08, 0.36),
+      darkWood);
+    shelf.position.set(0, 0.05, 0.18); g.add(shelf);
+    // leather wrap around the grip — 4 stacked rings
+    for (let i = 0; i < 4; i++) {
+      const wrap = new THREE.Mesh(
+        new THREE.TorusGeometry(0.17, 0.04, 6, 10),
+        leatherMat);
+      wrap.position.y = -0.22 + i * 0.14;
+      wrap.rotation.x = Math.PI / 2; g.add(wrap);
+    }
+    // metal arrow-rest above the grip
+    const rest = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 0.22),
+      metalMat(0x808088, 0.7));
+    rest.position.set(0, 0.16, 0.24); g.add(rest);
+    // STRING — a thin tube from the upper tip to the lower tip, with a
+    // small nocking point in the middle. Glows faintly with the bow's
+    // ability colour via glowMats.
     const strMat = new THREE.MeshStandardMaterial({
-      color: 0xe6e2d0, emissive: 0x9af0c0, emissiveIntensity: 0.4,
-      roughness: 0.6 });
+      color: 0xf0eed0, emissive: 0x9af0c0, emissiveIntensity: 0.5,
+      roughness: 0.5 });
     glowMats.push(strMat);
+    // string runs vertically through the same X plane as the limb tips
     const string = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.02, 0.02, 3.7, 4), strMat);
+      new THREE.CylinderGeometry(0.022, 0.022, 3.9, 4), strMat);
     string.position.set(0.18, 0, 0); g.add(string);
-    // a nocked arrow ready to fire
-    const arrow = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.04, 1.6, 5),
-      mat(0x8a6a3a, 0.9));
-    arrow.position.set(0.32, 0, 0); arrow.rotation.x = Math.PI / 2;
-    g.add(arrow);
-    const head = new THREE.Mesh(
-      new THREE.ConeGeometry(0.1, 0.26, 4), bladeMat);
-    head.position.set(0.32, 0, 0.95); head.rotation.x = Math.PI / 2;
-    g.add(head);
+    const nockPt = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 6, 5), darkWood);
+    nockPt.position.set(0.18, 0, 0); g.add(nockPt);
+    // a NOCKED ARROW sitting on the rest, ready to be drawn
+    const aShaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 1.6, 6),
+      new THREE.MeshStandardMaterial({ color: 0x9a7040,
+        roughness: 0.85 }));
+    aShaft.position.set(0.28, 0, 0); aShaft.rotation.x = Math.PI / 2;
+    g.add(aShaft);
+    const aHead = new THREE.Mesh(
+      new THREE.ConeGeometry(0.11, 0.3, 5), bladeMat);
+    aHead.position.set(0.28, 0, 0.95); aHead.rotation.x = Math.PI / 2;
+    g.add(aHead);
+    // two fletchings on the nocked arrow
+    for (const sy of [-1, 1]) {
+      const fle = new THREE.Mesh(
+        new THREE.BoxGeometry(0.02, 0.28, 0.18),
+        new THREE.MeshStandardMaterial({ color: 0xd8b75a,
+          roughness: 0.7 }));
+      fle.position.set(0.28, sy * 0.08, -0.72);
+      g.add(fle);
+    }
 
   } else if (kind === "daggers") {
     // twin daggers — kept as a legacy display-only model for the
@@ -5983,19 +6063,8 @@ function fireHighNoon() {
    a zombie. Just a quick scripted projectile. */
 function spawnRainArrow(tx, tz, dmg) {
   const ty = walkHeight(tx, tz);
-  const g = new THREE.Group();
-  const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.06, 0.06, 1.6, 5),
-    new THREE.MeshStandardMaterial({ color: 0x6a4a2a,
-      emissive: 0x9aeac0, emissiveIntensity: 1.1 }));
-  shaft.rotation.x = Math.PI / 2; g.add(shaft);
-  const tip = new THREE.Mesh(
-    new THREE.ConeGeometry(0.13, 0.36, 5),
-    new THREE.MeshStandardMaterial({ color: 0xe6e2d0,
-      emissive: 0x9aeac0, emissiveIntensity: 1.1 }));
-  tip.position.z = 0.95; tip.rotation.x = Math.PI / 2; g.add(tip);
+  const g = buildArrowProjectile(1.15);
   g.position.set(tx + rand(-2, 2), ty + 18, tz + rand(-2, 2));
-  // aim straight down at the target
   g.rotation.x = -Math.PI * 0.42;
   scene.add(g);
   heroProjectiles.push({ obj: g, kind: "arrow",
@@ -6082,30 +6151,9 @@ function releaseBowShot() {
   const sx = player.x + aimDirX * 1.6;
   const sz = player.z + aimDirZ * 1.6;
   const sy = (player.y || 0) + 2.2 + sP * 1.6;
-  const ag = new THREE.Group();
-  // arrow scales fatter at full charge — a true longbow shaft
-  const w = 0.05 + charge * 0.04;
-  const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(w, w, 1.6 + charge * 0.5, 5),
-    new THREE.MeshStandardMaterial({ color: 0x6a4a2a,
-      emissive: 0x9aeac0, emissiveIntensity: 0.5 + charge * 1.0 }));
-  shaft.rotation.x = Math.PI / 2; ag.add(shaft);
-  const tip = new THREE.Mesh(
-    new THREE.ConeGeometry(0.13 + charge * 0.06, 0.36, 5),
-    new THREE.MeshStandardMaterial({ color: 0xe6e2d0,
-      emissive: 0x9aeac0, emissiveIntensity: 0.7 + charge * 1.4 }));
-  tip.position.z = 0.95; tip.rotation.x = Math.PI / 2; ag.add(tip);
-  const fle = new THREE.Mesh(
-    new THREE.BoxGeometry(0.04, 0.3, 0.2),
-    new THREE.MeshStandardMaterial({ color: 0xd8b75a }));
-  fle.position.z = -0.7; ag.add(fle);
-  if (charge > 0.6) {                            // full-charge arrows glow
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: flareTex, color: 0x9aeac0, transparent: true,
-      opacity: 0.75, depthWrite: false,
-      blending: THREE.AdditiveBlending }));
-    halo.scale.set(1.6, 1.6, 1); ag.add(halo);
-  }
+  // arrow scales fatter at full charge — uses the shared helper so every
+  // shot in the game (LMB, multishot, arrowstorm) looks consistent
+  const ag = buildArrowProjectile(0.85 + charge * 0.8);
   ag.position.set(sx, sy, sz);
   ag.rotation.y = player.aim; ag.rotation.x = -pitchAng;
   scene.add(ag);
@@ -6452,17 +6500,7 @@ function multishot(baseDmg) {
     const aimDirX = Math.sin(a) * cP, aimDirZ = Math.cos(a) * cP;
     const sx = e.x + aimDirX * 1.6, sz = e.z + aimDirZ * 1.6;
     const sy = (e.y || 0) + 2.2 + sP * 1.6;
-    const ag = new THREE.Group();
-    const shaft = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.06, 0.06, 1.7, 5),
-      new THREE.MeshStandardMaterial({ color: 0x6a4a2a,
-        emissive: 0x9aeac0, emissiveIntensity: 0.9 }));
-    shaft.rotation.x = Math.PI / 2; ag.add(shaft);
-    const tip = new THREE.Mesh(
-      new THREE.ConeGeometry(0.13, 0.36, 5),
-      new THREE.MeshStandardMaterial({ color: 0xe6e2d0,
-        emissive: 0x9aeac0, emissiveIntensity: 0.9 }));
-    tip.position.z = 0.95; tip.rotation.x = Math.PI / 2; ag.add(tip);
+    const ag = buildArrowProjectile(1.05);
     ag.position.set(sx, sy, sz);
     ag.rotation.y = a; ag.rotation.x = -pitchAng;
     scene.add(ag);
@@ -6989,6 +7027,60 @@ function meleeStrike() {
    and damage zombies on contact. Each kind has its own colour, geometry,
    speed, life and pierce-count.  */
 let heroProjectiles = [];
+/* ─── visible arrow projectile — built once, shared by every shot.
+   power: 0..1 controls visual scale + tip brightness (charge shots
+   are bigger and glow harder).  ─────────────────────────────────── */
+function buildArrowProjectile(power) {
+  power = power == null ? 1.0 : clamp(power, 0.3, 1.8);
+  const ag = new THREE.Group();
+  // bright birch shaft — slightly emissive so it reads against dark turf
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.08 * power, 0.07 * power,
+      1.8 + power * 0.3, 7),
+    new THREE.MeshStandardMaterial({ color: 0xe8d3a8,
+      emissive: 0x9aeac0, emissiveIntensity: 0.55 + power * 0.5,
+      roughness: 0.6 }));
+  shaft.rotation.x = Math.PI / 2; ag.add(shaft);
+  // steel tip — bigger and glowing
+  const tip = new THREE.Mesh(
+    new THREE.ConeGeometry(0.18 * power, 0.45, 6),
+    new THREE.MeshStandardMaterial({ color: 0xf6f0d2,
+      emissive: 0xa8ffd0, emissiveIntensity: 1.0 + power * 1.0,
+      roughness: 0.3, metalness: 0.6 }));
+  tip.position.z = 1.05; tip.rotation.x = Math.PI / 2; ag.add(tip);
+  // collar where head meets shaft — small dark ring
+  const collar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.10 * power, 0.10 * power, 0.06, 6),
+    new THREE.MeshStandardMaterial({ color: 0x3a1a10 }));
+  collar.position.z = 0.86; collar.rotation.x = Math.PI / 2; ag.add(collar);
+  // fletching — three feathers radiating around the back of the shaft
+  const feMat = new THREE.MeshStandardMaterial({
+    color: 0xe8c870, roughness: 0.7, side: THREE.DoubleSide });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU;
+    const feather = new THREE.Mesh(
+      new THREE.BoxGeometry(0.03, 0.4 * power, 0.28 * power), feMat);
+    feather.position.set(Math.cos(a) * 0.12, Math.sin(a) * 0.12, -0.78);
+    feather.rotation.z = a;
+    ag.add(feather);
+  }
+  // nock — small notch at the tail
+  const nock = new THREE.Mesh(
+    new THREE.BoxGeometry(0.05 * power, 0.05 * power, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x2a1a10 }));
+  nock.position.z = -1.0; ag.add(nock);
+  // an additive glow sprite that follows the arrow — makes it readable
+  // even far away or in shadow
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: 0x9aeac0, transparent: true,
+    opacity: 0.55 + power * 0.3, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  halo.scale.set(1.3 * power, 1.3 * power, 1);
+  halo.position.z = 0.6;
+  ag.add(halo);
+  ag.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return ag;
+}
 // hard cap so explosive ultimates (bullet storm, arrow storm) can't
 // pile up enough projectiles to tank the framerate.
 const HERO_PROJ_CAP = 90;
@@ -7129,22 +7221,7 @@ function rangedFire() {
     return;
   }
   if (kind === "arrow") {
-    const ag = new THREE.Group();
-    const shaft = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.05, 0.05, 1.6, 5),
-      new THREE.MeshStandardMaterial({ color: 0x6a4a2a,
-        emissive: 0x9aeac0, emissiveIntensity: 0.6 }));
-    shaft.rotation.x = Math.PI / 2; ag.add(shaft);
-    const tip = new THREE.Mesh(
-      new THREE.ConeGeometry(0.12, 0.34, 5),
-      new THREE.MeshStandardMaterial({ color: 0xe6e2d0,
-        emissive: 0x9aeac0, emissiveIntensity: 0.6 }));
-    tip.position.z = 0.95; tip.rotation.x = Math.PI / 2; ag.add(tip);
-    const fle = new THREE.Mesh(
-      new THREE.BoxGeometry(0.04, 0.3, 0.2),
-      new THREE.MeshStandardMaterial({ color: 0xd8b75a }));
-    fle.position.z = -0.7; ag.add(fle);
-    ag.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    const ag = buildArrowProjectile(1.0);
     ag.position.set(startX, startY, startZ);
     ag.rotation.y = player.aim; ag.rotation.x = -pitchAng;
     scene.add(ag);
@@ -7223,9 +7300,17 @@ function updateHeroProjectiles(dt) {
       const horiz = Math.hypot(p.vx, p.vz);
       p.obj.rotation.y = Math.atan2(p.vx, p.vz);
       p.obj.rotation.x = -Math.atan2(p.vy || 0, horiz);
+      // CONTINUOUS GREEN TRAIL — every frame, so the arrow draws a
+      // legible streak across the field. 2-3 particles per frame
+      // gives a solid stream even on the highest-velocity shots.
+      spawnParts(p.x, p.y, p.z, 2,
+        { color: 0x9aeac0, speed: 1.6, life: 0.32 });
+      if (Math.random() < 0.6)
+        spawnParts(p.x, p.y, p.z, 1,
+          { color: 0xc0ffe0, speed: 1.0, life: 0.5 });
     }
-    // a soft trail (bullet/arrow)
-    if (p.kind !== "bolt" && p.def.trailN > 0 && Math.random() < 0.7)
+    // a soft trail (bullet)
+    if (p.kind === "bullet" && p.def.trailN > 0 && Math.random() < 0.7)
       spawnParts(p.x, p.y, p.z, p.def.trailN,
         { color: p.def.trail, speed: 2, life: 0.25 });
     // hit-check vs zombies
