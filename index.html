@@ -6801,7 +6801,7 @@ function smashStrike() {
   // ── class-specific power attacks ──
   const cls = e.classDef || CLASSES.knight;
   if (cls.weapon === "staff") { arcaneNova(dmg); return; }
-  if (cls.weapon === "pistol") { revolverFan(dmg); return; }
+  if (cls.weapon === "pistol") { explosiveBarrage(dmg); return; }
   if (cls.weapon === "bow") { multishot(dmg); return; }
   if (cls.weapon === "daggers") { shadowStep(dmg); return; }
   if (cls.weapon === "greatsword") { holyCharge(dmg); return; }
@@ -7019,6 +7019,101 @@ function arcaneNova(baseDmg) {
 /* ─── FAN THE HAMMER — gunslinger's RMB. Empties whatever's left in the
    cylinder in a rapid burst (max 6 shots, 70ms apart). Triggers a reload
    afterward. Each shot is a real piercing bullet projectile. ────────── */
+/* ─── EXPLOSIVE BARRAGE — gunslinger's RMB. Three explosive rounds
+   fire in a quick 0.4s burst. Each detonates in an 8yd radius, hits
+   like a stick of dynamite, and shreds anything in front of you.
+   15-second cooldown enforced separately from smashCd. ─────────────── */
+function explosiveBarrage(baseDmg) {
+  const e = player;
+  Sound.gunshot && Sound.gunshot();
+  shake(0.7); screenFlash("#ff8a3a", 0.32);
+  const pitchAng = aimPitchAngle();
+  const cP = Math.cos(pitchAng), sP = Math.sin(pitchAng);
+  // override the smash cooldown to 15s for the gunslinger barrage
+  e.smashCd = 15;
+  for (let i = 0; i < 3; i++) {
+    setTimeout(() => {
+      if (!player.alive) return;
+      const a = e.aim + rand(-0.04, 0.04);
+      const aimDirX = Math.sin(a) * cP, aimDirZ = Math.cos(a) * cP;
+      const sx = e.x + aimDirX * 1.8, sz = e.z + aimDirZ * 1.8;
+      const sy = (e.y || 0) + 2.2 + sP * 1.8;
+      // an oversized brass-cased shell, glowing hot
+      const bg = new THREE.Group();
+      const slug = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.32, 0.28, 0.9, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffe9a0,
+          emissive: 0xff6030, emissiveIntensity: 2.0,
+          roughness: 0.3, metalness: 0.7 }));
+      slug.rotation.x = Math.PI / 2; bg.add(slug);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: flareTex, color: 0xff8a3a, transparent: true,
+        opacity: 0.95, depthWrite: false,
+        blending: THREE.AdditiveBlending }));
+      halo.scale.set(2.4, 2.4, 1); bg.add(halo);
+      bg.position.set(sx, sy, sz);
+      bg.rotation.y = a; bg.rotation.x = -pitchAng;
+      scene.add(bg);
+      const SPEED = 110;
+      heroProjectiles.push({ obj: bg, kind: "explosive",
+        x: sx, y: sy, z: sz,
+        vx: aimDirX * SPEED, vy: sP * SPEED, vz: aimDirZ * SPEED,
+        life: 1.0, hits: new Set(), pierce: 0,
+        def: { col: 0xff6030, trail: 0xff8a3a, trailN: 3,
+               dmgMul: 1.0, knock: 9,
+               explosive: true, blastR: 8.5,
+               blastDmg: baseDmg * 1.4 } });
+      if (i > 0) Sound.gunshot && Sound.gunshot();
+      flashLight(sx, sy, sz, 0.55, 0xff8a3a);
+      spawnParts(sx, sy, sz, 28,
+        { color: 0xff8a3a, speed: 26, life: 0.4 });
+      spawnParts(sx, sy, sz, 14,
+        { color: 0x3a3a3a, speed: 8, up: 4, life: 0.7 });
+    }, i * 130);
+  }
+}
+/* triggers a heavy radial explosion at (x,y,z) — used by explosive rounds */
+function explodeAt(x, y, z, dmg, blastR) {
+  Sound.boom && Sound.boom();
+  Sound.tone && Sound.tone("sawtooth", 80, 36, 0.4, 0.32);
+  shake(1.6); hitStop = Math.max(hitStop, 0.07);
+  screenFlash("#ff8a3a", 0.42);
+  smashRing.setColor(0xff6030);
+  smashRing.show(x, y + 0.2, z, blastR * 0.7, 0.55);
+  boomRing.setColor(0xff8a3a);
+  boomRing.show(x, y + 0.2, z, blastR * 1.1, 0.78);
+  windRing.setColor(0xffd06a);
+  windRing.show(x, y + 0.4, z, blastR * 1.4, 0.95);
+  scorch(x, z, blastR);
+  spawnParts(x, y + 0.6, z, 80,
+    { color: 0xff8a3a, speed: 32, up: 14, life: 0.85 });
+  spawnParts(x, y + 0.6, z, 40,
+    { color: 0x3a3a3a, speed: 18, up: 22, life: 1.4 });
+  spawnGibs(x, y + 0.6, z, 8, 0x4a3a26);
+  for (let i = 0; i < 10; i++)
+    flare(x + rand(-4, 4), y + rand(0, 4.5), z + rand(-4, 4),
+      rand(5, 9), pick([0xff6030, 0xff8a3a, 0xffd06a]), rand(0.5, 0.85));
+  flashLight(x, y + 2.4, z, 0.75, 0xff8a3a);
+  // hit every zombie in the blast
+  for (const zb of zombies) {
+    if (zb.state === "die" || zb.state === "rising") continue;
+    const dx = zb.x - x, dz = zb.z - z;
+    const dd = Math.hypot(dx, dz);
+    if (dd > blastR + zb.r) continue;
+    if (lineBlocked(x, z, zb.x, zb.z)) continue;
+    const fall = clamp(1 - dd / (blastR * 1.3), 0.45, 1);
+    hitZombie(zb, dmg * fall, true,
+      Math.atan2(dx, dz), 7);
+    if (zb.state !== "die") {
+      zb.stun = Math.max(zb.stun, 0.5);
+      zb.burn = Math.max(zb.burn || 0, 2.2);
+      zb.burnDps = Math.max(zb.burnDps || 0, dmg * 0.18);
+    }
+  }
+  damageInteractables(x, z, blastR * 0.7, dmg);
+  grassFlatten = { x, z, r: blastR, t: 0 };
+}
+
 function revolverFan(baseDmg) {
   const e = player;
   const cls = e.classDef || CLASSES.gunslinger;
@@ -7699,8 +7794,10 @@ const PROJ_TYPES = {
   bolt:   { speed: 75, life: 1.0, pierce: 0, dmgMul: 1.0,
             col: 0x6aaaff, size: 0.5, trail: 0x6aaaff, trailN: 6 },
   // hand-cannon slug — heavy, slow, knocks them off their feet
-  bullet: { speed: 145, life: 0.9, pierce: 2, dmgMul: 1.4,
-            col: 0xffe06a, size: 0.32, trail: 0xff9030, trailN: 2 },
+  // hand-cannon slug — heavy hitter. 1.85× damage and a big knockback
+  bullet: { speed: 145, life: 0.9, pierce: 2, dmgMul: 1.85,
+            col: 0xffe06a, size: 0.36, trail: 0xff9030, trailN: 2,
+            knock: 6.5 },
   arrow:  { speed: 96, life: 1.4, pierce: 3, dmgMul: 0.85,
             col: 0xe8e0c0, size: 0.18, trail: 0x9aeac0, trailN: 1 },
 };
@@ -7864,6 +7961,9 @@ function updateHeroProjectiles(dt) {
     p.obj.position.set(p.x, p.y, p.z);
     // wall-block — projectiles can't punch through buildings
     if (lineBlocked(prevX, prevZ, p.x, p.z)) {
+      // explosive rounds detonate against the wall
+      if (p.kind === "explosive")
+        explodeAt(p.x, p.y, p.z, p.def.blastDmg, p.def.blastR);
       spawnParts(p.x, p.y, p.z, 14,
         { color: p.def && p.def.col || 0xffffff,
           speed: 12, life: 0.4 });
@@ -7914,10 +8014,14 @@ function updateHeroProjectiles(dt) {
         spawnParts(p.x, p.y, p.z, 1,
           { color: 0xc0ffe0, speed: 1.0, life: 0.5 });
     }
-    // a soft trail (bullet)
-    if (p.kind === "bullet" && p.def.trailN > 0 && Math.random() < 0.7)
+    // a soft trail (bullet / explosive)
+    if ((p.kind === "bullet" || p.kind === "explosive") &&
+        p.def.trailN > 0 && Math.random() < 0.85)
       spawnParts(p.x, p.y, p.z, p.def.trailN,
-        { color: p.def.trail, speed: 2, life: 0.25 });
+        { color: p.def.trail, speed: 3, life: 0.32 });
+    if (p.kind === "explosive" && Math.random() < 0.55)
+      spawnParts(p.x, p.y, p.z, 1,
+        { color: 0x6a3018, speed: 1, up: 2, life: 0.6 });
     // hit-check vs zombies
     let dead = false;
     for (const z of zombies) {
@@ -7926,12 +8030,27 @@ function updateHeroProjectiles(dt) {
       const dx = z.x - p.x, dz = z.z - p.z;
       if (Math.hypot(dx, dz) < z.r + 0.8 &&
           Math.abs((z.y || 0) + 1.2 - p.y) < 3.2) {
+        // EXPLOSIVE round — detonate at the impact, kill the projectile
+        if (p.kind === "explosive") {
+          explodeAt(p.x, p.y, p.z, p.def.blastDmg, p.def.blastR);
+          scene.remove(p.obj); heroProjectiles.splice(i, 1);
+          dead = true; break;
+        }
         p.hits.add(z);
         const crit = Math.random() < player.critChance;
         const ang = Math.atan2(dx, dz);
         const dmg = player.dmg * player.dmgMul * p.def.dmgMul *
           (crit ? player.critMul : 1);
-        hitZombie(z, dmg, crit, ang, 2);
+        // bullets/arrows pass their own knockback through .def.knock
+        const knockMul = p.def.knock || 2;
+        hitZombie(z, dmg, crit, ang, knockMul);
+        // bullets feel HEAVY — brief hit-stop + screen shake on impact
+        if (p.kind === "bullet") {
+          hitStop = Math.max(hitStop, 0.04);
+          shake(crit ? 0.45 : 0.28);
+          // stagger the zombie too so they reel back visibly
+          if (z.state !== "die") z.stagger = Math.max(z.stagger, 0.35);
+        }
         if (z.state !== "die") {
           if (hasA("fire")) { z.burn = 3.0; z.burnDps = 8 + player.level * 1.5; }
           if (hasA("frost")) applyChill(z);
@@ -7956,13 +8075,25 @@ function updateHeroProjectiles(dt) {
           Sound.tone && Sound.tone("sine", 1340, 50, 0.16, 0.12);
           Sound.tone && Sound.tone("triangle", 720, 1200, 0.16, 0.1);
         } else if (p.kind === "bullet") {
-          // bullet impact — sparks + a tight ring of dust
-          spawnParts(p.x, p.y, p.z, 16,
-            { color: 0xffd06a, speed: 22, life: 0.4 });
-          spawnParts(p.x, p.y, p.z, 8,
-            { color: 0x6a4a2a, speed: 10, up: 3, life: 0.55 });
-          flare(p.x, p.y, p.z, 4, 0xffd06a, 0.45);
-          flashLight(p.x, p.y, p.z, 0.18, 0xffd06a);
+          // bullet impact — heavy meaty hit. Triple particle layers,
+          // bone/blood ejecta from behind the zombie, plus a small
+          // shock-ring telegraph and a dynamic light flash.
+          spawnParts(p.x, p.y, p.z, 36,
+            { color: 0xffd06a, speed: 32, life: 0.45 });
+          spawnParts(p.x, p.y, p.z, 22,
+            { color: 0x7c1109, speed: 18, up: 2, life: 0.55 });
+          // exit-spray on the far side along the bullet's direction
+          const ex = p.x + (p.vx / Math.max(40, Math.hypot(p.vx, p.vz))) * 0.8;
+          const ez = p.z + (p.vz / Math.max(40, Math.hypot(p.vx, p.vz))) * 0.8;
+          spawnParts(ex, p.y, ez, 18,
+            { color: 0x7c1109, speed: 22, up: 3, life: 0.6 });
+          for (let f = 0; f < 5; f++)
+            flare(p.x + rand(-0.6, 0.6), p.y + rand(-0.4, 0.6),
+              p.z + rand(-0.6, 0.6), rand(3, 5),
+              pick([0xffd06a, 0xff9030, 0xff5a3a]), 0.55);
+          smashRing.setColor(0xffd06a);
+          smashRing.show(p.x, p.y, p.z, 1.8, 0.3);
+          flashLight(p.x, p.y, p.z, 0.32, 0xffd06a);
         } else if (p.kind === "arrow") {
           // arrow stick — a tight burst, less explosive
           spawnParts(p.x, p.y, p.z, 8,
@@ -7984,6 +8115,12 @@ function updateHeroProjectiles(dt) {
       spawnParts(p.x, yy + 0.4, p.z, 24,
         { color: 0x9adfff, speed: 18, up: 6, life: 0.6 });
       flashLight(p.x, yy + 0.5, p.z, 0.22, 0x6aaaff);
+    }
+    // explosive rounds also detonate when life expires (timed fuse)
+    if (!dead && p.kind === "explosive" && p.life <= 0) {
+      explodeAt(p.x, p.y, p.z, p.def.blastDmg, p.def.blastR);
+      scene.remove(p.obj); heroProjectiles.splice(i, 1);
+      continue;
     }
     if (!dead && (p.life <= 0 || Math.hypot(p.x, p.z) > ARENA - 2)) dead = true;
     if (dead) {
@@ -9972,10 +10109,17 @@ function poseSurvivor() {
       pX = lerp(hit[0], idleP[0], t); pY = lerp(hit[1], idleP[1], t);
       pZ = lerp(hit[2], idleP[2], t); }
   } else if (e.smash) {
-    // the SMASH — a vast wind-up overhead, then a brutal slam down
+    // the SMASH — knight winds the sword up overhead; ranged classes
+    // just thrust their weapon forward (gun barrel / staff tip / bow);
+    // rogue snaps both hands across.
     const a = e.smashT, w = e.smashW, s = e.smashS, r = e.smashR;
-    const wnd = ham ? [-2.85, 0.0, 0.0] : [-2.8, 0.62, -0.56];
-    const hit = ham ? [1.42, 0.0, 0.0]  : [1.36, -1.22, 0.78];
+    let wnd, hit;
+    if (ham) { wnd = [-2.85, 0.0, 0.0]; hit = [1.42, 0.0, 0.0]; }
+    else if (cls === "wizard") { wnd = [-2.0, 0, 0]; hit = [-1.2, 0, 0]; }
+    else if (cls === "gunslinger") { wnd = [-1.0, 0, 0]; hit = [-0.7, 0, 0]; }
+    else if (cls === "hunter") { wnd = [-1.4, 0.4, 0.2]; hit = [-1.1, 0, 0]; }
+    else if (cls === "rogue") { wnd = [-1.3, 0.4, -0.3]; hit = [0.6, -0.4, 0.4]; }
+    else { wnd = [-2.8, 0.62, -0.56]; hit = [1.36, -1.22, 0.78]; }
     if (a < w) { const t = easeIn(a / w);
       pX = lerp(idleP[0], wnd[0], t); pY = lerp(idleP[1], wnd[1], t);
       pZ = lerp(idleP[2], wnd[2], t); }
@@ -10013,11 +10157,15 @@ function poseSurvivor() {
   }
   for (const eye of u.eyes)
     eye.material.color.setHex(e.hurt > 0 ? 0xff5a3a : 0xffd06a);
-  // slash arc — for the quick slash and the sword smash
+  // slash arc — only for actual SWORD-LIKE melee classes (knight + rogue).
+  // The sword-style arc was bleeding through onto wizard/gunslinger/hunter
+  // smashes, which read as a phantom sword swing.
   let arcOn = false, arcK = 0, arcScl = 1;
-  if (e.atk && e.atkT >= e.atkW && e.atkT < e.atkW + e.atkS + 0.05) {
+  const meleeArc = cls === "knight" || cls === "rogue";
+  if (meleeArc && e.atk &&
+      e.atkT >= e.atkW && e.atkT < e.atkW + e.atkS + 0.05) {
     arcOn = true; arcK = clamp((e.atkT - e.atkW) / e.atkS, 0, 1);
-  } else if (e.smash && !ham && e.smashT >= e.smashW &&
+  } else if (meleeArc && e.smash && !ham && e.smashT >= e.smashW &&
              e.smashT < e.smashW + e.smashS + 0.1) {
     arcOn = true; arcK = clamp((e.smashT - e.smashW) / e.smashS, 0, 1);
     arcScl = 1.55;
