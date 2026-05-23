@@ -24,6 +24,9 @@ extends CharacterBody3D
 @export var smash_cd:     float = 1.2
 @export var summon_cd:    float = 25.0
 @export var ally_scene:   PackedScene = preload("res://scenes/ally.tscn")
+# OVERCLOCK ult — 5s of 3× fire rate + 1.6× damage
+@export var ult_dur:      float = 5.0
+@export var ult_cd:       float = 45.0
 @export var iframes_dur:  float = 0.4
 
 @onready var rig:    Node3D    = $CameraRig
@@ -37,6 +40,8 @@ var pitch:     float = -0.55
 var attack_t:  float = 999.0      # time since last shot
 var smash_t:   float = 999.0      # time since last smash
 var summon_t:  float = 999.0      # time since last Ringworker call-in
+var ult_t:     float = 999.0      # time since last ult activation
+var ult_active_t: float = 0.0     # remaining seconds of active ult
 var attacking: bool  = false      # only true during smash anim window
 var attack_hits: Array = []
 var iframes:   float = 0.0
@@ -72,6 +77,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_smash()
 	if event.is_action_pressed("summon_ally") and not dead:
 		_summon_ally()
+	if event.is_action_pressed("ult") and not dead:
+		_activate_ult()
 
 func _physics_process(delta: float) -> void:
 	if dead:
@@ -79,6 +86,9 @@ func _physics_process(delta: float) -> void:
 	attack_t += delta
 	smash_t  += delta
 	summon_t += delta
+	ult_t    += delta
+	if ult_active_t > 0.0:
+		ult_active_t -= delta
 	if iframes > 0.0:
 		iframes -= delta
 	var input := Input.get_vector("move_left", "move_right",
@@ -114,11 +124,27 @@ func _physics_process(delta: float) -> void:
 		hud.set_hp(hp, max_hp)
 	if hud and hud.has_method("set_mechparts"):
 		hud.set_mechparts(mechparts)
+	if hud and hud.has_method("set_ult"):
+		var cd_remaining: float = max(0.0, ult_cd - ult_t)
+		hud.set_ult(ult_active_t, cd_remaining)
+
+# ── Q: OVERCLOCK. 5s of 3× fire rate + 1.6× damage.
+func _activate_ult() -> void:
+	if ult_t < ult_cd or ult_active_t > 0.0:
+		return
+	ult_t = 0.0
+	ult_active_t = ult_dur
+
+func _ult_dmg_mul() -> float:
+	return 1.6 if ult_active_t > 0.0 else 1.0
+
+func _ult_cd_mul() -> float:
+	return 1.0 / 3.0 if ult_active_t > 0.0 else 1.0
 
 # ── LMB: fire a single round from Dread's rifle. Hitscan, with a
 # visible tracer + muzzle flash + impact spark.
 func _fire_gun() -> void:
-	if attack_t < attack_cd:
+	if attack_t < attack_cd * _ult_cd_mul():
 		return
 	attack_t = 0.0
 	var cam_xf := camera.global_transform
@@ -140,14 +166,15 @@ func _fire_gun() -> void:
 		var col: Object = hit.collider
 		# climb up from the collision shape's body to find the
 		# enemy script if needed
+		var dmg: int = int(round(float(attack_dmg) * _ult_dmg_mul()))
 		if col and col is Node:
 			var n: Node = col as Node
 			if n.is_in_group("zombie") and n.has_method("take_damage"):
-				n.take_damage(attack_dmg, global_position)
+				n.take_damage(dmg, global_position)
 			elif n.get_parent() and n.get_parent().is_in_group("zombie"):
 				var p: Node = n.get_parent()
 				if p.has_method("take_damage"):
-					p.take_damage(attack_dmg, global_position)
+					p.take_damage(dmg, global_position)
 		_spawn_spark(end_point)
 	_spawn_tracer(muzzle, end_point, 0.06)
 	_spawn_flash(muzzle, 0.05)

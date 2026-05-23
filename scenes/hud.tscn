@@ -80,6 +80,15 @@ offset_bottom = 60.0
 text = "ACT I · THE ASSEMBLY FLOOR"
 horizontal_alignment = 1
 
+[node name="UltText" type="Label" parent="Root/WaveInfo"]
+anchor_top = 0.0
+anchor_right = 1.0
+offset_top = 60.0
+offset_bottom = 90.0
+text = "Q  READY"
+horizontal_alignment = 1
+modulate = Color(0.4, 0.84, 1, 1)
+
 [node name="Mechparts" type="Control" parent="Root"]
 anchor_left = 1.0
 anchor_right = 1.0
