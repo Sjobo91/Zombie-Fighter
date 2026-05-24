@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1"]
-[ext_resource type="PackedScene" path="res://assets/models/dread.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/models/enemy_warrior.glb" id="2"]
 
 [sub_resource type="CapsuleShape3D" id="cap_shape"]
 radius = 0.55
@@ -19,7 +19,10 @@ shape = SubResource("cap_shape")
 [node name="Mesh" type="Node3D" parent="."]
 
 [node name="Model" parent="Mesh" instance=ExtResource("2")]
-transform = Transform3D(0.06, 0, 0, 0, 0.06, 0, 0, 0, 0.06, 0, 0, 0)
+; Normal-scale humanoid robot (matches the collision capsule, fills
+; the 9 m third-person camera frame). The skeleton inside this glb is
+; what makes Dread actually animate (arms-down + walk swing + punch).
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 
 [node name="CameraRig" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, 0)
