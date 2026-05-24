@@ -5,7 +5,7 @@
 extends CharacterBody3D
 
 @export var max_hp:    int   = 60        # tougher than the old zombies
-@export var speed:     float = 4.2
+@export var speed:     float = 6.5        # running pace
 @export var gravity:   float = 22.0
 @export var damage:    int   = 14
 @export var atk_cd:    float = 1.1
@@ -238,10 +238,11 @@ func _physics_process(delta: float) -> void:
 
 # Procedural animation (inline) — bob/sway/recoil + Mixamo bones.
 func _update_proc_anim(delta: float, is_moving: bool) -> void:
-	var rate: float = (5.5 if is_moving else 1.2)
+	# Faster cycle + bigger bob so they read as RUNNING not shuffling.
+	var rate: float = (10.0 if is_moving else 1.5)
 	_walk_phase += delta * rate
-	var bob_amp: float = 0.07 if is_moving else 0.015
-	var sway_amp: float = 0.03 if is_moving else 0.01
+	var bob_amp: float = 0.16 if is_moving else 0.02
+	var sway_amp: float = 0.08 if is_moving else 0.015
 	var bob: float  = abs(sin(_walk_phase)) * bob_amp
 	var sway: float = sin(_walk_phase * 0.5) * sway_amp
 	# Recoil from being shot — flash_t pulses 0.22→0 each hit.
@@ -253,8 +254,9 @@ func _update_proc_anim(delta: float, is_moving: bool) -> void:
 	# Skeleton bones (if found)
 	if _skel == null:
 		return
-	var swing: float = sin(_walk_phase) * (0.40 if is_moving else 0.05)
-	var leg_swing: float = -sin(_walk_phase) * (0.50 if is_moving else 0.0)
+	# Big arm + leg swings when running so the motion really reads.
+	var swing: float = sin(_walk_phase) * (0.85 if is_moving else 0.05)
+	var leg_swing: float = -sin(_walk_phase) * (1.10 if is_moving else 0.0)
 	# Right arm extends on strike; left arm always rests / swings.
 	_drive_arm_z(_b_l_arm, 0.0,         swing, -1.40)
 	_drive_arm_z(_b_r_arm, punch_anim_t, -swing,  1.40)

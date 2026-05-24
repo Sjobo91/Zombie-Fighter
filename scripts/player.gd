@@ -492,12 +492,12 @@ func _punch() -> void:
 	# dual-gun feel
 	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
 	var dread_right: Vector3 = mesh.basis * Vector3(-1, 0, 0)
-	var side: float = -0.30 if punch_left else 0.30
-	# Muzzle at the model's shoulder height (model is scaled 0.5 + lift
-	# 0.5 m → shoulders around world Y 1.4). Side-offset alternates
-	# so left and right barrels look like they fire independently.
-	var muzzle: Vector3 = global_position + Vector3.UP * 1.40 \
-		+ dread_fwd * 0.50 + dread_right * side
+	var side: float = -0.50 if punch_left else 0.50
+	# Muzzle at the model's arm/shoulder height — with the +2.5 m
+	# model lift and 0.5 scale, arms sit around world Y 2.8-3.0.
+	# Wider side-offset so left/right alternation shows clearly.
+	var muzzle: Vector3 = global_position + Vector3.UP * 2.80 \
+		+ dread_fwd * 0.40 + dread_right * side
 	var query := PhysicsRayQueryParameters3D.create(
 		origin, origin + forward * attack_range)
 	query.exclude = [get_rid()]
@@ -505,22 +505,33 @@ func _punch() -> void:
 	var hit: Dictionary = get_world_3d().direct_space_state \
 		.intersect_ray(query)
 	var end_point: Vector3 = origin + forward * attack_range
+	var dmg: int = int(round(float(attack_dmg) * _ult_dmg_mul()))
+	var direct_target: Node = null
 	if hit:
 		end_point = hit.position
 		var col: Object = hit.collider
-		var dmg: int = int(round(float(attack_dmg) * _ult_dmg_mul()))
 		if col and col is Node:
 			var n: Node = col as Node
-			if n.is_in_group("zombie") and n.has_method("take_damage"):
-				n.take_damage(dmg, global_position)
+			if n.is_in_group("zombie"):
+				direct_target = n
 			elif n.get_parent() and n.get_parent().is_in_group("zombie"):
-				var p: Node = n.get_parent()
-				if p.has_method("take_damage"):
-					p.take_damage(dmg, global_position)
+				direct_target = n.get_parent()
+		if direct_target and direct_target.has_method("take_damage"):
+			direct_target.take_damage(dmg, global_position)
 		# Small explosion on impact — flash + shockwave ring + sparks
 		_spawn_explosion(end_point, 0.90,
 			Color(1.0, 0.85, 0.40, 0.85),
 			Color(1.0, 0.65, 0.20, 1))
+	# Bigger effective hitbox — large rounds, any zombie within 1.2m
+	# of the impact point ALSO takes damage. Covers near-misses.
+	var bullet_radius: float = 1.2
+	for z in get_tree().get_nodes_in_group("zombie"):
+		if not (z is Node3D) or z == direct_target:
+			continue
+		var d: float = (z as Node3D).global_position \
+			.distance_to(end_point)
+		if d <= bullet_radius and z.has_method("take_damage"):
+			z.take_damage(dmg, global_position)
 	# Fat white-yellow tracer streak — bigger so it actually reads
 	_spawn_tracer(muzzle, end_point, 0.20, 0.18,
 		Color(1.0, 0.95, 0.55, 1), Color(1.0, 0.80, 0.20, 1))
