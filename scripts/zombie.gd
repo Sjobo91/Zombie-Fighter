@@ -31,6 +31,12 @@ var boss_name: String = ""
 # stiffly with a tiny vertical bob)
 var march_t: float = 0.0
 var mesh_base_y: float = 0.0
+# procedural animator (added in _ready, drives bone overrides if model
+# has a Mixamo skeleton; otherwise just bobs the mesh)
+var anim: Node = null
+# punch anim timer (mirrors zombie's strike) — drives the right-arm
+# extension visual when the zombie hits.
+var punch_anim_t: float = 0.0
 
 func _ready() -> void:
 	hp = max_hp
@@ -39,6 +45,13 @@ func _ready() -> void:
 	target = get_tree().get_first_node_in_group("player") as Node3D
 	mesh_base_y = mesh_root.position.y
 	march_t = randf() * TAU
+	# Procedural animator — bone overrides on Mixamo skeleton + mesh bob.
+	var anim_script: Script = load("res://scripts/procedural_anim.gd")
+	anim = Node.new()
+	anim.set_script(anim_script)
+	anim.mesh_root = mesh_root
+	anim.recoil_amp = 0.20
+	add_child(anim)
 
 func _collect_mesh_materials(node: Node) -> void:
 	if node is MeshInstance3D:
@@ -145,16 +158,22 @@ func _physics_process(delta: float) -> void:
 			if target.has_method("take_damage"):
 				target.take_damage(damage)
 			_spawn_strike_arc()
+			punch_anim_t = 1.0   # arm extension visual
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 	move_and_slide()
 	if to.length() > 0.0001:
 		look_at(target.global_position, Vector3.UP, false)
-	# robot march — tiny stiff bob, no organic sway
-	var moving := dist > atk_range
-	march_t += delta * (4.0 if moving else 0.6)
-	var amp_bob: float = 0.06 if moving else 0.015
-	mesh_root.position.y = mesh_base_y + abs(sin(march_t)) * amp_bob
+	# decay punch animation timer
+	if punch_anim_t > 0.0:
+		punch_anim_t = max(0.0, punch_anim_t - delta / 0.30)
+	# drive the procedural animator (whole-mesh bob + skeleton arms)
+	if anim:
+		anim.moving    = dist > atk_range
+		anim.sprint    = false
+		anim.in_air    = not is_on_floor()
+		anim.r_punch_t = punch_anim_t
+		anim.recoil_t  = clamp(flash_t / 0.22, 0.0, 1.0)
 
 # Spawn a red wedge in front of the enemy at the moment of impact, so
 # the player has visible feedback for what just dropped their HP.
