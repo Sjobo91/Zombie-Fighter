@@ -621,37 +621,50 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 		arm_z_rest: float) -> void:
 	if bone == -1:
 		return
-	# Bicep raises from "hanging at side" to "pointing FORWARD"
-	# during wind-up, holds horizontal at strike, then drops back.
-	# Mirrored per side via the sign of arm_z_rest (left=-1.4, right=+1.4).
+	# Compose two rotations in bone-local space:
+	#   1. The "down-at-side" rest (Z axis euler, brings arm from T-pose
+	#      to hanging).
+	#   2. A swing around WORLD-UP (computed via the bone's global rest
+	#      basis, so this works regardless of bone-local axis orientation).
+	# The swing is what tips the arm from outward → forward during a
+	# punch. Doing it via world axis avoids guesswork about which
+	# local axis is forward.
+	var rest_xform: Transform3D = _skel.get_bone_global_rest(bone)
+	var local_up: Vector3 = rest_xform.basis.inverse() * Vector3.UP
+	if local_up.length() < 0.001:
+		local_up = Vector3.UP
+	local_up = local_up.normalized()
+	var side_sign: float = sign(arm_z_rest)   # -1 left, +1 right
 	if punch_t > 0.0:
-		var inv:        float = 1.0 - punch_t
-		var side_sign:  float = sign(arm_z_rest)   # -1 left, +1 right
-		var arm_x:      float = 0.0
-		var arm_y:      float = 0.0
-		var arm_z:      float = arm_z_rest
+		var inv:         float = 1.0 - punch_t
+		var swing_angle: float = 0.0
+		var arm_x:       float = 0.0
+		var arm_z:       float = arm_z_rest
 		if inv < 0.30:
-			# WIND-UP: arm comes up off the side AND swings to the front
-			# (Y rotates 90° toward forward — mirrored per arm).
+			# Wind-up: arm raises off the side AND swings to point
+			# straight forward (90° around world UP, mirrored per arm).
 			var k: float = inv / 0.30
-			arm_x = lerp(0.0, 0.15, k)
-			arm_y = lerp(0.0, -side_sign * PI * 0.5, k)
+			swing_angle = lerp(0.0, -side_sign * PI * 0.5, k)
+			arm_x = lerp(0.0, 0.10, k)
 			arm_z = lerp(arm_z_rest, 0.0, k)
 		elif inv < 0.55:
-			# STRIKE: bicep stays horizontal-forward; elbow does the
-			# extension. Tiny extra push for liveliness.
+			# Strike: bicep stays forward, elbow extends in parallel.
 			var k: float = (inv - 0.30) / 0.25
-			arm_x = lerp(0.15, -0.10, k)
-			arm_y = -side_sign * PI * 0.5
+			swing_angle = -side_sign * PI * 0.5
+			arm_x = lerp(0.10, -0.10, k)
 			arm_z = 0.0
 		else:
-			# RECOVER: ease back to down-at-side rest pose.
+			# Recover.
 			var k: float = (inv - 0.55) / 0.45
+			swing_angle = lerp(-side_sign * PI * 0.5, 0.0, k)
 			arm_x = lerp(-0.10, 0.0, k)
-			arm_y = lerp(-side_sign * PI * 0.5, 0.0, k)
 			arm_z = lerp(0.0, arm_z_rest, k)
-		_skel.set_bone_pose_rotation(bone,
-			Quaternion.from_euler(Vector3(arm_x, arm_y, arm_z)))
+		var rest_q: Quaternion = Quaternion.from_euler(
+			Vector3(arm_x, 0, arm_z))
+		var swing_q: Quaternion = Quaternion(local_up, swing_angle)
+		# Apply rest first (Z down + small pitch), then swing around
+		# world UP. Quaternion compose order: rotation A then B = B * A.
+		_skel.set_bone_pose_rotation(bone, swing_q * rest_q)
 	else:
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
