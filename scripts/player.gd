@@ -44,6 +44,8 @@ var _mesh_base_pos: Vector3 = Vector3.ZERO
 var _skel: Skeleton3D = null
 var _b_l_arm:    int = -1
 var _b_r_arm:    int = -1
+var _b_l_elbow:  int = -1
+var _b_r_elbow:  int = -1
 var _b_l_up_leg: int = -1
 var _b_r_up_leg: int = -1
 var _b_spine:    int = -1
@@ -227,6 +229,10 @@ func _cache_bones() -> void:
 	if _b_r_arm == -1:    _b_r_arm    = _find_bone_contains(
 		["bicep_r", "arm_r", "armr_", "rightarm", "shoulder_r",
 		 "shoulderr", "upperarm_r", "upper_arm_r"])
+	if _b_l_elbow == -1:  _b_l_elbow  = _find_bone_contains(
+		["elbow_l", "forearm_l", "leftforearm"])
+	if _b_r_elbow == -1:  _b_r_elbow  = _find_bone_contains(
+		["elbow_r", "forearm_r", "rightforearm"])
 
 func _find_bone_prefix(prefix: String) -> int:
 	if _skel == null:
@@ -348,12 +354,12 @@ func _physics_process(delta: float) -> void:
 		var inv: float = 1.0 - max_punch
 		var pitch: float = 0.0
 		if inv < 0.30:
-			pitch = lerp(0.0, 0.55, inv / 0.30)            # wind UP back
+			pitch = lerp(0.0, 0.22, inv / 0.30)            # small lean back
 		elif inv < 0.55:
-			pitch = lerp(0.55, -0.65, (inv - 0.30) / 0.25) # SLAM forward
-			punch_lunge = sin((inv - 0.30) / 0.25 * PI) * 0.65
+			pitch = lerp(0.22, -0.28, (inv - 0.30) / 0.25) # small punch-forward
+			punch_lunge = sin((inv - 0.30) / 0.25 * PI) * 0.45
 		else:
-			pitch = lerp(-0.65, 0.0, (inv - 0.55) / 0.45)
+			pitch = lerp(-0.28, 0.0, (inv - 0.55) / 0.45)
 		mesh.rotation.x = pitch
 	# Forward bow on smash. smash_anim_t decays 1.0 -> 0.0 over 0.45s.
 	if smash_anim_t > 0.0:
@@ -601,6 +607,9 @@ func _update_proc_anim(delta: float, is_moving: bool,
 	else:
 		_drive_arm(_b_l_arm, l_punch_t,  swing, -1.40)
 		_drive_arm(_b_r_arm, r_punch_t, -swing,  1.40)
+		# Elbow piston-pumps for the actual punch motion
+		_drive_elbow(_b_l_elbow, l_punch_t)
+		_drive_elbow(_b_r_elbow, r_punch_t)
 	if _b_l_up_leg != -1:
 		_skel.set_bone_pose_rotation(_b_l_up_leg,
 			Quaternion.from_euler(Vector3(leg_swing, 0, 0)))
@@ -612,36 +621,44 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 		arm_z_rest: float) -> void:
 	if bone == -1:
 		return
+	# Bicep stays in its rest pose during punches. The elbow does the
+	# pump motion (see _drive_elbow). Bicep only gets a tiny pitch back
+	# during wind-up + tiny pitch forward at strike so the shoulder
+	# feels connected to the body's lunge.
 	if punch_t > 0.0:
-		# Straight punch — interpolate BOTH axes through 3 phases so the
-		# arm raises from rest, points straight forward at impact, then
-		# drops back. No residual side-tilt at strike = no flapping out.
-		# inv: 0 = just triggered, 1 = done.
 		var inv: float = 1.0 - punch_t
-		var arm_x: float = 0.0
-		var arm_z: float = arm_z_rest
+		var pitch: float = 0.0
 		if inv < 0.30:
-			# WIND-UP: bicep raises toward neutral (arm coming up off
-			# the side) and tucks back a touch.
-			var k: float = inv / 0.30
-			arm_x = lerp(0.0, 0.25, k)
-			arm_z = lerp(arm_z_rest, 0.0, k)
+			pitch = lerp(0.0, 0.20, inv / 0.30)
 		elif inv < 0.55:
-			# STRIKE: arm rotates 90° to point STRAIGHT forward. Z stays
-			# at 0 so the arm doesn't fan out to the side.
-			var k: float = (inv - 0.30) / 0.25
-			arm_x = lerp(0.25, -PI * 0.50, k)
-			arm_z = 0.0
+			pitch = lerp(0.20, -0.30, (inv - 0.30) / 0.25)
 		else:
-			# RECOVER: ease back to the down-at-side rest pose.
-			var k: float = (inv - 0.55) / 0.45
-			arm_x = lerp(-PI * 0.50, 0.0, k)
-			arm_z = lerp(0.0, arm_z_rest, k)
+			pitch = lerp(-0.30, 0.0, (inv - 0.55) / 0.45)
 		_skel.set_bone_pose_rotation(bone,
-			Quaternion.from_euler(Vector3(arm_x, 0, arm_z)))
+			Quaternion.from_euler(Vector3(pitch, 0, arm_z_rest)))
 	else:
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
+
+# Piston pump on the elbow — folded up during wind-up, snapped fully
+# extended at strike, then relaxes back.
+func _drive_elbow(bone: int, punch_t: float) -> void:
+	if bone == -1:
+		return
+	if punch_t > 0.0:
+		var inv: float = 1.0 - punch_t
+		var bend: float = 0.0
+		if inv < 0.30:
+			# WIND-UP: bend the elbow so the forearm folds up
+			bend = lerp(0.0, PI * 0.65, inv / 0.30)
+		elif inv < 0.55:
+			# STRIKE: snap straight — elbow extends fast
+			bend = lerp(PI * 0.65, 0.0, (inv - 0.30) / 0.25)
+		# Recover phase: stays at rest (bend = 0)
+		_skel.set_bone_pose_rotation(bone,
+			Quaternion.from_euler(Vector3(bend, 0, 0)))
+	else:
+		_skel.set_bone_pose_rotation(bone, Quaternion.IDENTITY)
 
 func take_damage(amt: int) -> void:
 	if dead or iframes > 0.0:
