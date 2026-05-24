@@ -276,19 +276,21 @@ func _find_bone_contains(needles: Array) -> int:
 				return i
 	return -1
 
-# Hide any obvious "pedestal" / "base" / "platform" mesh that ships
-# baked into the imported model. Match by case-insensitive name
-# substring.
+# Hide any baked-in pedestal / floor-disc mesh that ships with the
+# imported model. We're careful to skip body-part meshes whose names
+# also contain words like "base" or "ground" by accident.
 func _hide_model_base(node: Node) -> void:
 	if node is MeshInstance3D:
 		var n: String = node.name.to_lower()
-		var bad: Array = ["base", "pedestal", "platform", "stand",
-			"ground", "floor", "disc", "plinth", "podium"]
-		for b in bad:
-			if b in n:
-				node.visible = false
-				print("[Reaper] hid base mesh: ", node.name)
-				break
+		var is_body_part: bool = "legs" in n or "hands" in n \
+			or "arm" in n or "head" in n or "body" in n \
+			or "torso" in n or "chest" in n or "hip" in n
+		var looks_like_pedestal: bool = ("floor" in n \
+			or "pedestal" in n or "plinth" in n or "podium" in n \
+			or n.begins_with("base") or n.begins_with("disc"))
+		if looks_like_pedestal and not is_body_part:
+			node.visible = false
+			print("[Reaper] HID base mesh: ", node.name)
 	for child in node.get_children():
 		_hide_model_base(child)
 
