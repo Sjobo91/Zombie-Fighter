@@ -219,20 +219,11 @@ func _cache_bones() -> void:
 	if _b_r_up_leg == -1: _b_r_up_leg = _find_bone_contains(
 		["thigh_r", "upleg_r", "upperleg_r", "leg_r_"])
 	if _b_l_arm == -1:    _b_l_arm    = _find_bone_contains(
-		["arm_l", "arml_", "leftarm", "shoulder_l", "shoulderl",
-		 "upperarm_l", "upper_arm_l"])
+		["bicep_l", "arm_l", "arml_", "leftarm", "shoulder_l",
+		 "shoulderl", "upperarm_l", "upper_arm_l"])
 	if _b_r_arm == -1:    _b_r_arm    = _find_bone_contains(
-		["arm_r", "armr_", "rightarm", "shoulder_r", "shoulderr",
-		 "upperarm_r", "upper_arm_r"])
-	# Last-ditch debug: list bones that look like they could be arms.
-	if _b_l_arm == -1 or _b_r_arm == -1:
-		print("[Reaper] arm bones not found — candidates:")
-		for i in range(_skel.get_bone_count()):
-			var n: String = _skel.get_bone_name(i)
-			var lo: String = n.to_lower()
-			if "arm" in lo or "shoulder" in lo or "hand" in lo \
-					or "elbow" in lo or "wrist" in lo:
-				print("  ", i, ": ", n)
+		["bicep_r", "arm_r", "armr_", "rightarm", "shoulder_r",
+		 "shoulderr", "upperarm_r", "upper_arm_r"])
 
 func _find_bone_prefix(prefix: String) -> int:
 	if _skel == null:
