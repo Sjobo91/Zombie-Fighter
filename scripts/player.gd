@@ -448,11 +448,10 @@ func _punch() -> void:
 	if attack_t < attack_cd * _ult_cd_mul():
 		return
 	attack_t = 0.0
+	# Toggle muzzle side for visual variation, but DON'T trigger
+	# the body twist/lunge — user wants a stable firing pose, just
+	# tracers/flash/recoil as feedback.
 	punch_left = not punch_left
-	if punch_left:
-		l_punch_t = 1.0
-	else:
-		r_punch_t = 1.0
 	# Hitscan from camera ray
 	var cam_xf := camera.global_transform
 	var origin: Vector3 = cam_xf.origin
