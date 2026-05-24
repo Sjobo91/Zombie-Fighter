@@ -207,12 +207,32 @@ func _cache_bones() -> void:
 		if _b_l_up_leg == -1: _b_l_up_leg = _skel.find_bone(prefix + "LeftUpLeg")
 		if _b_r_up_leg == -1: _b_r_up_leg = _skel.find_bone(prefix + "RightUpLeg")
 		if _b_spine == -1:    _b_spine    = _skel.find_bone(prefix + "Spine")
-	# Fallback: custom rig naming with prefix + numeric suffix
-	# (e.g. "Arm1_L_00", "Leg1_R_019"). Match by prefix.
+	# Fallback: prefix-style custom rigs (Arm1_L_00, Leg1_R_019)
 	if _b_l_arm == -1:    _b_l_arm    = _find_bone_prefix("Arm1_L")
 	if _b_r_arm == -1:    _b_r_arm    = _find_bone_prefix("Arm1_R")
 	if _b_l_up_leg == -1: _b_l_up_leg = _find_bone_prefix("Leg1_L")
 	if _b_r_up_leg == -1: _b_r_up_leg = _find_bone_prefix("Leg1_R")
+	# Reaper rig uses Thigh_L / Thigh_R for upper legs, plus various
+	# arm-ish names we don't know yet. Substring search per side.
+	if _b_l_up_leg == -1: _b_l_up_leg = _find_bone_contains(
+		["thigh_l", "upleg_l", "upperleg_l", "leg_l_"])
+	if _b_r_up_leg == -1: _b_r_up_leg = _find_bone_contains(
+		["thigh_r", "upleg_r", "upperleg_r", "leg_r_"])
+	if _b_l_arm == -1:    _b_l_arm    = _find_bone_contains(
+		["arm_l", "arml_", "leftarm", "shoulder_l", "shoulderl",
+		 "upperarm_l", "upper_arm_l"])
+	if _b_r_arm == -1:    _b_r_arm    = _find_bone_contains(
+		["arm_r", "armr_", "rightarm", "shoulder_r", "shoulderr",
+		 "upperarm_r", "upper_arm_r"])
+	# Last-ditch debug: list bones that look like they could be arms.
+	if _b_l_arm == -1 or _b_r_arm == -1:
+		print("[Reaper] arm bones not found — candidates:")
+		for i in range(_skel.get_bone_count()):
+			var n: String = _skel.get_bone_name(i)
+			var lo: String = n.to_lower()
+			if "arm" in lo or "shoulder" in lo or "hand" in lo \
+					or "elbow" in lo or "wrist" in lo:
+				print("  ", i, ": ", n)
 
 func _find_bone_prefix(prefix: String) -> int:
 	if _skel == null:
@@ -220,6 +240,16 @@ func _find_bone_prefix(prefix: String) -> int:
 	for i in range(_skel.get_bone_count()):
 		if _skel.get_bone_name(i).begins_with(prefix):
 			return i
+	return -1
+
+func _find_bone_contains(needles: Array) -> int:
+	if _skel == null:
+		return -1
+	for i in range(_skel.get_bone_count()):
+		var lower: String = _skel.get_bone_name(i).to_lower()
+		for needle in needles:
+			if needle in lower:
+				return i
 	return -1
 
 func _tint_player(node: Node) -> void:
