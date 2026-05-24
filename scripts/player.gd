@@ -1,7 +1,7 @@
-# Player — REAPER. A combat steampunk robot fighting the zombie horde.
-# Left hand has a hammer, right hand has a gun.
-#   LMB   — hammer punch (melee, fast, AoE wedge in front)
-#   RMB   — fire gun from right hand (hitscan, tracer + spark)
+# Player — REAPER. A gun-toting combat robot fighting the zombie horde.
+# Big guns in both hands. Light gun on LMB, heavy cannon on RMB.
+#   LMB   — light gun (fast, low damage per shot, white tracer)
+#   RMB   — heavy cannon (slow, high damage + AoE splash, orange tracer)
 #   Q     — MELTDOWN ult (3× rate + 1.6× damage for 5s)
 #   R     — summon Ringworker ally
 #   Space — jump (plus 2 air-jumps for verticality)
@@ -17,16 +17,18 @@ extends CharacterBody3D
 @export var pitch_max:    float = -0.05
 # combat
 @export var max_hp:       int   = 140
-# LMB — hammer punch (melee wedge in front, left hand carries the hammer)
-@export var attack_dmg:   int   = 32
-@export var attack_range: float = 4.0
-@export var attack_arc:   float = 0.85    # ~49° half-angle (one arm)
-@export var attack_cd:    float = 0.40    # hammer is heavier than a jab
-# RMB — fire gun from right hand (hitscan, projectile tracer)
-@export var gun_dmg:      int   = 20
-@export var gun_range:    float = 55.0
-@export var gun_cd:       float = 0.32    # rapid pew-pew
-# Legacy smash plumbing — still used by Q ult / boss interactions
+# LMB — light gun (rapid, single-target, white tracer)
+@export var attack_dmg:   int   = 14
+@export var attack_range: float = 55.0
+@export var attack_cd:    float = 0.18      # fast pew-pew
+# RMB — heavy cannon (slow, big AoE splash, orange tracer)
+@export var gun_dmg:      int   = 55        # direct hit
+@export var gun_splash:   int   = 25        # AoE around impact
+@export var gun_splash_radius: float = 4.0
+@export var gun_range:    float = 65.0
+@export var gun_cd:       float = 0.75      # slow heavy cannon
+# Legacy smash plumbing — used only by Q ult math now
+@export var attack_arc:   float = 0.85
 @export var smash_dmg:    int   = 70
 @export var smash_range:  float = 5.2
 @export var smash_cd:     float = 0.9
@@ -441,56 +443,58 @@ func _ult_dmg_mul() -> float:
 func _ult_cd_mul() -> float:
 	return 1.0 / 3.0 if ult_active_t > 0.0 else 1.0
 
-# ── LMB: single-hand alternating fist punch. Hulk-style — rapid jabs.
+# ── LMB: light gun (rapid pew-pew, low damage, alternating barrels).
 func _punch() -> void:
 	if attack_t < attack_cd * _ult_cd_mul():
 		return
 	attack_t = 0.0
 	punch_left = not punch_left
-	# Drive the procedural anim's per-arm extension
 	if punch_left:
 		l_punch_t = 1.0
 	else:
 		r_punch_t = 1.0
-	# Play the punch / attack animation if the model has a real one.
-	# (If not, we don't auto-play a random clip — procedural body
-	# twist + lunge + recoil still fires in _physics_process.)
-	if _anim_player and _clip_punch != "":
-		_anim_player.stop()
-		_anim_player.play(_clip_punch, -1, 1.6)
-		_current_anim = _clip_punch
-		_anim_play_t = 0.45   # generous so the punch clip plays out
-	var dmg: int = int(round(float(attack_dmg) * _ult_dmg_mul()))
-	var face: float = mesh.rotation.y
+	# Hitscan from camera ray
+	var cam_xf := camera.global_transform
+	var origin: Vector3 = cam_xf.origin
+	var forward: Vector3 = -cam_xf.basis.z
+	# Alternate the muzzle between left and right hands for that
+	# dual-gun feel
 	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
 	var dread_right: Vector3 = mesh.basis * Vector3(-1, 0, 0)
-	# Offset the hit-test slightly to the punching side so the AoE
-	# actually feels like one arm.
-	var side: float = 0.4 if punch_left else -0.4
-	var hit_origin: Vector3 = global_position + dread_right * side
-	for z in get_tree().get_nodes_in_group("zombie"):
-		if not (z is Node3D):
-			continue
-		var to: Vector3 = (z as Node3D).global_position - hit_origin
-		to.y = 0.0
-		var d: float = to.length()
-		if d > attack_range:
-			continue
-		var ang := atan2(to.x, to.z)
-		var diff: float = abs(wrapf(ang - face, -PI, PI))
-		if diff > attack_arc:
-			continue
-		if z.has_method("take_damage"):
-			z.take_damage(dmg, global_position)
-		_spawn_punch_burst((z as Node3D).global_position
-			+ Vector3.UP * 1.0, 0.34, 0.18)
-	# Burst at the punching fist's reach so even a whiff reads
-	var burst_pos: Vector3 = global_position + Vector3.UP * 1.0 \
-		+ dread_fwd * (attack_range * 0.55) + dread_right * side
-	_spawn_punch_burst(burst_pos, attack_range * 0.32, 0.10)
-	recoil_t = 0.08
-	shake_t = max(shake_t, 0.06)
-	shake_amp = max(shake_amp, 0.04)
+	var side: float = -0.30 if punch_left else 0.30
+	var muzzle: Vector3 = global_position + Vector3.UP * 1.30 \
+		+ dread_fwd * 0.55 + dread_right * side
+	var query := PhysicsRayQueryParameters3D.create(
+		origin, origin + forward * attack_range)
+	query.exclude = [get_rid()]
+	query.collide_with_areas = false
+	var hit: Dictionary = get_world_3d().direct_space_state \
+		.intersect_ray(query)
+	var end_point: Vector3 = origin + forward * attack_range
+	if hit:
+		end_point = hit.position
+		var col: Object = hit.collider
+		var dmg: int = int(round(float(attack_dmg) * _ult_dmg_mul()))
+		if col and col is Node:
+			var n: Node = col as Node
+			if n.is_in_group("zombie") and n.has_method("take_damage"):
+				n.take_damage(dmg, global_position)
+			elif n.get_parent() and n.get_parent().is_in_group("zombie"):
+				var p: Node = n.get_parent()
+				if p.has_method("take_damage"):
+					p.take_damage(dmg, global_position)
+		_spawn_punch_burst(end_point, 0.22, 0.06)
+	# Thin white-yellow tracer
+	_spawn_tracer(muzzle, end_point, 0.05)
+	_spawn_punch_burst(muzzle, 0.12, 0.04)
+	recoil_t = 0.05
+	shake_t = max(shake_t, 0.04)
+	shake_amp = max(shake_amp, 0.03)
+	if _anim_player and _clip_shoot != "":
+		_anim_player.stop()
+		_anim_player.play(_clip_shoot, -1, 1.8)
+		_current_anim = _clip_shoot
+		_anim_play_t = 0.20
 
 # ── RMB: double-fisted SMASH. Both arms slam down — 360° lava shockwave.
 func _smash() -> void:
@@ -524,8 +528,7 @@ func _smash() -> void:
 	shake_t = max(shake_t, 0.32)
 	shake_amp = max(shake_amp, 0.32)
 
-# ── RMB: fire gun from the right hand. Hitscan from camera with a
-# visible orange tracer + impact spark + muzzle flash.
+# ── RMB: HEAVY CANNON. Slow, big tracer, AoE splash on impact.
 func _fire_gun() -> void:
 	if gun_t < gun_cd * _ult_cd_mul():
 		return
@@ -533,12 +536,11 @@ func _fire_gun() -> void:
 	var cam_xf := camera.global_transform
 	var origin: Vector3 = cam_xf.origin
 	var forward: Vector3 = -cam_xf.basis.z
-	# Muzzle position: in front of Reaper, slightly right (right hand
-	# holds the gun) and at chest height.
 	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
 	var dread_right: Vector3 = mesh.basis * Vector3(-1, 0, 0)
+	# Both shoulders firing — center the muzzle for the cannon
 	var muzzle: Vector3 = global_position + Vector3.UP * 1.30 \
-		+ dread_fwd * 0.55 + dread_right * -0.30
+		+ dread_fwd * 0.55
 	var query := PhysicsRayQueryParameters3D.create(
 		origin, origin + forward * gun_range)
 	query.exclude = [get_rid()]
@@ -550,29 +552,40 @@ func _fire_gun() -> void:
 		end_point = hit.position
 		var col: Object = hit.collider
 		var dmg: int = int(round(float(gun_dmg) * _ult_dmg_mul()))
+		# Direct hit on the targeted zombie
 		if col and col is Node:
 			var n: Node = col as Node
-			if n.is_in_group("zombie") and n.has_method("take_damage"):
-				n.take_damage(dmg, global_position)
+			var target: Node = null
+			if n.is_in_group("zombie"):
+				target = n
 			elif n.get_parent() and n.get_parent().is_in_group("zombie"):
-				var p: Node = n.get_parent()
-				if p.has_method("take_damage"):
-					p.take_damage(dmg, global_position)
-		_spawn_punch_burst(end_point, 0.30, 0.08)   # impact spark
-	# Visible tracer from muzzle to end point
-	_spawn_tracer(muzzle, end_point, 0.06)
-	# Muzzle flash
-	_spawn_punch_burst(muzzle, 0.18, 0.05)
-	# Tiny recoil + screen shake
-	recoil_t = 0.08
-	shake_t = max(shake_t, 0.08)
-	shake_amp = max(shake_amp, 0.06)
-	# Play the shoot animation if the model has one.
+				target = n.get_parent()
+			if target and target.has_method("take_damage"):
+				target.take_damage(dmg, global_position)
+		# AoE splash — every zombie in radius takes splash damage
+		var splash_dmg: int = int(round(float(gun_splash) * _ult_dmg_mul()))
+		for z in get_tree().get_nodes_in_group("zombie"):
+			if not (z is Node3D):
+				continue
+			var d: float = (z as Node3D).global_position \
+				.distance_to(end_point)
+			if d <= gun_splash_radius and z.has_method("take_damage"):
+				z.take_damage(splash_dmg, global_position)
+		# Big orange explosion at the impact
+		_spawn_punch_burst(end_point, gun_splash_radius * 0.6, 0.30)
+	# Big fat orange tracer
+	_spawn_tracer(muzzle, end_point, 0.12)
+	# Big muzzle flash
+	_spawn_punch_burst(muzzle, 0.40, 0.12)
+	# Heavy recoil + camera shake
+	recoil_t = 0.20
+	shake_t = max(shake_t, 0.22)
+	shake_amp = max(shake_amp, 0.18)
 	if _anim_player and _clip_shoot != "":
 		_anim_player.stop()
-		_anim_player.play(_clip_shoot, -1, 1.4)
+		_anim_player.play(_clip_shoot, -1, 1.0)
 		_current_anim = _clip_shoot
-		_anim_play_t = 0.35
+		_anim_play_t = 0.50
 
 # Thin glowing cylinder from muzzle to hit point — the bullet streak.
 func _spawn_tracer(a: Vector3, b: Vector3, ttl: float) -> void:
