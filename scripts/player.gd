@@ -74,6 +74,7 @@ var _clip_idle:   String = ""
 var _clip_walk:   String = ""
 var _clip_punch:  String = ""
 var _clip_smash:  String = ""
+var _clip_shoot:  String = ""
 
 var hp:        int   = 140
 var yaw:       float = 0.0
@@ -157,24 +158,24 @@ func _find_anim_player(n: Node) -> AnimationPlayer:
 # Pick which clip names map to our gameplay states. Different rigs name
 # things differently — we accept any reasonable alias.
 func _pick_clip_aliases() -> void:
-	_clip_idle  = _first_matching(["idle", "Idle", "T-Pose", "rest", "Stand"])
-	_clip_walk  = _first_matching(["walk", "Walk", "run", "Run", "walking"])
-	_clip_punch = _first_matching(["punch", "Punch", "attack", "Attack",
-		"swing", "jab"])
-	_clip_smash = _first_matching(["smash", "Smash", "slam", "Slam",
-		"whirlwind", "reap", "Reap"])
-	# If nothing matched a category, fall back to whatever's available.
+	_clip_idle  = _first_matching(["idle", "T-Pose", "rest", "Stand"])
+	_clip_walk  = _first_matching(["walk", "run", "walking"])
+	_clip_punch = _first_matching(["punch", "attack", "hit", "swing",
+		"jab", "hammer", "melee", "strike"])
+	_clip_shoot = _first_matching(["shoot", "fire", "gun", "shot"])
+	_clip_smash = _first_matching(["smash", "slam", "whirlwind", "reap",
+		"heavy"])
+	# Fall back to whatever's available so we have SOMETHING to play.
 	if _clip_idle == "" and _anim_list.size() > 0:
 		_clip_idle = _anim_list[0]
 	if _clip_walk == "":
 		_clip_walk = _clip_idle
-	if _clip_punch == "":
-		_clip_punch = _clip_idle
 	if _clip_smash == "":
 		_clip_smash = _clip_punch
 	print("[Reaper] clip map: idle=", _clip_idle,
 		" walk=", _clip_walk,
 		" punch=", _clip_punch,
+		" shoot=", _clip_shoot,
 		" smash=", _clip_smash)
 
 func _first_matching(needles: Array) -> String:
@@ -451,15 +452,14 @@ func _punch() -> void:
 		l_punch_t = 1.0
 	else:
 		r_punch_t = 1.0
-	# Play the artist-authored whirlwind animation from frame 0 at a
-	# fast clip — way more convincing than guessing bone-local axes.
-	# We stop it early via _anim_play_t so only ONE punch's worth of
-	# the long whirlwind clip plays per LMB.
-	if _anim_player and _clip_smash != "":
+	# Play the punch / attack animation if the model has a real one.
+	# (If not, we don't auto-play a random clip — procedural body
+	# twist + lunge + recoil still fires in _physics_process.)
+	if _anim_player and _clip_punch != "":
 		_anim_player.stop()
-		_anim_player.play(_clip_smash, -1, 2.4)
-		_current_anim = _clip_smash
-		_anim_play_t = 0.28   # ~0.28 s × 2.4 speed = 0.67 s of clip
+		_anim_player.play(_clip_punch, -1, 1.6)
+		_current_anim = _clip_punch
+		_anim_play_t = 0.45   # generous so the punch clip plays out
 	var dmg: int = int(round(float(attack_dmg) * _ult_dmg_mul()))
 	var face: float = mesh.rotation.y
 	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
@@ -567,6 +567,12 @@ func _fire_gun() -> void:
 	recoil_t = 0.08
 	shake_t = max(shake_t, 0.08)
 	shake_amp = max(shake_amp, 0.06)
+	# Play the shoot animation if the model has one.
+	if _anim_player and _clip_shoot != "":
+		_anim_player.stop()
+		_anim_player.play(_clip_shoot, -1, 1.4)
+		_current_anim = _clip_shoot
+		_anim_play_t = 0.35
 
 # Thin glowing cylinder from muzzle to hit point — the bullet streak.
 func _spawn_tracer(a: Vector3, b: Vector3, ttl: float) -> void:
