@@ -110,8 +110,10 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y -= gravity * delta
 	# Dread always faces where the camera looks (third-person aim).
-	# This keeps the gun pointing into the reticle.
-	mesh.rotation.y = lerp_angle(mesh.rotation.y, yaw, 16.0 * delta)
+	# The model's front is +Z (Mixamo convention) but the camera sits
+	# along +Z behind the player, so add PI to flip Dread around to
+	# face away from the camera — into the reticle, not at us.
+	mesh.rotation.y = lerp_angle(mesh.rotation.y, yaw + PI, 16.0 * delta)
 	move_and_slide()
 	# smash hit window — partway through the swing
 	if attacking and smash_t >= 0.10 and smash_t < 0.22:
