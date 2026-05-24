@@ -482,10 +482,12 @@ func _punch() -> void:
 				var p: Node = n.get_parent()
 				if p.has_method("take_damage"):
 					p.take_damage(dmg, global_position)
-		_spawn_punch_burst(end_point, 0.22, 0.06)
-	# Thin white-yellow tracer
-	_spawn_tracer(muzzle, end_point, 0.05)
-	_spawn_punch_burst(muzzle, 0.12, 0.04)
+		_spawn_punch_burst(end_point, 0.55, 0.18)        # impact spark
+	# Fat white-yellow tracer streak — bigger so it actually reads
+	_spawn_tracer(muzzle, end_point, 0.20, 0.18,
+		Color(1.0, 0.95, 0.55, 1), Color(1.0, 0.80, 0.20, 1))
+	# Big muzzle flash
+	_spawn_punch_burst(muzzle, 0.30, 0.10)
 	recoil_t = 0.05
 	shake_t = max(shake_t, 0.04)
 	shake_amp = max(shake_amp, 0.03)
@@ -571,11 +573,12 @@ func _fire_gun() -> void:
 			if d <= gun_splash_radius and z.has_method("take_damage"):
 				z.take_damage(splash_dmg, global_position)
 		# Big orange explosion at the impact
-		_spawn_punch_burst(end_point, gun_splash_radius * 0.6, 0.30)
-	# Big fat orange tracer
-	_spawn_tracer(muzzle, end_point, 0.12)
-	# Big muzzle flash
-	_spawn_punch_burst(muzzle, 0.40, 0.12)
+		_spawn_punch_burst(end_point, gun_splash_radius * 0.9, 0.45)
+	# Big fat ORANGE tracer beam — heavy cannon round
+	_spawn_tracer(muzzle, end_point, 0.30, 0.40,
+		Color(1.0, 0.55, 0.15, 1), Color(1.0, 0.40, 0.08, 1))
+	# Huge muzzle flash
+	_spawn_punch_burst(muzzle, 0.65, 0.18)
 	# Heavy recoil + camera shake
 	recoil_t = 0.20
 	shake_t = max(shake_t, 0.22)
@@ -586,21 +589,26 @@ func _fire_gun() -> void:
 		_current_anim = _clip_shoot
 		_anim_play_t = 0.50
 
-# Thin glowing cylinder from muzzle to hit point — the bullet streak.
-func _spawn_tracer(a: Vector3, b: Vector3, ttl: float) -> void:
+# Glowing cylinder from muzzle to hit point — the bullet streak.
+# radius and color let LMB (small, white-yellow) differ from RMB
+# (fat, orange) without duplicating code.
+func _spawn_tracer(a: Vector3, b: Vector3, ttl: float,
+		radius: float = 0.15,
+		color_albedo: Color = Color(1.0, 0.85, 0.4, 1),
+		color_emit: Color = Color(1.0, 0.75, 0.25, 1)) -> void:
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
 	var length: float = (b - a).length()
-	cm.top_radius = 0.04
-	cm.bottom_radius = 0.04
+	cm.top_radius = radius
+	cm.bottom_radius = radius
 	cm.height = max(0.01, length)
 	mi.mesh = cm
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(1.0, 0.85, 0.4, 1)
+	mat.albedo_color = color_albedo
 	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.75, 0.25, 1)
-	mat.emission_energy_multiplier = 4.0
+	mat.emission = color_emit
+	mat.emission_energy_multiplier = 6.0
 	mi.material_override = mat
 	get_tree().current_scene.add_child(mi)
 	var mid: Vector3 = (a + b) * 0.5
