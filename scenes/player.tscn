@@ -19,9 +19,8 @@ shape = SubResource("cap_shape")
 [node name="Mesh" type="Node3D" parent="."]
 
 [node name="Model" parent="Mesh" instance=ExtResource("2")]
-; combat_robot.glb — scale 0.5, slight lift so the feet sit on the
-; floor even after the bundled Floor_001 mesh is hidden in code.
-transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 0.3, 0)
+; combat_robot.glb — scale 0.5, +1.5m lift to get fully above the floor.
+transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 1.5, 0)
 
 [node name="CameraRig" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, 0)
