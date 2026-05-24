@@ -19,9 +19,10 @@ shape = SubResource("cap_shape")
 [node name="Mesh" type="Node3D" parent="."]
 
 [node name="Model" parent="Mesh" instance=ExtResource("2")]
-; reap_the_whirlwind.glb is exported at giant scale — needed ~20× shrink
-; to fit the 2.2 m collision capsule + 9 m third-person camera frame.
-transform = Transform3D(0.05, 0, 0, 0, 0.05, 0, 0, 0, 0.05, 0, 0, 0)
+; reap_the_whirlwind.glb is exported at HUGE scale (~hundreds of metres
+; tall natively). 0.005 = 200× shrink puts him at a sensible character
+; height that fits the 2.2 m collision capsule + 9 m camera frame.
+transform = Transform3D(0.005, 0, 0, 0, 0.005, 0, 0, 0, 0.005, 0, 0, 0)
 
 [node name="CameraRig" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, 0)
