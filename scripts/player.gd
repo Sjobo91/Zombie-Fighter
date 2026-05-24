@@ -1,8 +1,8 @@
-# Player — REAPER. A rebel workshop robot fighting the zombie horde.
-# Plays like the Hulk: fast, jumpy, brutal.
-#   LMB   — single-hand alternating punch (rapid)
-#   RMB   — double-fisted ground smash with shockwave ring
-#   Q     — MELTDOWN ult (3× swing rate + 1.6× dmg for 5s)
+# Player — REAPER. A combat steampunk robot fighting the zombie horde.
+# Left hand has a hammer, right hand has a gun.
+#   LMB   — hammer punch (melee, fast, AoE wedge in front)
+#   RMB   — fire gun from right hand (hitscan, tracer + spark)
+#   Q     — MELTDOWN ult (3× rate + 1.6× damage for 5s)
 #   R     — summon Ringworker ally
 #   Space — jump (plus 2 air-jumps for verticality)
 extends CharacterBody3D
@@ -17,14 +17,18 @@ extends CharacterBody3D
 @export var pitch_max:    float = -0.05
 # combat
 @export var max_hp:       int   = 140
-# LMB — single-hand alternating fist (Hulk style, fast)
-@export var attack_dmg:   int   = 22
-@export var attack_range: float = 3.6
+# LMB — hammer punch (melee wedge in front, left hand carries the hammer)
+@export var attack_dmg:   int   = 32
+@export var attack_range: float = 4.0
 @export var attack_arc:   float = 0.85    # ~49° half-angle (one arm)
-@export var attack_cd:    float = 0.22    # rapid
-# RMB — double-fisted SMASH (slow, big AoE, lava ring)
+@export var attack_cd:    float = 0.40    # hammer is heavier than a jab
+# RMB — fire gun from right hand (hitscan, projectile tracer)
+@export var gun_dmg:      int   = 20
+@export var gun_range:    float = 55.0
+@export var gun_cd:       float = 0.32    # rapid pew-pew
+# Legacy smash plumbing — still used by Q ult / boss interactions
 @export var smash_dmg:    int   = 70
-@export var smash_range:  float = 5.2     # radius around Reaper
+@export var smash_range:  float = 5.2
 @export var smash_cd:     float = 0.9
 @export var summon_cd:    float = 25.0
 @export var ally_scene:   PackedScene = preload("res://scenes/ally.tscn")
@@ -74,8 +78,9 @@ var _clip_smash:  String = ""
 var hp:        int   = 140
 var yaw:       float = 0.0
 var pitch:     float = -0.55
-var attack_t:  float = 999.0      # time since last punch
-var smash_t:   float = 999.0      # time since last double-fist smash
+var attack_t:  float = 999.0      # time since last hammer punch
+var gun_t:     float = 999.0      # time since last gun shot
+var smash_t:   float = 999.0      # time since last smash (legacy)
 var summon_t:  float = 999.0      # time since last Ringworker call-in
 var ult_t:     float = 999.0      # time since last ult activation
 var ult_active_t: float = 0.0     # remaining seconds of active ult
@@ -289,9 +294,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		rig.rotation.x = pitch
 	# Esc is owned by the HUD (it opens the pause menu).
 	if event.is_action_pressed("attack") and not dead:
-		_punch()
+		_punch()        # LMB → hammer punch (left hand)
 	if event.is_action_pressed("smash") and not dead:
-		_smash()
+		_fire_gun()     # RMB → gun (right hand)
 	if event.is_action_pressed("summon_ally") and not dead:
 		_summon_ally()
 	if event.is_action_pressed("ult") and not dead:
@@ -301,6 +306,7 @@ func _physics_process(delta: float) -> void:
 	if dead:
 		return
 	attack_t += delta
+	gun_t    += delta
 	smash_t  += delta
 	summon_t += delta
 	ult_t    += delta
@@ -517,6 +523,77 @@ func _smash() -> void:
 	recoil_t = 0.25
 	shake_t = max(shake_t, 0.32)
 	shake_amp = max(shake_amp, 0.32)
+
+# ── RMB: fire gun from the right hand. Hitscan from camera with a
+# visible orange tracer + impact spark + muzzle flash.
+func _fire_gun() -> void:
+	if gun_t < gun_cd * _ult_cd_mul():
+		return
+	gun_t = 0.0
+	var cam_xf := camera.global_transform
+	var origin: Vector3 = cam_xf.origin
+	var forward: Vector3 = -cam_xf.basis.z
+	# Muzzle position: in front of Reaper, slightly right (right hand
+	# holds the gun) and at chest height.
+	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
+	var dread_right: Vector3 = mesh.basis * Vector3(-1, 0, 0)
+	var muzzle: Vector3 = global_position + Vector3.UP * 1.30 \
+		+ dread_fwd * 0.55 + dread_right * -0.30
+	var query := PhysicsRayQueryParameters3D.create(
+		origin, origin + forward * gun_range)
+	query.exclude = [get_rid()]
+	query.collide_with_areas = false
+	var hit: Dictionary = get_world_3d().direct_space_state \
+		.intersect_ray(query)
+	var end_point: Vector3 = origin + forward * gun_range
+	if hit:
+		end_point = hit.position
+		var col: Object = hit.collider
+		var dmg: int = int(round(float(gun_dmg) * _ult_dmg_mul()))
+		if col and col is Node:
+			var n: Node = col as Node
+			if n.is_in_group("zombie") and n.has_method("take_damage"):
+				n.take_damage(dmg, global_position)
+			elif n.get_parent() and n.get_parent().is_in_group("zombie"):
+				var p: Node = n.get_parent()
+				if p.has_method("take_damage"):
+					p.take_damage(dmg, global_position)
+		_spawn_punch_burst(end_point, 0.30, 0.08)   # impact spark
+	# Visible tracer from muzzle to end point
+	_spawn_tracer(muzzle, end_point, 0.06)
+	# Muzzle flash
+	_spawn_punch_burst(muzzle, 0.18, 0.05)
+	# Tiny recoil + screen shake
+	recoil_t = 0.08
+	shake_t = max(shake_t, 0.08)
+	shake_amp = max(shake_amp, 0.06)
+
+# Thin glowing cylinder from muzzle to hit point — the bullet streak.
+func _spawn_tracer(a: Vector3, b: Vector3, ttl: float) -> void:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	var length: float = (b - a).length()
+	cm.top_radius = 0.04
+	cm.bottom_radius = 0.04
+	cm.height = max(0.01, length)
+	mi.mesh = cm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.85, 0.4, 1)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.75, 0.25, 1)
+	mat.emission_energy_multiplier = 4.0
+	mi.material_override = mat
+	get_tree().current_scene.add_child(mi)
+	var mid: Vector3 = (a + b) * 0.5
+	mi.global_position = mid
+	var dir: Vector3 = (b - a)
+	if dir.length() > 0.001:
+		mi.look_at(mi.global_position + dir, Vector3.UP, true)
+		mi.rotate_object_local(Vector3.RIGHT, PI * 0.5)
+	get_tree().create_timer(ttl).timeout.connect(func ():
+		if is_instance_valid(mi):
+			mi.queue_free())
 
 # ── R: call in a Ringworker ally that fights for ~15s.
 func _summon_ally() -> void:

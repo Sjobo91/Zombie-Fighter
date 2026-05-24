@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1"]
-[ext_resource type="PackedScene" path="res://assets/models/rock_golem.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/models/combat_steampunk_robot.glb" id="2"]
 
 [sub_resource type="CapsuleShape3D" id="cap_shape"]
 radius = 0.55
