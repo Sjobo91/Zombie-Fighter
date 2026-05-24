@@ -43,6 +43,11 @@ var summon_t:  float = 999.0      # time since last Ringworker call-in
 var ult_t:     float = 999.0      # time since last ult activation
 var ult_active_t: float = 0.0     # remaining seconds of active ult
 var attacking: bool  = false      # only true during smash anim window
+# camera shake — decays each frame, applied as a small jitter on the rig
+var shake_t:   float = 0.0
+var shake_amp: float = 0.0
+# fire recoil — brief mesh kickback after a shot, decays to 0
+var recoil_t:  float = 0.0
 var attack_hits: Array = []
 var iframes:   float = 0.0
 var dead:      bool  = false
@@ -91,6 +96,19 @@ func _physics_process(delta: float) -> void:
 		ult_active_t -= delta
 	if iframes > 0.0:
 		iframes -= delta
+	# decay shake + recoil timers
+	if shake_t > 0.0:
+		shake_t -= delta
+		if shake_t <= 0.0:
+			shake_amp = 0.0
+			rig.position = Vector3(0, 2.0, 0)
+		else:
+			var k: float = shake_t / 0.28
+			var jx: float = (randf() * 2.0 - 1.0) * shake_amp * k
+			var jy: float = (randf() * 2.0 - 1.0) * shake_amp * k
+			rig.position = Vector3(jx, 2.0 + jy, 0)
+	if recoil_t > 0.0:
+		recoil_t -= delta
 	var input := Input.get_vector("move_left", "move_right",
 								  "move_forward", "move_back")
 	var basis_y := Basis(Vector3.UP, yaw)
@@ -114,6 +132,11 @@ func _physics_process(delta: float) -> void:
 	# along +Z behind the player, so add PI to flip Dread around to
 	# face away from the camera — into the reticle, not at us.
 	mesh.rotation.y = lerp_angle(mesh.rotation.y, yaw + PI, 16.0 * delta)
+	# fire recoil: bob the mesh back a touch so each shot has visible
+	# weight. Eases back to rest.
+	var rec_k: float = clamp(recoil_t / 0.10, 0.0, 1.0)
+	var dread_fwd_now: Vector3 = mesh.basis * Vector3(0, 0, 1)
+	mesh.position = -dread_fwd_now * (0.35 * rec_k)
 	move_and_slide()
 	# smash hit window — partway through the swing
 	if attacking and smash_t >= 0.10 and smash_t < 0.22:
@@ -187,6 +210,11 @@ func _fire_gun() -> void:
 		_spawn_spark(end_point)
 	_spawn_tracer(muzzle, end_point, 0.06)
 	_spawn_flash(muzzle, 0.05)
+	# kick the recoil timer — physics_process bobs the mesh back briefly
+	recoil_t = 0.10
+	# tiny screen shake so the gun has weight
+	shake_t = max(shake_t, 0.08)
+	shake_amp = max(shake_amp, 0.05)
 
 # ── R: call in a Ringworker ally that fights for ~15s.
 func _summon_ally() -> void:
@@ -301,6 +329,11 @@ func take_damage(amt: int) -> void:
 		return
 	hp -= amt
 	iframes = iframes_dur
+	# screen flash + camera shake so the hit lands visibly
+	if hud and hud.has_method("pulse_damage_flash"):
+		hud.pulse_damage_flash()
+	shake_t = 0.28
+	shake_amp = 0.18
 	if hp <= 0:
 		hp = 0
 		dead = true

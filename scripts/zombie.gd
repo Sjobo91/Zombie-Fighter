@@ -144,6 +144,7 @@ func _physics_process(delta: float) -> void:
 			atk_t = atk_cd
 			if target.has_method("take_damage"):
 				target.take_damage(damage)
+			_spawn_strike_arc()
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 	move_and_slide()
@@ -155,11 +156,46 @@ func _physics_process(delta: float) -> void:
 	var amp_bob: float = 0.06 if moving else 0.015
 	mesh_root.position.y = mesh_base_y + abs(sin(march_t)) * amp_bob
 
+# Spawn a red wedge in front of the enemy at the moment of impact, so
+# the player has visible feedback for what just dropped their HP.
+func _spawn_strike_arc() -> void:
+	var mi := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = atk_range * 0.55
+	sm.height = atk_range * 1.1
+	mi.mesh = sm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.18, 0.10, 0.55)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.22, 0.10, 1)
+	mat.emission_energy_multiplier = 2.5
+	mi.material_override = mat
+	get_tree().current_scene.add_child(mi)
+	# place in front of the enemy at strike range
+	var fwd: Vector3 = -global_transform.basis.z
+	mi.global_position = global_position + Vector3.UP * 1.1 \
+		+ fwd * (atk_range * 0.5)
+	get_tree().create_timer(0.18).timeout.connect(func ():
+		if is_instance_valid(mi):
+			mi.queue_free())
+
 func take_damage(amt: int, _from: Vector3 = Vector3.ZERO) -> void:
 	if dying:
 		return
 	hp -= amt
-	flash_t = 0.12
+	flash_t = 0.22
+	# Knockback — push the enemy a bit away from the hit source so the
+	# impact reads visibly. Bosses resist most of it.
+	if _from != Vector3.ZERO:
+		var away: Vector3 = global_position - _from
+		away.y = 0.0
+		if away.length() > 0.001:
+			away = away.normalized()
+			var force: float = 6.0 if not is_boss else 1.5
+			velocity.x += away.x * force
+			velocity.z += away.z * force
 	if is_boss:
 		var hud := get_node_or_null("/root/Main/HUD")
 		if hud and hud.has_method("set_boss_hp"):

@@ -13,8 +13,10 @@ extends CanvasLayer
 @onready var boss_root:  Control   = $Root/BossBar
 @onready var boss_fill:  ColorRect = $Root/BossBar/Fill
 @onready var boss_label: Label     = $Root/BossBar/Label
+@onready var dmg_flash:  ColorRect = $Root/DamageFlash
 
 var _banner_t: float = 0.0
+var _dmg_flash_t: float = 0.0
 
 func _ready() -> void:
 	# The HUD is a heads-up display, never interactive. Force every
@@ -39,6 +41,14 @@ func _process(delta: float) -> void:
 		_banner_t -= delta
 		if _banner_t <= 0.0:
 			banner.visible = false
+	if _dmg_flash_t > 0.0:
+		_dmg_flash_t -= delta
+		var k: float = max(0.0, _dmg_flash_t / 0.32)
+		dmg_flash.color = Color(0.85, 0.10, 0.05, 0.55 * k)
+
+func pulse_damage_flash() -> void:
+	_dmg_flash_t = 0.32
+	dmg_flash.color = Color(0.85, 0.10, 0.05, 0.55)
 
 func set_hp(hp: int, max_hp: int) -> void:
 	var k: float = clamp(float(hp) / float(max_hp), 0.0, 1.0)
