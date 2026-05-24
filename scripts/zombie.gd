@@ -254,12 +254,14 @@ func _update_proc_anim(delta: float, is_moving: bool) -> void:
 	# Skeleton bones (if found)
 	if _skel == null:
 		return
-	# Big arm + leg swings when running so the motion really reads.
-	var swing: float = sin(_walk_phase) * (0.85 if is_moving else 0.05)
-	var leg_swing: float = -sin(_walk_phase) * (1.10 if is_moving else 0.0)
-	# Right arm extends on strike; left arm always rests / swings.
-	_drive_arm_z(_b_l_arm, 0.0,         swing, -1.40)
-	_drive_arm_z(_b_r_arm, punch_anim_t, -swing,  1.40)
+	# Modest arm swing (any bigger and the hands flip past their rest
+	# orientation and look "backwards"). Legs swing big = running motion.
+	var swing: float = sin(_walk_phase) * (0.25 if is_moving else 0.04)
+	var leg_swing: float = -sin(_walk_phase) * (1.05 if is_moving else 0.0)
+	# Mild swing only — keep the arm-down "rest Z" close to the rig's
+	# natural rest pose to avoid hands rotating to weird angles.
+	_drive_arm_z(_b_l_arm, 0.0,           swing, -0.55)
+	_drive_arm_z(_b_r_arm, punch_anim_t, -swing,   0.55)
 	if _b_l_up_leg != -1:
 		_skel.set_bone_pose_rotation(_b_l_up_leg,
 			Quaternion.from_euler(Vector3(leg_swing, 0, 0)))
