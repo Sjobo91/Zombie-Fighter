@@ -31,11 +31,15 @@ var boss_name: String = ""
 # stiffly with a tiny vertical bob)
 var march_t: float = 0.0
 var mesh_base_y: float = 0.0
-# procedural animator (added in _ready, drives bone overrides if model
-# has a Mixamo skeleton; otherwise just bobs the mesh)
-var anim: Node = null
-# punch anim timer (mirrors zombie's strike) — drives the right-arm
-# extension visual when the zombie hits.
+# Procedural animation state (inlined — same pattern as player.gd)
+var _walk_phase:    float = 0.0
+var _mesh_base_pos: Vector3 = Vector3.ZERO
+var _skel: Skeleton3D = null
+var _b_l_arm:    int = -1
+var _b_r_arm:    int = -1
+var _b_l_up_leg: int = -1
+var _b_r_up_leg: int = -1
+# punch anim timer — drives the right-arm extension visual on strike
 var punch_anim_t: float = 0.0
 
 func _ready() -> void:
@@ -45,13 +49,32 @@ func _ready() -> void:
 	target = get_tree().get_first_node_in_group("player") as Node3D
 	mesh_base_y = mesh_root.position.y
 	march_t = randf() * TAU
-	# Procedural animator — bone overrides on Mixamo skeleton + mesh bob.
-	var anim_script: Script = load("res://scripts/procedural_anim.gd")
-	anim = Node.new()
-	anim.set_script(anim_script)
-	anim.mesh_root = mesh_root
-	anim.recoil_amp = 0.20
-	add_child(anim)
+	# Inline procedural animator — same pattern as Dread.
+	_mesh_base_pos = mesh_root.position
+	_skel = _find_skeleton(mesh_root)
+	if _skel:
+		_cache_bones()
+		print("[Zombie] skeleton found with L/R arm: ", _b_l_arm, "/", _b_r_arm)
+	else:
+		print("[Zombie] no Skeleton3D under mesh")
+
+func _find_skeleton(n: Node) -> Skeleton3D:
+	if n is Skeleton3D:
+		return n as Skeleton3D
+	for c in n.get_children():
+		var f := _find_skeleton(c)
+		if f != null:
+			return f
+	return null
+
+func _cache_bones() -> void:
+	if _skel == null:
+		return
+	for prefix in ["mixamorig_", "mixamorig:", "mixamorig1_", "mixamorig2_", ""]:
+		if _b_l_arm == -1:    _b_l_arm    = _skel.find_bone(prefix + "LeftArm")
+		if _b_r_arm == -1:    _b_r_arm    = _skel.find_bone(prefix + "RightArm")
+		if _b_l_up_leg == -1: _b_l_up_leg = _skel.find_bone(prefix + "LeftUpLeg")
+		if _b_r_up_leg == -1: _b_r_up_leg = _skel.find_bone(prefix + "RightUpLeg")
 
 func _collect_mesh_materials(node: Node) -> void:
 	if node is MeshInstance3D:
@@ -164,16 +187,52 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	if to.length() > 0.0001:
 		look_at(target.global_position, Vector3.UP, false)
-	# decay punch animation timer
+	# Decay punch anim timer
 	if punch_anim_t > 0.0:
 		punch_anim_t = max(0.0, punch_anim_t - delta / 0.30)
-	# drive the procedural animator (whole-mesh bob + skeleton arms)
-	if anim:
-		anim.moving    = dist > atk_range
-		anim.sprint    = false
-		anim.in_air    = not is_on_floor()
-		anim.r_punch_t = punch_anim_t
-		anim.recoil_t  = clamp(flash_t / 0.22, 0.0, 1.0)
+	# Procedural anim — mesh bob/sway + skeleton arms (inline)
+	_update_proc_anim(delta, dist > atk_range)
+
+# Procedural animation (inline) — bob/sway/recoil + Mixamo bones.
+func _update_proc_anim(delta: float, is_moving: bool) -> void:
+	var rate: float = (5.5 if is_moving else 1.2)
+	_walk_phase += delta * rate
+	var bob_amp: float = 0.07 if is_moving else 0.015
+	var sway_amp: float = 0.03 if is_moving else 0.01
+	var bob: float  = abs(sin(_walk_phase)) * bob_amp
+	var sway: float = sin(_walk_phase * 0.5) * sway_amp
+	# Recoil from being shot — flash_t pulses 0.22→0 each hit.
+	var rec_k: float = clamp(flash_t / 0.22, 0.0, 1.0)
+	var fwd: Vector3 = mesh_root.basis * Vector3(0, 0, 1)
+	var recoil_off: Vector3 = -fwd * (0.20 * rec_k)
+	mesh_root.position = _mesh_base_pos \
+		+ Vector3(sway, bob, 0) + recoil_off
+	# Skeleton bones (if found)
+	if _skel == null:
+		return
+	var swing: float = sin(_walk_phase) * (0.40 if is_moving else 0.05)
+	var leg_swing: float = -sin(_walk_phase) * (0.50 if is_moving else 0.0)
+	# Right arm extends on strike; left arm always rests / swings.
+	_drive_arm_z(_b_l_arm, 0.0,         swing, -1.40)
+	_drive_arm_z(_b_r_arm, punch_anim_t, -swing,  1.40)
+	if _b_l_up_leg != -1:
+		_skel.set_bone_pose_rotation(_b_l_up_leg,
+			Quaternion.from_euler(Vector3(leg_swing, 0, 0)))
+	if _b_r_up_leg != -1:
+		_skel.set_bone_pose_rotation(_b_r_up_leg,
+			Quaternion.from_euler(Vector3(-leg_swing, 0, 0)))
+
+func _drive_arm_z(bone: int, punch_t: float, walk_swing: float,
+		arm_z_rest: float) -> void:
+	if bone == -1:
+		return
+	if punch_t > 0.0:
+		var p: float = sin(punch_t * PI) * (PI * 0.60)
+		_skel.set_bone_pose_rotation(bone,
+			Quaternion.from_euler(Vector3(-p, 0, arm_z_rest * 0.55)))
+	else:
+		_skel.set_bone_pose_rotation(bone,
+			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
 
 # Spawn a red wedge in front of the enemy at the moment of impact, so
 # the player has visible feedback for what just dropped their HP.

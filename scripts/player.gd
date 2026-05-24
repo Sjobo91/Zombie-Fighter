@@ -37,7 +37,16 @@ extends CharacterBody3D
 @onready var camera: Camera3D  = $CameraRig/SpringArm3D/Camera3D
 @onready var mesh:   Node3D    = $Mesh
 @onready var hud:    CanvasLayer    = get_node_or_null("/root/Main/HUD")
-var anim: Node = null
+
+# Procedural animation state
+var _walk_phase:    float = 0.0
+var _mesh_base_pos: Vector3 = Vector3.ZERO
+var _skel: Skeleton3D = null
+var _b_l_arm:    int = -1
+var _b_r_arm:    int = -1
+var _b_l_up_leg: int = -1
+var _b_r_up_leg: int = -1
+var _b_spine:    int = -1
 
 var hp:        int   = 140
 var yaw:       float = 0.0
@@ -79,15 +88,35 @@ func _ready() -> void:
 	# emission cracks. Runs after the model is fully loaded so every
 	# MeshInstance3D in the .glb gets repainted.
 	_tint_dread(mesh)
-	# Attach procedural animation. It handles mesh bob/sway/recoil
-	# plus Skeleton3D arm overrides when a Mixamo skeleton is found.
-	var anim_script: Script = load("res://scripts/procedural_anim.gd")
-	anim = Node.new()
-	anim.set_script(anim_script)
-	anim.mesh_root = mesh
-	anim.face_offset = PI
-	anim.recoil_amp = 0.35
-	add_child(anim)
+	# Cache mesh base pose + find skeleton bones for procedural anim.
+	_mesh_base_pos = mesh.position
+	_skel = _find_skeleton(mesh)
+	if _skel:
+		_cache_bones()
+		print("[Dread] found Skeleton3D with bones: ",
+			"LArm=", _b_l_arm, " RArm=", _b_r_arm,
+			" LLeg=", _b_l_up_leg, " RLeg=", _b_r_up_leg)
+	else:
+		print("[Dread] no Skeleton3D found under Mesh; mesh-bob only")
+
+func _find_skeleton(n: Node) -> Skeleton3D:
+	if n is Skeleton3D:
+		return n as Skeleton3D
+	for c in n.get_children():
+		var f := _find_skeleton(c)
+		if f != null:
+			return f
+	return null
+
+func _cache_bones() -> void:
+	if _skel == null:
+		return
+	for prefix in ["mixamorig_", "mixamorig:", "mixamorig1_", "mixamorig2_", ""]:
+		if _b_l_arm == -1:    _b_l_arm    = _skel.find_bone(prefix + "LeftArm")
+		if _b_r_arm == -1:    _b_r_arm    = _skel.find_bone(prefix + "RightArm")
+		if _b_l_up_leg == -1: _b_l_up_leg = _skel.find_bone(prefix + "LeftUpLeg")
+		if _b_r_up_leg == -1: _b_r_up_leg = _skel.find_bone(prefix + "RightUpLeg")
+		if _b_spine == -1:    _b_spine    = _skel.find_bone(prefix + "Spine")
 
 func _tint_dread(node: Node) -> void:
 	if node is MeshInstance3D:
@@ -181,15 +210,11 @@ func _physics_process(delta: float) -> void:
 	# face away from the camera — into the reticle, not at us.
 	mesh.rotation.y = lerp_angle(mesh.rotation.y, yaw + PI, 16.0 * delta)
 	move_and_slide()
-	# Feed the procedural animator. It owns mesh.position + bone poses.
-	if anim:
-		anim.moving    = dir.length() > 0.0001
-		anim.sprint    = Input.is_action_pressed("sprint")
-		anim.in_air    = not is_on_floor()
-		anim.l_punch_t = l_punch_t
-		anim.r_punch_t = r_punch_t
-		anim.smash_t   = smash_anim_t
-		anim.recoil_t  = clamp(recoil_t / 0.20, 0.0, 1.0)
+	# Procedural animation — mesh bob/sway + Skeleton3D bone overrides
+	var is_moving: bool = dir.length() > 0.0001
+	var is_sprint: bool = Input.is_action_pressed("sprint")
+	var is_in_air: bool = not is_on_floor()
+	_update_proc_anim(delta, is_moving, is_sprint, is_in_air)
 	# HUD push
 	if hud and hud.has_method("set_hp"):
 		hud.set_hp(hp, max_hp)
@@ -346,6 +371,71 @@ func _spawn_punch_burst(pos: Vector3, radius: float, ttl: float) -> void:
 	get_tree().create_timer(ttl).timeout.connect(func ():
 		if is_instance_valid(mi):
 			mi.queue_free())
+
+# ── Procedural animation — mesh bob/sway/lean/recoil (always), plus
+# Skeleton3D arm/leg overrides when the model is Mixamo-rigged.
+func _update_proc_anim(delta: float, is_moving: bool,
+		is_sprint: bool, is_in_air: bool) -> void:
+	var rate: float = 1.6
+	if is_moving:
+		rate = 9.5 if is_sprint else 6.8
+	_walk_phase += delta * rate
+	# Mesh-level: vertical bob + horizontal sway + recoil offset
+	var bob_amp:  float = 0.10 if is_moving else 0.02
+	var sway_amp: float = 0.05 if is_moving else 0.015
+	var bob:  float = abs(sin(_walk_phase)) * bob_amp
+	var sway: float = sin(_walk_phase * 0.5) * sway_amp
+	var rec_k: float = clamp(recoil_t / 0.20, 0.0, 1.0)
+	var fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
+	var recoil_off: Vector3 = -fwd * (0.35 * rec_k)
+	mesh.position = _mesh_base_pos + Vector3(sway, bob, 0) + recoil_off
+	# Forward lean
+	var target_pitch: float = 0.0
+	if is_in_air:
+		target_pitch = -0.10
+	elif is_moving:
+		target_pitch = -0.20 if is_sprint else -0.10
+	mesh.rotation.x = lerp(mesh.rotation.x, target_pitch, 8.0 * delta)
+	# Skeleton overrides (only if bones found)
+	if _skel == null:
+		return
+	var swing: float = sin(_walk_phase) * (0.45 if is_moving else 0.06)
+	var leg_swing: float = -sin(_walk_phase) * (0.55 if is_moving else 0.0)
+	# Smash overrides both arms (raise + slam)
+	if smash_anim_t > 0.0:
+		var inv: float = clamp(1.0 - smash_anim_t, 0.0, 1.0)
+		var arm_z: float
+		if inv < 0.35:
+			arm_z = lerp(-1.40, -3.0, inv / 0.35)
+		else:
+			arm_z = lerp(-3.0, -0.35, (inv - 0.35) / 0.65)
+		if _b_l_arm != -1:
+			_skel.set_bone_pose_rotation(_b_l_arm,
+				Quaternion.from_euler(Vector3(0, 0, arm_z)))
+		if _b_r_arm != -1:
+			_skel.set_bone_pose_rotation(_b_r_arm,
+				Quaternion.from_euler(Vector3(0, 0, -arm_z)))
+	else:
+		_drive_arm(_b_l_arm, l_punch_t,  swing, -1.40)
+		_drive_arm(_b_r_arm, r_punch_t, -swing,  1.40)
+	if _b_l_up_leg != -1:
+		_skel.set_bone_pose_rotation(_b_l_up_leg,
+			Quaternion.from_euler(Vector3(leg_swing, 0, 0)))
+	if _b_r_up_leg != -1:
+		_skel.set_bone_pose_rotation(_b_r_up_leg,
+			Quaternion.from_euler(Vector3(-leg_swing, 0, 0)))
+
+func _drive_arm(bone: int, punch_t: float, walk_swing: float,
+		arm_z_rest: float) -> void:
+	if bone == -1:
+		return
+	if punch_t > 0.0:
+		var p: float = sin(punch_t * PI) * (PI * 0.65)
+		_skel.set_bone_pose_rotation(bone,
+			Quaternion.from_euler(Vector3(-p, 0, arm_z_rest * 0.55)))
+	else:
+		_skel.set_bone_pose_rotation(bone,
+			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
 
 func take_damage(amt: int) -> void:
 	if dead or iframes > 0.0:
