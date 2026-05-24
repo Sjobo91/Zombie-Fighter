@@ -238,11 +238,12 @@ func _physics_process(delta: float) -> void:
 
 # Procedural animation (inline) — bob/sway/recoil + Mixamo bones.
 func _update_proc_anim(delta: float, is_moving: bool) -> void:
-	# Faster cycle + bigger bob so they read as RUNNING not shuffling.
+	# Faster cycle + subtle bob (any bigger and they look like they're
+	# pogo-sticking instead of running).
 	var rate: float = (10.0 if is_moving else 1.5)
 	_walk_phase += delta * rate
-	var bob_amp: float = 0.16 if is_moving else 0.02
-	var sway_amp: float = 0.08 if is_moving else 0.015
+	var bob_amp: float = 0.04 if is_moving else 0.015
+	var sway_amp: float = 0.02 if is_moving else 0.01
 	var bob: float  = abs(sin(_walk_phase)) * bob_amp
 	var sway: float = sin(_walk_phase * 0.5) * sway_amp
 	# Recoil from being shot — flash_t pulses 0.22→0 each hit.
@@ -254,14 +255,11 @@ func _update_proc_anim(delta: float, is_moving: bool) -> void:
 	# Skeleton bones (if found)
 	if _skel == null:
 		return
-	# Modest arm swing (any bigger and the hands flip past their rest
-	# orientation and look "backwards"). Legs swing big = running motion.
-	var swing: float = sin(_walk_phase) * (0.25 if is_moving else 0.04)
+	# Legs do the running (big swing). Arms are NOT touched anymore —
+	# their rest pose stays put, so the hands won't flip backwards.
 	var leg_swing: float = -sin(_walk_phase) * (1.05 if is_moving else 0.0)
-	# Mild swing only — keep the arm-down "rest Z" close to the rig's
-	# natural rest pose to avoid hands rotating to weird angles.
-	_drive_arm_z(_b_l_arm, 0.0,           swing, -0.55)
-	_drive_arm_z(_b_r_arm, punch_anim_t, -swing,   0.55)
+	# Don't touch the arm bones — let them sit at the rig's rest pose
+	# so the hand orientation isn't fought.
 	if _b_l_up_leg != -1:
 		_skel.set_bone_pose_rotation(_b_l_up_leg,
 			Quaternion.from_euler(Vector3(leg_swing, 0, 0)))
