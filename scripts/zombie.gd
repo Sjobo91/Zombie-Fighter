@@ -52,11 +52,21 @@ func _ready() -> void:
 	# Inline procedural animator — same pattern as Dread.
 	_mesh_base_pos = mesh_root.position
 	_skel = _find_skeleton(mesh_root)
-	if _skel:
-		_cache_bones()
-		print("[Zombie] skeleton found with L/R arm: ", _b_l_arm, "/", _b_r_arm)
-	else:
-		print("[Zombie] no Skeleton3D under mesh")
+	if _skel and _b_l_arm == -1 and not get_meta("dumped_bones", false):
+		# Print full bone roster ONCE per session so we can fix the lookup
+		set_meta("dumped_bones", true)
+		var n: int = _skel.get_bone_count()
+		print("[Zombie] Skeleton has ", n, " bones:")
+		for i in range(min(n, 60)):
+			print("  ", i, ": ", _skel.get_bone_name(i))
+	if _skel == null:
+		print("[Zombie] no Skeleton3D under mesh — tree:")
+		_dump_tree(mesh_root, "  ")
+
+func _dump_tree(n: Node, indent: String) -> void:
+	print(indent, n.name, " (", n.get_class(), ")")
+	for c in n.get_children():
+		_dump_tree(c, indent + "  ")
 
 func _find_skeleton(n: Node) -> Skeleton3D:
 	if n is Skeleton3D:

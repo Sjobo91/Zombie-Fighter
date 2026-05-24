@@ -47,6 +47,7 @@ var _b_r_arm:    int = -1
 var _b_l_up_leg: int = -1
 var _b_r_up_leg: int = -1
 var _b_spine:    int = -1
+var _debug_t: float = 0.0
 
 var hp:        int   = 140
 var yaw:       float = 0.0
@@ -93,11 +94,25 @@ func _ready() -> void:
 	_skel = _find_skeleton(mesh)
 	if _skel:
 		_cache_bones()
-		print("[Dread] found Skeleton3D with bones: ",
-			"LArm=", _b_l_arm, " RArm=", _b_r_arm,
-			" LLeg=", _b_l_up_leg, " RLeg=", _b_r_up_leg)
+		_dump_bone_names("Dread")
 	else:
 		print("[Dread] no Skeleton3D found under Mesh; mesh-bob only")
+		# Dump scene tree so we can see what's actually inside the glb
+		print("[Dread] mesh tree:")
+		_dump_tree(mesh, "  ")
+
+func _dump_tree(n: Node, indent: String) -> void:
+	print(indent, n.name, " (", n.get_class(), ")")
+	for c in n.get_children():
+		_dump_tree(c, indent + "  ")
+
+func _dump_bone_names(label: String) -> void:
+	if _skel == null:
+		return
+	var n: int = _skel.get_bone_count()
+	print("[", label, "] Skeleton has ", n, " bones:")
+	for i in range(min(n, 60)):
+		print("  ", i, ": ", _skel.get_bone_name(i))
 
 func _find_skeleton(n: Node) -> Skeleton3D:
 	if n is Skeleton3D:
@@ -381,14 +396,22 @@ func _update_proc_anim(delta: float, is_moving: bool,
 		rate = 9.5 if is_sprint else 6.8
 	_walk_phase += delta * rate
 	# Mesh-level: vertical bob + horizontal sway + recoil offset
-	var bob_amp:  float = 0.10 if is_moving else 0.02
-	var sway_amp: float = 0.05 if is_moving else 0.015
+	# *** EXAGGERATED for visibility-debug — dial back once visible ***
+	var bob_amp:  float = 0.60 if is_moving else 0.20
+	var sway_amp: float = 0.30 if is_moving else 0.10
 	var bob:  float = abs(sin(_walk_phase)) * bob_amp
 	var sway: float = sin(_walk_phase * 0.5) * sway_amp
 	var rec_k: float = clamp(recoil_t / 0.20, 0.0, 1.0)
 	var fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
 	var recoil_off: Vector3 = -fwd * (0.35 * rec_k)
 	mesh.position = _mesh_base_pos + Vector3(sway, bob, 0) + recoil_off
+	# Debug ping every ~1s so we can verify _update_proc_anim is running
+	_debug_t += delta
+	if _debug_t > 1.0:
+		_debug_t = 0.0
+		print("[Dread anim] mesh.pos=", mesh.position,
+			" walk_phase=", _walk_phase,
+			" moving=", is_moving, " base=", _mesh_base_pos)
 	# Forward lean
 	var target_pitch: float = 0.0
 	if is_in_air:
