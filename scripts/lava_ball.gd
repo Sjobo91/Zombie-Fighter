@@ -1,4 +1,4 @@
-# Lava ball — Dread spits these from his mouth. Travels in a slight
+# Lava ball — Reaper spits these from his mouth. Travels in a slight
 # arc, detonates on first zombie it touches (or after lifetime), dealing
 # direct damage to the impact target + splash to nearby zombies.
 
@@ -40,7 +40,7 @@ func _physics_process(delta: float) -> void:
 func _on_body_entered(body: Node) -> void:
 	if detonated:
 		return
-	# Friendly fire guard — never explode on Dread or the Ringworker ally.
+	# Friendly fire guard — never explode on Reaper or the Ringworker ally.
 	if body.is_in_group("player") or body.is_in_group("ally"):
 		return
 	if body.is_in_group("zombie") and body.has_method("take_damage"):

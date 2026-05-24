@@ -135,7 +135,7 @@ func clear_boss_hp() -> void:
 	boss_root.visible = false
 
 func show_death(wave: int = 0, earned: int = 0, banked: int = 0) -> void:
-	death.text = "DREAD FELL"
+	death.text = "REAPER FELL"
 	death.modulate = Color(1.0, 1.0, 1.0, 1)
 	death.visible = true
 	death_stat.text = "WAVE %d REACHED\n⚙ %d EARNED   →   ⚙ %d BANKED\nreturning to the workshop…" \

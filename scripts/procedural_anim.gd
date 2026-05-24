@@ -14,7 +14,7 @@ extends Node
 
 # ── External wiring ──
 var mesh_root:   Node3D
-var face_offset: float = 0.0  # PI for Dread (model's +Z faces forward)
+var face_offset: float = 0.0  # PI for Reaper (model's +Z faces forward)
 
 # ── State driven by the parent each frame ──
 var moving:    bool  = false
@@ -137,7 +137,7 @@ func _apply_skel_pose() -> void:
 		_drive_arm(_b_l_arm,  l_punch_t, swing,  -1.40)
 		_drive_arm(_b_r_arm,  r_punch_t, -swing,  1.40)
 
-	# Legs swing whether punching or not — Dread keeps walking.
+	# Legs swing whether punching or not — Reaper keeps walking.
 	if _b_l_up_leg != -1:
 		_skel.set_bone_pose_rotation(_b_l_up_leg,
 			Quaternion.from_euler(Vector3(leg_swing, 0, 0)))

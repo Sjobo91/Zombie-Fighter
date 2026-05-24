@@ -49,7 +49,7 @@ func _ready() -> void:
 	target = get_tree().get_first_node_in_group("player") as Node3D
 	mesh_base_y = mesh_root.position.y
 	march_t = randf() * TAU
-	# Inline procedural animator — same pattern as Dread.
+	# Inline procedural animator — same pattern as Reaper.
 	_mesh_base_pos = mesh_root.position
 	_skel = _find_skeleton(mesh_root)
 	if _skel:

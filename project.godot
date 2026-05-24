@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="DREAD: Rogue Protocol"
-config/description="A tiny rebellious robot fighting his way through a giant workshop overrun by his rogue siblings."
+config/name="REAPER: Rogue Protocol"
+config/description="REAPER — a rebel workshop robot — and his siblings fight back against the zombie horde overrunning the workshop."
 run/main_scene="res://scenes/title.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 # cap framerate to stop GPU coil-whine on uncapped frame rates

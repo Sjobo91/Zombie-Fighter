@@ -1,4 +1,4 @@
-# Ringworker ally — friendly construct Dread summons with R.
+# Ringworker ally — friendly construct Reaper summons with R.
 #
 # Picks the nearest enemy in the "zombie" group, runs at it, swings on
 # contact. Has a short lifetime (~15s) and limited HP, then fades.

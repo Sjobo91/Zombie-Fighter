@@ -248,7 +248,7 @@ func _random_pos() -> Vector3:
 		return p
 	return Vector3.ZERO
 
-# ── Static colliders so Dread doesn't walk through props
+# ── Static colliders so Reaper doesn't walk through props
 func _add_static_collider_cylinder(parent: Node, r: float, h: float) -> void:
 	var body := StaticBody3D.new()
 	body.collision_layer = 1

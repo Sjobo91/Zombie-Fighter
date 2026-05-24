@@ -1,4 +1,4 @@
-# Title screen — DREAD: Rogue Protocol.
+# Title screen — REAPER: Rogue Protocol.
 # Three options: PLAY (start a run), MECH REPAIR SHOP (spend Mechparts),
 # QUIT. Bank balance is shown top-right.
 extends Control

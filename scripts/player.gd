@@ -1,9 +1,9 @@
-# Player — Dread. Half rebellious workshop robot, half lava monster.
+# Player — REAPER. A rebel workshop robot fighting the zombie horde.
 # Plays like the Hulk: fast, jumpy, brutal.
-#   LMB  — single-hand alternating molten punch (rapid)
-#   RMB  — double-fisted ground smash with lava shockwave ring
-#   Q    — MELTDOWN ult (3× swing rate + 1.6× dmg for 5s)
-#   R    — summon Ringworker ally
+#   LMB   — single-hand alternating punch (rapid)
+#   RMB   — double-fisted ground smash with shockwave ring
+#   Q     — MELTDOWN ult (3× swing rate + 1.6× dmg for 5s)
+#   R     — summon Ringworker ally
 #   Space — jump (plus 2 air-jumps for verticality)
 extends CharacterBody3D
 
@@ -24,7 +24,7 @@ extends CharacterBody3D
 @export var attack_cd:    float = 0.22    # rapid
 # RMB — double-fisted SMASH (slow, big AoE, lava ring)
 @export var smash_dmg:    int   = 70
-@export var smash_range:  float = 5.2     # radius around Dread
+@export var smash_range:  float = 5.2     # radius around Reaper
 @export var smash_cd:     float = 0.9
 @export var summon_cd:    float = 25.0
 @export var ally_scene:   PackedScene = preload("res://scenes/ally.tscn")
@@ -97,10 +97,10 @@ func _ready() -> void:
 		bank.apply_to_player(self)
 	hp = max_hp
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	# Tint Dread lava-themed — dark molten rock with bright orange
-	# emission cracks. Runs after the model is fully loaded so every
-	# MeshInstance3D in the .glb gets repainted.
-	_tint_dread(mesh)
+	# Repaint Reaper's body — sober industrial gunmetal so he reads
+	# like the other workshop robots (the model ships with bright
+	# cartoonish materials we don't want).
+	_tint_player(mesh)
 	# Cache mesh base pose + find skeleton bones for procedural anim.
 	_mesh_base_pos = mesh.position
 	_skel = _find_skeleton(mesh)
@@ -110,7 +110,7 @@ func _ready() -> void:
 	_anim_player = _find_anim_player(mesh)
 	if _anim_player:
 		_anim_list = _anim_player.get_animation_list()
-		print("[Dread] AnimationPlayer found with ", _anim_list.size(),
+		print("[Reaper] AnimationPlayer found with ", _anim_list.size(),
 			" clips:")
 		for n in _anim_list:
 			print("  - ", n)
@@ -119,7 +119,7 @@ func _ready() -> void:
 			_anim_player.play(_clip_idle)
 			_current_anim = _clip_idle
 	else:
-		print("[Dread] no AnimationPlayer — falling back to procedural anim")
+		print("[Reaper] no AnimationPlayer — falling back to procedural anim")
 
 func _find_anim_player(n: Node) -> AnimationPlayer:
 	if n is AnimationPlayer:
@@ -148,7 +148,7 @@ func _pick_clip_aliases() -> void:
 		_clip_punch = _clip_idle
 	if _clip_smash == "":
 		_clip_smash = _clip_punch
-	print("[Dread] clip map: idle=", _clip_idle,
+	print("[Reaper] clip map: idle=", _clip_idle,
 		" walk=", _clip_walk,
 		" punch=", _clip_punch,
 		" smash=", _clip_smash)
@@ -198,7 +198,7 @@ func _cache_bones() -> void:
 		if _b_r_up_leg == -1: _b_r_up_leg = _skel.find_bone(prefix + "RightUpLeg")
 		if _b_spine == -1:    _b_spine    = _skel.find_bone(prefix + "Spine")
 
-func _tint_dread(node: Node) -> void:
+func _tint_player(node: Node) -> void:
 	# Sober industrial-robot palette — cool gunmetal, brushed,
 	# no emission. Reads like the other workshop bots, not cartoonish.
 	if node is MeshInstance3D:
@@ -213,7 +213,7 @@ func _tint_dread(node: Node) -> void:
 			dup.emission_enabled = false
 			mi.set_surface_override_material(0, dup)
 	for child in node.get_children():
-		_tint_dread(child)
+		_tint_player(child)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and \
@@ -284,7 +284,7 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_just_pressed("jump") and air_jumps_left > 0:
 			velocity.y = jump_speed
 			air_jumps_left -= 1
-	# Dread faces the camera direction (third-person aim).
+	# Reaper faces the camera direction (third-person aim).
 	# Per-arm punch TWIST whips body left/right with each LMB.
 	# Smash-pitch tips body forward on RMB.
 	var twist: float = (l_punch_t * 1.0) - (r_punch_t * 1.0)
@@ -388,7 +388,7 @@ func _smash() -> void:
 			z.take_damage(dmg, global_position)
 		_spawn_punch_burst((z as Node3D).global_position
 			+ Vector3.UP * 1.0, 0.5, 0.26)
-	# Lava shockwave ring around Dread
+	# Lava shockwave ring around Reaper
 	_spawn_lava_ring(global_position, smash_range)
 	# BIG recoil + camera shake
 	recoil_t = 0.25
@@ -405,7 +405,7 @@ func _summon_ally() -> void:
 	var inst: Node = ally_scene.instantiate()
 	if not (inst is Node3D):
 		return
-	# spawn slightly behind Dread so the model doesn't intersect with us
+	# spawn slightly behind Reaper so the model doesn't intersect with us
 	var back: Vector3 = (Basis(Vector3.UP, yaw) * Vector3(0, 0, 1.4))
 	(inst as Node3D).global_position = global_position + back
 	get_tree().current_scene.add_child(inst)
@@ -482,7 +482,7 @@ func _update_proc_anim(delta: float, is_moving: bool,
 	var rec_k: float = clamp(recoil_t / 0.20, 0.0, 1.0)
 	var fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
 	var recoil_off: Vector3 = -fwd * (0.55 * rec_k)
-	# Smash dip — when smashing, Dread drops down and forward.
+	# Smash dip — when smashing, Reaper drops down and forward.
 	var smash_drop: float = -0.4 * smash_anim_t
 	mesh.position = _mesh_base_pos + Vector3(sway, bob + smash_drop, 0) \
 		+ recoil_off
@@ -490,7 +490,7 @@ func _update_proc_anim(delta: float, is_moving: bool,
 	_debug_t += delta
 	if _debug_t > 1.0:
 		_debug_t = 0.0
-		print("[Dread anim] pos=", mesh.position,
+		print("[Reaper anim] pos=", mesh.position,
 			" walk=", snappedf(_walk_phase, 0.1),
 			" moving=", is_moving)
 	# Forward lean
