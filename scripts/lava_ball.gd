@@ -5,7 +5,9 @@
 extends Area3D
 
 @export var speed:         float = 28.0
-@export var gravity:       float = 7.0   # gentle arc
+# How fast the projectile falls each second (can't be named `gravity`
+# because Area3D already has its own `gravity` property).
+@export var fall_rate:     float = 7.0
 @export var direct_dmg:    int   = 60
 @export var splash_dmg:    int   = 28
 @export var splash_radius: float = 3.6
@@ -32,7 +34,7 @@ func _physics_process(delta: float) -> void:
 	if life_t > lifetime:
 		_detonate()
 		return
-	velocity.y -= gravity * delta
+	velocity.y -= fall_rate * delta
 	global_position += velocity * delta
 
 func _on_body_entered(body: Node) -> void:
