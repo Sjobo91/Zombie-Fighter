@@ -229,10 +229,15 @@ func _cache_bones() -> void:
 	if _b_r_arm == -1:    _b_r_arm    = _find_bone_contains(
 		["bicep_r", "arm_r", "armr_", "rightarm", "shoulder_r",
 		 "shoulderr", "upperarm_r", "upper_arm_r"])
-	if _b_l_elbow == -1:  _b_l_elbow  = _find_bone_contains(
-		["elbow_l", "forearm_l", "leftforearm"])
-	if _b_r_elbow == -1:  _b_r_elbow  = _find_bone_contains(
-		["elbow_r", "forearm_r", "rightforearm"])
+	# The actual elbow-bend rotation usually lives on the Forearm bone
+	# (it's parented to the Bicep, so its local rotation = elbow joint).
+	# Try forearm first, fall back to a separately-named Elbow bone.
+	if _b_l_elbow == -1: _b_l_elbow = _find_bone_contains(
+		["forearm_l", "leftforearm"])
+	if _b_r_elbow == -1: _b_r_elbow = _find_bone_contains(
+		["forearm_r", "rightforearm"])
+	if _b_l_elbow == -1: _b_l_elbow = _find_bone_contains(["elbow_l"])
+	if _b_r_elbow == -1: _b_r_elbow = _find_bone_contains(["elbow_r"])
 
 func _find_bone_prefix(prefix: String) -> int:
 	if _skel == null:
@@ -661,9 +666,9 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
 
-# Piston pump on the elbow — forearm RAISES UP during wind-up (sign
-# flipped from previous version), then snaps DOWN/forward on strike
-# while the body lunges forward.
+# Piston pump on the elbow joint (rotation lives on Forearm bone).
+# Wind-up folds the forearm in toward the bicep; strike snaps it back
+# to straight while the body lunges forward.
 func _drive_elbow(bone: int, punch_t: float) -> void:
 	if bone == -1:
 		return
@@ -671,13 +676,9 @@ func _drive_elbow(bone: int, punch_t: float) -> void:
 		var inv: float = 1.0 - punch_t
 		var bend: float = 0.0
 		if inv < 0.36:
-			# WIND-UP: forearm raises UP (negative bend = opposite of before)
-			bend = lerp(0.0, -PI * 0.75, inv / 0.36)
+			bend = lerp(0.0, PI * 0.85, inv / 0.36)
 		elif inv < 0.55:
-			# STRIKE: forearm snaps back to straight — fist goes
-			# forward (body has lunged + pitched forward by now)
-			bend = lerp(-PI * 0.75, 0.0, (inv - 0.36) / 0.19)
-		# Recover phase: stays at rest (bend = 0)
+			bend = lerp(PI * 0.85, 0.0, (inv - 0.36) / 0.19)
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(bend, 0, 0)))
 	else:
