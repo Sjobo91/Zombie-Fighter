@@ -297,9 +297,9 @@ func _physics_process(delta: float) -> void:
 	# Decay punch/smash animation timers (used by the procedural anim).
 	# Longer punch window so the wind-up + strike + recover phases read.
 	if l_punch_t > 0.0:
-		l_punch_t = max(0.0, l_punch_t - delta / 0.32)
+		l_punch_t = max(0.0, l_punch_t - delta / 0.55)
 	if r_punch_t > 0.0:
-		r_punch_t = max(0.0, r_punch_t - delta / 0.32)
+		r_punch_t = max(0.0, r_punch_t - delta / 0.55)
 	if smash_anim_t > 0.0:
 		smash_anim_t = max(0.0, smash_anim_t - delta / 0.45)
 	if ult_active_t > 0.0:
@@ -353,11 +353,11 @@ func _physics_process(delta: float) -> void:
 	if max_punch > 0.0:
 		var inv: float = 1.0 - max_punch
 		var pitch: float = 0.0
-		if inv < 0.30:
-			pitch = lerp(0.0, 0.35, inv / 0.30)            # cock back
+		if inv < 0.36:
+			pitch = lerp(0.0, 0.35, inv / 0.36)            # cock back
 		elif inv < 0.55:
-			pitch = lerp(0.35, -0.45, (inv - 0.30) / 0.25) # SLAM forward
-			punch_lunge = sin((inv - 0.30) / 0.25 * PI) * 0.85
+			pitch = lerp(0.35, -0.45, (inv - 0.36) / 0.19) # SLAM forward
+			punch_lunge = sin((inv - 0.36) / 0.19 * PI) * 0.85
 		else:
 			pitch = lerp(-0.45, 0.0, (inv - 0.55) / 0.45)
 		mesh.rotation.x = pitch
@@ -640,16 +640,16 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 		var swing_angle: float = 0.0
 		var arm_x:       float = 0.0
 		var arm_z:       float = arm_z_rest
-		if inv < 0.30:
+		if inv < 0.36:
 			# Wind-up: arm raises off the side AND swings to point
 			# straight forward (90° around world UP, mirrored per arm).
-			var k: float = inv / 0.30
+			var k: float = inv / 0.36
 			swing_angle = lerp(0.0, side_sign * PI * 0.5, k)
 			arm_x = lerp(0.0, 0.10, k)
 			arm_z = lerp(arm_z_rest, 0.0, k)
 		elif inv < 0.55:
 			# Strike: bicep stays forward, elbow extends in parallel.
-			var k: float = (inv - 0.30) / 0.25
+			var k: float = (inv - 0.36) / 0.19
 			swing_angle = side_sign * PI * 0.5
 			arm_x = lerp(0.10, -0.10, k)
 			arm_z = 0.0
@@ -677,12 +677,12 @@ func _drive_elbow(bone: int, punch_t: float) -> void:
 	if punch_t > 0.0:
 		var inv: float = 1.0 - punch_t
 		var bend: float = 0.0
-		if inv < 0.30:
+		if inv < 0.36:
 			# WIND-UP: bend the elbow so the forearm folds up
-			bend = lerp(0.0, PI * 0.65, inv / 0.30)
+			bend = lerp(0.0, PI * 0.65, inv / 0.36)
 		elif inv < 0.55:
 			# STRIKE: snap straight — elbow extends fast
-			bend = lerp(PI * 0.65, 0.0, (inv - 0.30) / 0.25)
+			bend = lerp(PI * 0.65, 0.0, (inv - 0.36) / 0.19)
 		# Recover phase: stays at rest (bend = 0)
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(bend, 0, 0)))
