@@ -19,9 +19,9 @@ shape = SubResource("cap_shape")
 [node name="Mesh" type="Node3D" parent="."]
 
 [node name="Model" parent="Mesh" instance=ExtResource("2")]
-; reap_the_whirlwind.glb is exported at HUGE scale. 0.0055 hits the
-; sweet spot for the 2.2 m collision capsule + 9 m camera frame.
-transform = Transform3D(0.0055, 0, 0, 0, 0.0055, 0, 0, 0, 0.0055, 0, 0, 0)
+; combat_steampunk_robot.glb is probably exported at normal humanoid
+; scale (~2 m tall) — back to scale 1.0. Dial from here.
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 
 [node name="CameraRig" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, 0)
