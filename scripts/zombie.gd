@@ -73,12 +73,40 @@ func _cache_bones() -> void:
 		if _b_r_arm == -1:    _b_r_arm    = _skel.find_bone(prefix + "RightArm")
 		if _b_l_up_leg == -1: _b_l_up_leg = _skel.find_bone(prefix + "LeftUpLeg")
 		if _b_r_up_leg == -1: _b_r_up_leg = _skel.find_bone(prefix + "RightUpLeg")
-	# Custom zombie rig: bones look like "Arm1_L_00", "Arm1_R_*", etc.
-	# The numeric suffix varies per import, so match by prefix.
+	# Custom rig: "Arm1_L_00", "Leg1_R_019", etc.
 	if _b_l_arm == -1:    _b_l_arm    = _find_bone_prefix("Arm1_L")
 	if _b_r_arm == -1:    _b_r_arm    = _find_bone_prefix("Arm1_R")
 	if _b_l_up_leg == -1: _b_l_up_leg = _find_bone_prefix("Leg1_L")
 	if _b_r_up_leg == -1: _b_r_up_leg = _find_bone_prefix("Leg1_R")
+	# Generic substring fallback (Thigh_L, UpperArm_L, etc.)
+	if _b_l_arm == -1:    _b_l_arm    = _find_bone_contains(
+		["bicep_l", "upperarm_l", "shoulder_l", "arm_l", "leftarm"])
+	if _b_r_arm == -1:    _b_r_arm    = _find_bone_contains(
+		["bicep_r", "upperarm_r", "shoulder_r", "arm_r", "rightarm"])
+	if _b_l_up_leg == -1: _b_l_up_leg = _find_bone_contains(
+		["thigh_l", "upleg_l", "upperleg_l", "leg_l"])
+	if _b_r_up_leg == -1: _b_r_up_leg = _find_bone_contains(
+		["thigh_r", "upleg_r", "upperleg_r", "leg_r"])
+	# Print every bone name once per session so we can fix the lookup
+	# if some zombie variant uses yet another convention.
+	if not get_meta("dumped_bones", false):
+		set_meta("dumped_bones", true)
+		var n: int = _skel.get_bone_count()
+		print("[Zombie] Skeleton has ", n, " bones. cached: LArm=",
+			_b_l_arm, " RArm=", _b_r_arm, " LLeg=", _b_l_up_leg,
+			" RLeg=", _b_r_up_leg)
+		for i in range(min(n, 60)):
+			print("  ", i, ": ", _skel.get_bone_name(i))
+
+func _find_bone_contains(needles: Array) -> int:
+	if _skel == null:
+		return -1
+	for i in range(_skel.get_bone_count()):
+		var lower: String = _skel.get_bone_name(i).to_lower()
+		for needle in needles:
+			if needle in lower:
+				return i
+	return -1
 
 func _find_bone_prefix(prefix: String) -> int:
 	if _skel == null:
@@ -198,7 +226,10 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= gravity * delta
 	move_and_slide()
 	if to.length() > 0.0001:
-		look_at(target.global_position, Vector3.UP, false)
+		# use_model_front=true: model's +Z axis faces the target.
+		# The new zombie .glb is rigged with +Z forward (Mixamo
+		# convention), so this orients them face-toward-player.
+		look_at(target.global_position, Vector3.UP, true)
 	# Decay punch anim timer
 	if punch_anim_t > 0.0:
 		punch_anim_t = max(0.0, punch_anim_t - delta / 0.30)
