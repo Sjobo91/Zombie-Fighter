@@ -53,6 +53,11 @@ var _debug_t: float = 0.0
 # Set each frame in _physics_process; consumed by _update_proc_anim
 # to translate the mesh forward during the strike phase of a punch.
 var _punch_lunge_now: float = 0.0
+# How long to keep the AnimationPlayer playing (real seconds). Set
+# by _punch / _smash; decremented each frame. When it hits 0, the
+# animation is stopped early so we get just one punch's worth of
+# the longer whirlwind clip.
+var _anim_play_t: float = 0.0
 
 # Real animation — if the glb has an AnimationPlayer, we play named
 # clips from it instead of procedurally driving bones.
@@ -307,6 +312,14 @@ func _physics_process(delta: float) -> void:
 		r_punch_t = max(0.0, r_punch_t - delta / 0.55)
 	if smash_anim_t > 0.0:
 		smash_anim_t = max(0.0, smash_anim_t - delta / 0.45)
+	# Cut the AnimationPlayer clip short so we get just one punch's
+	# worth of the long whirlwind, not its full multi-punch + step.
+	if _anim_play_t > 0.0:
+		_anim_play_t -= delta
+		if _anim_play_t <= 0.0 and _anim_player \
+				and _anim_player.is_playing():
+			_anim_player.stop()
+			_current_anim = ""
 	if ult_active_t > 0.0:
 		ult_active_t -= delta
 	if iframes > 0.0:
@@ -434,10 +447,13 @@ func _punch() -> void:
 		r_punch_t = 1.0
 	# Play the artist-authored whirlwind animation from frame 0 at a
 	# fast clip — way more convincing than guessing bone-local axes.
+	# We stop it early via _anim_play_t so only ONE punch's worth of
+	# the long whirlwind clip plays per LMB.
 	if _anim_player and _clip_smash != "":
 		_anim_player.stop()
-		_anim_player.play(_clip_smash, -1, 2.0)
+		_anim_player.play(_clip_smash, -1, 2.4)
 		_current_anim = _clip_smash
+		_anim_play_t = 0.28   # ~0.28 s × 2.4 speed = 0.67 s of clip
 	var dmg: int = int(round(float(attack_dmg) * _ult_dmg_mul()))
 	var face: float = mesh.rotation.y
 	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
@@ -476,11 +492,12 @@ func _smash() -> void:
 		return
 	smash_t = 0.0
 	smash_anim_t = 1.0
-	# Play the whirlwind animation at normal speed for the heavier feel.
+	# Smash gets the longer chunk of the whirlwind — multiple punches.
 	if _anim_player and _clip_smash != "":
 		_anim_player.stop()
 		_anim_player.play(_clip_smash, -1, 1.0)
 		_current_anim = _clip_smash
+		_anim_play_t = 1.3    # 1.3 s of authored whirlwind at 1× speed
 	var dmg: int = int(round(float(smash_dmg) * _ult_dmg_mul()))
 	for z in get_tree().get_nodes_in_group("zombie"):
 		if not (z is Node3D):
