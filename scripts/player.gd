@@ -149,13 +149,20 @@ func _fire_gun() -> void:
 	if attack_t < attack_cd * _ult_cd_mul():
 		return
 	attack_t = 0.0
+	# Aim ray comes from the camera so the bullet hits whatever the
+	# reticle is on.
 	var cam_xf := camera.global_transform
 	var origin: Vector3 = cam_xf.origin
 	var forward: Vector3 = -cam_xf.basis.z
-	# muzzle position: slightly down-right of the camera, in front of
-	# Dread's chest. This is purely cosmetic — damage uses camera ray.
-	var muzzle: Vector3 = origin + cam_xf.basis.x * 0.35 \
-		+ cam_xf.basis.y * -0.30 + forward * 0.6
+	# Visual muzzle sits in front of Dread, NOT at the camera. The
+	# SpringArm puts the camera ~9 units behind him — if we anchored
+	# the muzzle to the camera, the flash and the start of the tracer
+	# pop up behind the player (looking like a yellow cone behind us).
+	# Anchoring to Dread's own facing keeps the tracer leaving from
+	# his body, then heading where the reticle points.
+	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
+	var muzzle: Vector3 = global_position + Vector3.UP * 1.4 \
+		+ dread_fwd * 0.8
 	var query := PhysicsRayQueryParameters3D.create(
 		origin, origin + forward * gun_range)
 	query.exclude = [get_rid()]
