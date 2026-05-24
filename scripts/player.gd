@@ -38,7 +38,7 @@ extends CharacterBody3D
 @onready var mesh:   Node3D    = $Mesh
 @onready var hud:    CanvasLayer    = get_node_or_null("/root/Main/HUD")
 
-# Procedural animation state
+# Procedural animation state (fallback when there's no AnimationPlayer)
 var _walk_phase:    float = 0.0
 var _mesh_base_pos: Vector3 = Vector3.ZERO
 var _skel: Skeleton3D = null
@@ -48,6 +48,18 @@ var _b_l_up_leg: int = -1
 var _b_r_up_leg: int = -1
 var _b_spine:    int = -1
 var _debug_t: float = 0.0
+
+# Real animation — if the glb has an AnimationPlayer, we play named
+# clips from it instead of procedurally driving bones.
+var _anim_player: AnimationPlayer = null
+var _anim_list:   PackedStringArray = PackedStringArray()
+var _current_anim: String = ""
+# Best-guess names of clips for each state (filled in once we know
+# what's actually in the model).
+var _clip_idle:   String = ""
+var _clip_walk:   String = ""
+var _clip_punch:  String = ""
+var _clip_smash:  String = ""
 
 var hp:        int   = 140
 var yaw:       float = 0.0
@@ -94,6 +106,78 @@ func _ready() -> void:
 	_skel = _find_skeleton(mesh)
 	if _skel:
 		_cache_bones()
+	# Hook up the model's AnimationPlayer if it has one.
+	_anim_player = _find_anim_player(mesh)
+	if _anim_player:
+		_anim_list = _anim_player.get_animation_list()
+		print("[Dread] AnimationPlayer found with ", _anim_list.size(),
+			" clips:")
+		for n in _anim_list:
+			print("  - ", n)
+		_pick_clip_aliases()
+		if _clip_idle != "":
+			_anim_player.play(_clip_idle)
+			_current_anim = _clip_idle
+	else:
+		print("[Dread] no AnimationPlayer — falling back to procedural anim")
+
+func _find_anim_player(n: Node) -> AnimationPlayer:
+	if n is AnimationPlayer:
+		return n as AnimationPlayer
+	for c in n.get_children():
+		var f := _find_anim_player(c)
+		if f != null:
+			return f
+	return null
+
+# Pick which clip names map to our gameplay states. Different rigs name
+# things differently — we accept any reasonable alias.
+func _pick_clip_aliases() -> void:
+	_clip_idle  = _first_matching(["idle", "Idle", "T-Pose", "rest", "Stand"])
+	_clip_walk  = _first_matching(["walk", "Walk", "run", "Run", "walking"])
+	_clip_punch = _first_matching(["punch", "Punch", "attack", "Attack",
+		"swing", "jab"])
+	_clip_smash = _first_matching(["smash", "Smash", "slam", "Slam",
+		"whirlwind", "reap", "Reap"])
+	# If nothing matched a category, fall back to whatever's available.
+	if _clip_idle == "" and _anim_list.size() > 0:
+		_clip_idle = _anim_list[0]
+	if _clip_walk == "":
+		_clip_walk = _clip_idle
+	if _clip_punch == "":
+		_clip_punch = _clip_idle
+	if _clip_smash == "":
+		_clip_smash = _clip_punch
+	print("[Dread] clip map: idle=", _clip_idle,
+		" walk=", _clip_walk,
+		" punch=", _clip_punch,
+		" smash=", _clip_smash)
+
+func _first_matching(needles: Array) -> String:
+	for n in _anim_list:
+		var lower: String = String(n).to_lower()
+		for needle in needles:
+			if lower.find(String(needle).to_lower()) != -1:
+				return n
+	return ""
+
+func _play_clip(name: String, speed: float = 1.0) -> void:
+	if _anim_player == null or name == "" or name == _current_anim:
+		return
+	_current_anim = name
+	_anim_player.play(name, -1, speed)
+
+# Pick the right clip based on player state. Punch / smash take
+# priority because they're transient; walk / idle are the steady states.
+func _drive_real_animations(is_moving: bool, is_sprint: bool) -> void:
+	if smash_anim_t > 0.0:
+		_play_clip(_clip_smash, 1.4)
+	elif l_punch_t > 0.0 or r_punch_t > 0.0:
+		_play_clip(_clip_punch, 1.6)
+	elif is_moving:
+		_play_clip(_clip_walk, 1.4 if is_sprint else 1.0)
+	else:
+		_play_clip(_clip_idle, 1.0)
 
 func _find_skeleton(n: Node) -> Skeleton3D:
 	if n is Skeleton3D:
@@ -381,6 +465,10 @@ func _spawn_punch_burst(pos: Vector3, radius: float, ttl: float) -> void:
 # Skeleton3D arm/leg overrides when the model is Mixamo-rigged.
 func _update_proc_anim(delta: float, is_moving: bool,
 		is_sprint: bool, is_in_air: bool) -> void:
+	# Real animations override everything else when available.
+	if _anim_player != null:
+		_drive_real_animations(is_moving, is_sprint)
+		return
 	var rate: float = 1.6
 	if is_moving:
 		rate = 9.5 if is_sprint else 6.8
