@@ -644,19 +644,19 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 			# Wind-up: arm raises off the side AND swings to point
 			# straight forward (90° around world UP, mirrored per arm).
 			var k: float = inv / 0.30
-			swing_angle = lerp(0.0, -side_sign * PI * 0.5, k)
+			swing_angle = lerp(0.0, side_sign * PI * 0.5, k)
 			arm_x = lerp(0.0, 0.10, k)
 			arm_z = lerp(arm_z_rest, 0.0, k)
 		elif inv < 0.55:
 			# Strike: bicep stays forward, elbow extends in parallel.
 			var k: float = (inv - 0.30) / 0.25
-			swing_angle = -side_sign * PI * 0.5
+			swing_angle = side_sign * PI * 0.5
 			arm_x = lerp(0.10, -0.10, k)
 			arm_z = 0.0
 		else:
 			# Recover.
 			var k: float = (inv - 0.55) / 0.45
-			swing_angle = lerp(-side_sign * PI * 0.5, 0.0, k)
+			swing_angle = lerp(side_sign * PI * 0.5, 0.0, k)
 			arm_x = lerp(-0.10, 0.0, k)
 			arm_z = lerp(0.0, arm_z_rest, k)
 		var rest_q: Quaternion = Quaternion.from_euler(
