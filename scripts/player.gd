@@ -432,6 +432,12 @@ func _punch() -> void:
 		l_punch_t = 1.0
 	else:
 		r_punch_t = 1.0
+	# Play the artist-authored whirlwind animation from frame 0 at a
+	# fast clip — way more convincing than guessing bone-local axes.
+	if _anim_player and _clip_smash != "":
+		_anim_player.stop()
+		_anim_player.play(_clip_smash, -1, 2.0)
+		_current_anim = _clip_smash
 	var dmg: int = int(round(float(attack_dmg) * _ult_dmg_mul()))
 	var face: float = mesh.rotation.y
 	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
@@ -470,6 +476,11 @@ func _smash() -> void:
 		return
 	smash_t = 0.0
 	smash_anim_t = 1.0
+	# Play the whirlwind animation at normal speed for the heavier feel.
+	if _anim_player and _clip_smash != "":
+		_anim_player.stop()
+		_anim_player.play(_clip_smash, -1, 1.0)
+		_current_anim = _clip_smash
 	var dmg: int = int(round(float(smash_dmg) * _ult_dmg_mul()))
 	for z in get_tree().get_nodes_in_group("zombie"):
 		if not (z is Node3D):
@@ -560,20 +571,12 @@ func _spawn_punch_burst(pos: Vector3, radius: float, ttl: float) -> void:
 # Skeleton3D arm/leg overrides when the model is Mixamo-rigged.
 func _update_proc_anim(delta: float, is_moving: bool,
 		is_sprint: bool, is_in_air: bool) -> void:
-	# AnimationPlayer is reserved for the SMASH only. While the
-	# whirlwind clip plays, IT owns the skeleton (procedural bone
-	# overrides would be overwritten anyway). The rest of the time we
-	# stop the player so procedural drives everything.
-	var anim_owns_skeleton: bool = false
-	if _anim_player != null:
-		if smash_anim_t > 0.0 and _clip_smash != "":
-			if _current_anim != _clip_smash:
-				_play_clip(_clip_smash, 1.6)
-			anim_owns_skeleton = true
-		else:
-			if _anim_player.is_playing():
-				_anim_player.stop()
-				_current_anim = ""
+	# AnimationPlayer is triggered explicitly from _punch / _smash.
+	# While it's playing, IT owns the skeleton; procedural bone
+	# overrides would just get overwritten. When it finishes (or was
+	# never started) procedural takes over.
+	var anim_owns_skeleton: bool = _anim_player != null \
+		and _anim_player.is_playing()
 	var rate: float = 1.6
 	if is_moving:
 		rate = 9.5 if is_sprint else 6.8
