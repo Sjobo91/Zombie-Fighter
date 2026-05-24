@@ -461,8 +461,11 @@ func _punch() -> void:
 	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
 	var dread_right: Vector3 = mesh.basis * Vector3(-1, 0, 0)
 	var side: float = -0.30 if punch_left else 0.30
-	var muzzle: Vector3 = global_position + Vector3.UP * 1.30 \
-		+ dread_fwd * 0.55 + dread_right * side
+	# Muzzle at the model's shoulder height (model is scaled 0.5 + lift
+	# 0.5 m → shoulders around world Y 1.4). Side-offset alternates
+	# so left and right barrels look like they fire independently.
+	var muzzle: Vector3 = global_position + Vector3.UP * 1.40 \
+		+ dread_fwd * 0.50 + dread_right * side
 	var query := PhysicsRayQueryParameters3D.create(
 		origin, origin + forward * attack_range)
 	query.exclude = [get_rid()]
@@ -539,8 +542,8 @@ func _fire_gun() -> void:
 	var forward: Vector3 = -cam_xf.basis.z
 	var dread_fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
 	var dread_right: Vector3 = mesh.basis * Vector3(-1, 0, 0)
-	# Both shoulders firing — center the muzzle for the cannon
-	var muzzle: Vector3 = global_position + Vector3.UP * 1.30 \
+	# Heavy cannon — centered on the chest of the scaled model (~1.4 m).
+	var muzzle: Vector3 = global_position + Vector3.UP * 1.40 \
 		+ dread_fwd * 0.55
 	var query := PhysicsRayQueryParameters3D.create(
 		origin, origin + forward * gun_range)
