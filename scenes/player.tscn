@@ -19,10 +19,9 @@ shape = SubResource("cap_shape")
 [node name="Mesh" type="Node3D" parent="."]
 
 [node name="Model" parent="Mesh" instance=ExtResource("2")]
-; Normal-scale humanoid robot (matches the collision capsule, fills
-; the 9 m third-person camera frame). The skeleton inside this glb is
-; what makes Dread actually animate (arms-down + walk swing + punch).
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+; reap_the_whirlwind.glb is exported at giant scale — needed ~20× shrink
+; to fit the 2.2 m collision capsule + 9 m third-person camera frame.
+transform = Transform3D(0.05, 0, 0, 0, 0.05, 0, 0, 0, 0.05, 0, 0, 0)
 
 [node name="CameraRig" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, 0)
