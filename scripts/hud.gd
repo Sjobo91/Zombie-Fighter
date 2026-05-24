@@ -96,17 +96,17 @@ func set_hp(hp: int, max_hp: int) -> void:
 func set_mechparts(n: int) -> void:
 	mp_label.text = "⚙ %d" % n
 
-# OVERCLOCK ult readout. active_t > 0 means it's currently running.
+# MELTDOWN ult readout. active_t > 0 means it's currently running.
 func set_ult(active_t: float, cd_remaining: float) -> void:
 	if active_t > 0.0:
-		ult_text.text = "OVERCLOCK · %0.1fs" % active_t
-		ult_text.modulate = Color(1.0, 0.85, 0.4, 1)
+		ult_text.text = "MELTDOWN · %0.1fs" % active_t
+		ult_text.modulate = Color(1.0, 0.42, 0.10, 1)
 	elif cd_remaining > 0.0:
 		ult_text.text = "Q  %0.0fs" % cd_remaining
 		ult_text.modulate = Color(0.62, 0.62, 0.66, 1)
 	else:
 		ult_text.text = "Q  READY"
-		ult_text.modulate = Color(0.4, 0.84, 1, 1)
+		ult_text.modulate = Color(1.0, 0.55, 0.20, 1)
 
 func show_wave_banner(n: int, total: int, act: String) -> void:
 	wave_text.text = "WAVE %d / %d" % [n, total]
