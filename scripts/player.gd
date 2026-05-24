@@ -119,6 +119,12 @@ func _ready() -> void:
 	# like the other workshop robots (the model ships with bright
 	# cartoonish materials we don't want).
 	_tint_player(mesh)
+	# Hide any baked-in pedestal/base mesh that ships with the .glb
+	# (common Sketchfab quirk — the model stands on its own disc).
+	_hide_model_base(mesh)
+	# Dump every MeshInstance3D name once so we can spot what to hide
+	# if the auto-pass missed it.
+	_dump_mesh_names(mesh, "  ")
 	# Cache mesh base pose + find skeleton bones for procedural anim.
 	_mesh_base_pos = mesh.position
 	_skel = _find_skeleton(mesh)
@@ -269,6 +275,30 @@ func _find_bone_contains(needles: Array) -> int:
 			if needle in lower:
 				return i
 	return -1
+
+# Hide any obvious "pedestal" / "base" / "platform" mesh that ships
+# baked into the imported model. Match by case-insensitive name
+# substring.
+func _hide_model_base(node: Node) -> void:
+	if node is MeshInstance3D:
+		var n: String = node.name.to_lower()
+		var bad: Array = ["base", "pedestal", "platform", "stand",
+			"ground", "floor", "disc", "plinth", "podium"]
+		for b in bad:
+			if b in n:
+				node.visible = false
+				print("[Reaper] hid base mesh: ", node.name)
+				break
+	for child in node.get_children():
+		_hide_model_base(child)
+
+# Print every MeshInstance3D in the model so we can manually identify
+# any base/pedestal mesh that didn't match the auto-hide names.
+func _dump_mesh_names(node: Node, indent: String) -> void:
+	if node is MeshInstance3D:
+		print(indent, "MESH: ", node.name)
+	for child in node.get_children():
+		_dump_mesh_names(child, indent + "  ")
 
 func _tint_player(node: Node) -> void:
 	# Sober industrial-robot palette — cool gunmetal, brushed,
