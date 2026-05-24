@@ -340,10 +340,30 @@ func _physics_process(delta: float) -> void:
 			velocity.y = jump_speed
 			air_jumps_left -= 1
 	# Reaper faces the camera direction (third-person aim).
-	# Per-arm punch TWIST — upper body rotates into the strike.
-	var twist: float = (l_punch_t * 1.1) - (r_punch_t * 1.1)
+	# Punch TWIST is an S-curve: body rotates AWAY from the punch
+	# direction during wind-up (charge), then sweeps THROUGH into the
+	# punch direction during the strike, then back to neutral. Per
+	# user spec: "rotate upper body, arm follows, then continue
+	# rotating through".
+	var which_arm: float = 0.0     # +1 left, -1 right
+	if l_punch_t > r_punch_t:
+		which_arm = 1.0
+	elif r_punch_t > 0.0:
+		which_arm = -1.0
+	var max_punch_t: float = max(l_punch_t, r_punch_t)
+	var twist: float = 0.0
+	if max_punch_t > 0.0:
+		var inv: float = 1.0 - max_punch_t
+		var amount: float = 0.0
+		if inv < 0.36:
+			amount = lerp(0.0, -1.30, inv / 0.36)            # cock back
+		elif inv < 0.55:
+			amount = lerp(-1.30, 1.20, (inv - 0.36) / 0.19)  # sweep through
+		else:
+			amount = lerp(1.20, 0.0, (inv - 0.55) / 0.45)
+		twist = amount * which_arm
 	var target_y: float = yaw + PI + twist
-	mesh.rotation.y = lerp_angle(mesh.rotation.y, target_y, 22.0 * delta)
+	mesh.rotation.y = lerp_angle(mesh.rotation.y, target_y, 28.0 * delta)
 	# 3-phase whole-body punch pitch — wind-up back, strike forward,
 	# recover. Inv goes 0 (just triggered) to 1 (done).
 	# Also lunge forward in the strike window so the punch reads as
@@ -354,12 +374,12 @@ func _physics_process(delta: float) -> void:
 		var inv: float = 1.0 - max_punch
 		var pitch: float = 0.0
 		if inv < 0.36:
-			pitch = lerp(0.0, 0.35, inv / 0.36)            # cock back
+			pitch = lerp(0.0, 0.40, inv / 0.36)            # cock back
 		elif inv < 0.55:
-			pitch = lerp(0.35, -0.45, (inv - 0.36) / 0.19) # SLAM forward
-			punch_lunge = sin((inv - 0.36) / 0.19 * PI) * 0.85
+			pitch = lerp(0.40, -0.55, (inv - 0.36) / 0.19) # SLAM forward
+			punch_lunge = sin((inv - 0.36) / 0.19 * PI) * 1.20
 		else:
-			pitch = lerp(-0.45, 0.0, (inv - 0.55) / 0.45)
+			pitch = lerp(-0.55, 0.0, (inv - 0.55) / 0.45)
 		mesh.rotation.x = pitch
 	# Forward bow on smash. smash_anim_t decays 1.0 -> 0.0 over 0.45s.
 	if smash_anim_t > 0.0:
@@ -621,50 +641,22 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 		arm_z_rest: float) -> void:
 	if bone == -1:
 		return
-	# Compose two rotations in bone-local space:
-	#   1. The "down-at-side" rest (Z axis euler, brings arm from T-pose
-	#      to hanging).
-	#   2. A swing around WORLD-UP (computed via the bone's global rest
-	#      basis, so this works regardless of bone-local axis orientation).
-	# The swing is what tips the arm from outward → forward during a
-	# punch. Doing it via world axis avoids guesswork about which
-	# local axis is forward.
-	var rest_xform: Transform3D = _skel.get_bone_global_rest(bone)
-	var local_up: Vector3 = rest_xform.basis.inverse() * Vector3.UP
-	if local_up.length() < 0.001:
-		local_up = Vector3.UP
-	local_up = local_up.normalized()
-	var side_sign: float = sign(arm_z_rest)   # -1 left, +1 right
+	# Bicep just gets a small pitch during punch — the visible motion
+	# comes from the BODY TWIST (S-curve in _physics_process), BODY
+	# LUNGE (mesh.position offset), and the ELBOW extension. Trying to
+	# point the bicep "forward" via bone-local rotation kept producing
+	# wrong-axis results for this rig.
 	if punch_t > 0.0:
-		var inv:         float = 1.0 - punch_t
-		var swing_angle: float = 0.0
-		var arm_x:       float = 0.0
-		var arm_z:       float = arm_z_rest
+		var inv: float = 1.0 - punch_t
+		var arm_x: float = 0.0
 		if inv < 0.36:
-			# Wind-up: arm raises off the side AND swings to point
-			# straight forward (90° around world UP, mirrored per arm).
-			var k: float = inv / 0.36
-			swing_angle = lerp(0.0, side_sign * PI * 0.5, k)
-			arm_x = lerp(0.0, 0.10, k)
-			arm_z = lerp(arm_z_rest, 0.0, k)
+			arm_x = lerp(0.0, 0.20, inv / 0.36)         # tuck back
 		elif inv < 0.55:
-			# Strike: bicep stays forward, elbow extends in parallel.
-			var k: float = (inv - 0.36) / 0.19
-			swing_angle = side_sign * PI * 0.5
-			arm_x = lerp(0.10, -0.10, k)
-			arm_z = 0.0
+			arm_x = lerp(0.20, -0.40, (inv - 0.36) / 0.19) # push forward
 		else:
-			# Recover.
-			var k: float = (inv - 0.55) / 0.45
-			swing_angle = lerp(side_sign * PI * 0.5, 0.0, k)
-			arm_x = lerp(-0.10, 0.0, k)
-			arm_z = lerp(0.0, arm_z_rest, k)
-		var rest_q: Quaternion = Quaternion.from_euler(
-			Vector3(arm_x, 0, arm_z))
-		var swing_q: Quaternion = Quaternion(local_up, swing_angle)
-		# Apply rest first (Z down + small pitch), then swing around
-		# world UP. Quaternion compose order: rotation A then B = B * A.
-		_skel.set_bone_pose_rotation(bone, swing_q * rest_q)
+			arm_x = lerp(-0.40, 0.0, (inv - 0.55) / 0.45)
+		_skel.set_bone_pose_rotation(bone,
+			Quaternion.from_euler(Vector3(arm_x, 0, arm_z_rest)))
 	else:
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
