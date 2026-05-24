@@ -201,13 +201,19 @@ func _physics_process(delta: float) -> void:
 			velocity.y = jump_speed
 			air_jumps_left -= 1
 	# Dread faces the camera direction (third-person aim).
-	# Add a per-arm punch-twist on top — rotates body INTO the swing,
-	# so even without skeleton anim you see the whole torso whip
-	# left/right with each LMB and bow forward on RMB smash.
-	var twist: float = (l_punch_t * 0.7) - (r_punch_t * 0.7)
-	var smash_dip: float = smash_anim_t * 0.0  # not used on Y
+	# Per-arm punch TWIST whips body left/right with each LMB.
+	# Smash-pitch tips body forward on RMB.
+	var twist: float = (l_punch_t * 1.0) - (r_punch_t * 1.0)
 	var target_y: float = yaw + PI + twist
 	mesh.rotation.y = lerp_angle(mesh.rotation.y, target_y, 22.0 * delta)
+	# Forward bow on smash. smash_anim_t goes 1.0 -> 0.0 over 0.45s.
+	# We tilt forward steeply (max -1.0 rad ≈ -57°) at peak smash.
+	var smash_pitch: float = -1.0 * smash_anim_t
+	# (don't fight the walk-lean from _update_proc_anim; that uses a
+	# slower lerp on rotation.x. Override here in physics so smash_pitch
+	# wins during the smash window.)
+	if smash_anim_t > 0.0:
+		mesh.rotation.x = smash_pitch
 	move_and_slide()
 	# Procedural animation — mesh bob/sway + Skeleton3D bone overrides
 	var is_moving: bool = dir.length() > 0.0001
@@ -379,16 +385,26 @@ func _update_proc_anim(delta: float, is_moving: bool,
 	if is_moving:
 		rate = 9.5 if is_sprint else 6.8
 	_walk_phase += delta * rate
-	# Mesh-level: vertical bob + horizontal sway + recoil offset.
-	# Amplitudes scaled for visibility against the giant workshop world.
-	var bob_amp:  float = 0.32 if is_moving else 0.08
-	var sway_amp: float = 0.16 if is_moving else 0.05
+	# Mesh-level: vertical bob + horizontal sway + recoil + smash dip.
+	# Cranked since the model is tiny vs. the 9m camera distance.
+	var bob_amp:  float = 0.55 if is_moving else 0.18
+	var sway_amp: float = 0.25 if is_moving else 0.08
 	var bob:  float = abs(sin(_walk_phase)) * bob_amp
 	var sway: float = sin(_walk_phase * 0.5) * sway_amp
 	var rec_k: float = clamp(recoil_t / 0.20, 0.0, 1.0)
 	var fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
 	var recoil_off: Vector3 = -fwd * (0.55 * rec_k)
-	mesh.position = _mesh_base_pos + Vector3(sway, bob, 0) + recoil_off
+	# Smash dip — when smashing, Dread drops down and forward.
+	var smash_drop: float = -0.4 * smash_anim_t
+	mesh.position = _mesh_base_pos + Vector3(sway, bob + smash_drop, 0) \
+		+ recoil_off
+	# Debug ping every ~1s so we can verify the function is running.
+	_debug_t += delta
+	if _debug_t > 1.0:
+		_debug_t = 0.0
+		print("[Dread anim] pos=", mesh.position,
+			" walk=", snappedf(_walk_phase, 0.1),
+			" moving=", is_moving)
 	# Forward lean
 	var target_pitch: float = 0.0
 	if is_in_air:
