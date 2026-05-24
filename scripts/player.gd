@@ -94,25 +94,6 @@ func _ready() -> void:
 	_skel = _find_skeleton(mesh)
 	if _skel:
 		_cache_bones()
-		_dump_bone_names("Dread")
-	else:
-		print("[Dread] no Skeleton3D found under Mesh; mesh-bob only")
-		# Dump scene tree so we can see what's actually inside the glb
-		print("[Dread] mesh tree:")
-		_dump_tree(mesh, "  ")
-
-func _dump_tree(n: Node, indent: String) -> void:
-	print(indent, n.name, " (", n.get_class(), ")")
-	for c in n.get_children():
-		_dump_tree(c, indent + "  ")
-
-func _dump_bone_names(label: String) -> void:
-	if _skel == null:
-		return
-	var n: int = _skel.get_bone_count()
-	print("[", label, "] Skeleton has ", n, " bones:")
-	for i in range(min(n, 60)):
-		print("  ", i, ": ", _skel.get_bone_name(i))
 
 func _find_skeleton(n: Node) -> Skeleton3D:
 	if n is Skeleton3D:
@@ -219,11 +200,14 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_just_pressed("jump") and air_jumps_left > 0:
 			velocity.y = jump_speed
 			air_jumps_left -= 1
-	# Dread always faces where the camera looks (third-person aim).
-	# The model's front is +Z (Mixamo convention) but the camera sits
-	# along +Z behind the player, so add PI to flip Dread around to
-	# face away from the camera — into the reticle, not at us.
-	mesh.rotation.y = lerp_angle(mesh.rotation.y, yaw + PI, 16.0 * delta)
+	# Dread faces the camera direction (third-person aim).
+	# Add a per-arm punch-twist on top — rotates body INTO the swing,
+	# so even without skeleton anim you see the whole torso whip
+	# left/right with each LMB and bow forward on RMB smash.
+	var twist: float = (l_punch_t * 0.7) - (r_punch_t * 0.7)
+	var smash_dip: float = smash_anim_t * 0.0  # not used on Y
+	var target_y: float = yaw + PI + twist
+	mesh.rotation.y = lerp_angle(mesh.rotation.y, target_y, 22.0 * delta)
 	move_and_slide()
 	# Procedural animation — mesh bob/sway + Skeleton3D bone overrides
 	var is_moving: bool = dir.length() > 0.0001
@@ -395,23 +379,16 @@ func _update_proc_anim(delta: float, is_moving: bool,
 	if is_moving:
 		rate = 9.5 if is_sprint else 6.8
 	_walk_phase += delta * rate
-	# Mesh-level: vertical bob + horizontal sway + recoil offset
-	# *** EXAGGERATED for visibility-debug — dial back once visible ***
-	var bob_amp:  float = 0.60 if is_moving else 0.20
-	var sway_amp: float = 0.30 if is_moving else 0.10
+	# Mesh-level: vertical bob + horizontal sway + recoil offset.
+	# Amplitudes scaled for visibility against the giant workshop world.
+	var bob_amp:  float = 0.32 if is_moving else 0.08
+	var sway_amp: float = 0.16 if is_moving else 0.05
 	var bob:  float = abs(sin(_walk_phase)) * bob_amp
 	var sway: float = sin(_walk_phase * 0.5) * sway_amp
 	var rec_k: float = clamp(recoil_t / 0.20, 0.0, 1.0)
 	var fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
-	var recoil_off: Vector3 = -fwd * (0.35 * rec_k)
+	var recoil_off: Vector3 = -fwd * (0.55 * rec_k)
 	mesh.position = _mesh_base_pos + Vector3(sway, bob, 0) + recoil_off
-	# Debug ping every ~1s so we can verify _update_proc_anim is running
-	_debug_t += delta
-	if _debug_t > 1.0:
-		_debug_t = 0.0
-		print("[Dread anim] mesh.pos=", mesh.position,
-			" walk_phase=", _walk_phase,
-			" moving=", is_moving, " base=", _mesh_base_pos)
 	# Forward lean
 	var target_pitch: float = 0.0
 	if is_in_air:
