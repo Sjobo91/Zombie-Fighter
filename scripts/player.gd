@@ -613,23 +613,32 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 	if bone == -1:
 		return
 	if punch_t > 0.0:
-		# 3-phase punch on the bicep — synced to the body wind-up.
+		# Straight punch — interpolate BOTH axes through 3 phases so the
+		# arm raises from rest, points straight forward at impact, then
+		# drops back. No residual side-tilt at strike = no flapping out.
 		# inv: 0 = just triggered, 1 = done.
 		var inv: float = 1.0 - punch_t
 		var arm_x: float = 0.0
+		var arm_z: float = arm_z_rest
 		if inv < 0.30:
-			# wind-up: pull bicep back (positive X = back)
-			arm_x = lerp(0.0, 0.55, inv / 0.30)
+			# WIND-UP: bicep raises toward neutral (arm coming up off
+			# the side) and tucks back a touch.
+			var k: float = inv / 0.30
+			arm_x = lerp(0.0, 0.25, k)
+			arm_z = lerp(arm_z_rest, 0.0, k)
 		elif inv < 0.55:
-			# STRIKE: extend bicep forward HARD (large negative X)
-			arm_x = lerp(0.55, -PI * 0.95, (inv - 0.30) / 0.25)
+			# STRIKE: arm rotates 90° to point STRAIGHT forward. Z stays
+			# at 0 so the arm doesn't fan out to the side.
+			var k: float = (inv - 0.30) / 0.25
+			arm_x = lerp(0.25, -PI * 0.50, k)
+			arm_z = 0.0
 		else:
-			# recover back to rest swing pose
-			arm_x = lerp(-PI * 0.95, 0.0, (inv - 0.55) / 0.45)
-		# Reduce the rest-Z bias during the strike so the arm comes
-		# out straight rather than diagonal across the body.
+			# RECOVER: ease back to the down-at-side rest pose.
+			var k: float = (inv - 0.55) / 0.45
+			arm_x = lerp(-PI * 0.50, 0.0, k)
+			arm_z = lerp(0.0, arm_z_rest, k)
 		_skel.set_bone_pose_rotation(bone,
-			Quaternion.from_euler(Vector3(arm_x, 0, arm_z_rest * 0.30)))
+			Quaternion.from_euler(Vector3(arm_x, 0, arm_z)))
 	else:
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
