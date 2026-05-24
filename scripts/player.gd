@@ -199,18 +199,18 @@ func _cache_bones() -> void:
 		if _b_spine == -1:    _b_spine    = _skel.find_bone(prefix + "Spine")
 
 func _tint_dread(node: Node) -> void:
+	# Sober industrial-robot palette — cool gunmetal, brushed,
+	# no emission. Reads like the other workshop bots, not cartoonish.
 	if node is MeshInstance3D:
 		var mi := node as MeshInstance3D
 		var src := mi.get_active_material(0)
 		if src is StandardMaterial3D:
 			var dup := (src as StandardMaterial3D).duplicate() \
 				as StandardMaterial3D
-			dup.albedo_color = Color(0.18, 0.09, 0.05, 1)
-			dup.metallic = 0.20
-			dup.roughness = 0.85
-			dup.emission_enabled = true
-			dup.emission = Color(1.0, 0.32, 0.06, 1)
-			dup.emission_energy_multiplier = 1.15
+			dup.albedo_color = Color(0.30, 0.32, 0.36, 1)
+			dup.metallic = 0.85
+			dup.roughness = 0.45
+			dup.emission_enabled = false
 			mi.set_surface_override_material(0, dup)
 	for child in node.get_children():
 		_tint_dread(child)
