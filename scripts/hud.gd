@@ -14,9 +14,13 @@ extends CanvasLayer
 @onready var boss_fill:  ColorRect = $Root/BossBar/Fill
 @onready var boss_label: Label     = $Root/BossBar/Label
 @onready var dmg_flash:  ColorRect = $Root/DamageFlash
+@onready var pause_root: Panel     = $Root/Pause
+@onready var resume_btn: Button    = $Root/Pause/ResumeBtn
+@onready var quit_btn:   Button    = $Root/Pause/QuitBtn
 
 var _banner_t: float = 0.0
 var _dmg_flash_t: float = 0.0
+var _paused: bool = false
 
 func _ready() -> void:
 	# The HUD is a heads-up display, never interactive. Force every
@@ -29,6 +33,13 @@ func _ready() -> void:
 	boss_root.visible = false
 	wave_text.text = ""
 	act_text.text = ""
+	# Pause overlay starts hidden; its buttons MUST receive mouse input
+	# (so re-enable them after _make_passthrough nuked their filter).
+	pause_root.visible = false
+	resume_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	quit_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	resume_btn.pressed.connect(_on_resume)
+	quit_btn.pressed.connect(_on_quit_to_title)
 
 func _make_passthrough(node: Node) -> void:
 	if node is Control:
@@ -49,6 +60,33 @@ func _process(delta: float) -> void:
 func pulse_damage_flash() -> void:
 	_dmg_flash_t = 0.32
 	dmg_flash.color = Color(0.85, 0.10, 0.05, 0.55)
+
+# ── Pause menu ──
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("escape") and not death.visible:
+		toggle_pause()
+		get_viewport().set_input_as_handled()
+
+func toggle_pause() -> void:
+	set_paused(not _paused)
+
+func set_paused(p: bool) -> void:
+	_paused = p
+	pause_root.visible = p
+	get_tree().paused = p
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if p \
+		else Input.MOUSE_MODE_CAPTURED
+
+func _on_resume() -> void:
+	set_paused(false)
+
+func _on_quit_to_title() -> void:
+	# bank what we earned this run (50% — same rule as dying mid-run)
+	var bank := get_node_or_null("/root/Mechbank")
+	if bank and bank.has_method("on_run_end"):
+		bank.on_run_end(false)
+	set_paused(false)
+	get_tree().change_scene_to_file("res://scenes/title.tscn")
 
 func set_hp(hp: int, max_hp: int) -> void:
 	var k: float = clamp(float(hp) / float(max_hp), 0.0, 1.0)

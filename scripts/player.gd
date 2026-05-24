@@ -72,10 +72,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		pitch  = clamp(pitch, pitch_min, pitch_max)
 		rig.rotation.y = yaw
 		rig.rotation.x = pitch
-	if event.is_action_pressed("escape"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if \
-			Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
-			else Input.MOUSE_MODE_CAPTURED
+	# Esc is owned by the HUD (it opens the pause menu).
 	if event.is_action_pressed("attack") and not dead:
 		_fire_gun()
 	if event.is_action_pressed("smash") and not dead:

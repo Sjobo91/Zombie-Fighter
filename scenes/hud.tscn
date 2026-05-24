@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1"]
 
@@ -30,8 +30,20 @@ shadow_color = Color(0, 0, 0, 0.95)
 outline_size = 4
 outline_color = Color(0, 0, 0, 1)
 
+[sub_resource type="StyleBoxFlat" id="pause_dim"]
+bg_color = Color(0, 0, 0, 0.62)
+
+[sub_resource type="LabelSettings" id="pause_title"]
+font_size = 64
+font_color = Color(0.96, 0.86, 0.5, 1)
+shadow_size = 12
+shadow_color = Color(0, 0, 0, 0.95)
+outline_size = 6
+outline_color = Color(0, 0, 0, 1)
+
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1")
+process_mode = 3
 
 [node name="Root" type="Control" parent="."]
 anchor_right = 1.0
@@ -198,3 +210,45 @@ text = ""
 horizontal_alignment = 1
 vertical_alignment = 1
 label_settings = SubResource("wave_settings")
+
+[node name="Pause" type="Panel" parent="Root"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_styles/panel = SubResource("pause_dim")
+visible = false
+
+[node name="PauseTitle" type="Label" parent="Root/Pause"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -180.0
+offset_right = 260.0
+offset_bottom = -80.0
+text = "PAUSED"
+horizontal_alignment = 1
+vertical_alignment = 1
+label_settings = SubResource("pause_title")
+
+[node name="ResumeBtn" type="Button" parent="Root/Pause"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -180.0
+offset_top = -32.0
+offset_right = 180.0
+offset_bottom = 24.0
+text = "RESUME (Esc)"
+
+[node name="QuitBtn" type="Button" parent="Root/Pause"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -180.0
+offset_top = 44.0
+offset_right = 180.0
+offset_bottom = 100.0
+text = "QUIT TO TITLE"
