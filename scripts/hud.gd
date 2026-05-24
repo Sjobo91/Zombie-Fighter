@@ -17,12 +17,22 @@ extends CanvasLayer
 var _banner_t: float = 0.0
 
 func _ready() -> void:
+	# The HUD is a heads-up display, never interactive. Force every
+	# child Control to ignore mouse input so the Banner / labels can't
+	# silently eat LMB clicks that should have been an attack.
+	_make_passthrough(self)
 	death.visible = false
 	death_stat.visible = false
 	banner.visible = false
 	boss_root.visible = false
 	wave_text.text = ""
 	act_text.text = ""
+
+func _make_passthrough(node: Node) -> void:
+	if node is Control:
+		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children():
+		_make_passthrough(child)
 
 func _process(delta: float) -> void:
 	if _banner_t > 0.0:
