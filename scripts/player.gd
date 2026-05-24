@@ -340,8 +340,8 @@ func _physics_process(delta: float) -> void:
 			velocity.y = jump_speed
 			air_jumps_left -= 1
 	# Reaper faces the camera direction (third-person aim).
-	# Per-arm punch TWIST whips body left/right with each LMB.
-	var twist: float = (l_punch_t * 0.7) - (r_punch_t * 0.7)
+	# Per-arm punch TWIST — upper body rotates into the strike.
+	var twist: float = (l_punch_t * 1.1) - (r_punch_t * 1.1)
 	var target_y: float = yaw + PI + twist
 	mesh.rotation.y = lerp_angle(mesh.rotation.y, target_y, 22.0 * delta)
 	# 3-phase whole-body punch pitch — wind-up back, strike forward,
@@ -354,12 +354,12 @@ func _physics_process(delta: float) -> void:
 		var inv: float = 1.0 - max_punch
 		var pitch: float = 0.0
 		if inv < 0.30:
-			pitch = lerp(0.0, 0.22, inv / 0.30)            # small lean back
+			pitch = lerp(0.0, 0.35, inv / 0.30)            # cock back
 		elif inv < 0.55:
-			pitch = lerp(0.22, -0.28, (inv - 0.30) / 0.25) # small punch-forward
-			punch_lunge = sin((inv - 0.30) / 0.25 * PI) * 0.45
+			pitch = lerp(0.35, -0.45, (inv - 0.30) / 0.25) # SLAM forward
+			punch_lunge = sin((inv - 0.30) / 0.25 * PI) * 0.85
 		else:
-			pitch = lerp(-0.28, 0.0, (inv - 0.55) / 0.45)
+			pitch = lerp(-0.45, 0.0, (inv - 0.55) / 0.45)
 		mesh.rotation.x = pitch
 	# Forward bow on smash. smash_anim_t decays 1.0 -> 0.0 over 0.45s.
 	if smash_anim_t > 0.0:
@@ -621,21 +621,37 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 		arm_z_rest: float) -> void:
 	if bone == -1:
 		return
-	# Bicep stays in its rest pose during punches. The elbow does the
-	# pump motion (see _drive_elbow). Bicep only gets a tiny pitch back
-	# during wind-up + tiny pitch forward at strike so the shoulder
-	# feels connected to the body's lunge.
+	# Bicep raises from "hanging at side" to "pointing FORWARD"
+	# during wind-up, holds horizontal at strike, then drops back.
+	# Mirrored per side via the sign of arm_z_rest (left=-1.4, right=+1.4).
 	if punch_t > 0.0:
-		var inv: float = 1.0 - punch_t
-		var pitch: float = 0.0
+		var inv:        float = 1.0 - punch_t
+		var side_sign:  float = sign(arm_z_rest)   # -1 left, +1 right
+		var arm_x:      float = 0.0
+		var arm_y:      float = 0.0
+		var arm_z:      float = arm_z_rest
 		if inv < 0.30:
-			pitch = lerp(0.0, 0.20, inv / 0.30)
+			# WIND-UP: arm comes up off the side AND swings to the front
+			# (Y rotates 90° toward forward — mirrored per arm).
+			var k: float = inv / 0.30
+			arm_x = lerp(0.0, 0.15, k)
+			arm_y = lerp(0.0, -side_sign * PI * 0.5, k)
+			arm_z = lerp(arm_z_rest, 0.0, k)
 		elif inv < 0.55:
-			pitch = lerp(0.20, -0.30, (inv - 0.30) / 0.25)
+			# STRIKE: bicep stays horizontal-forward; elbow does the
+			# extension. Tiny extra push for liveliness.
+			var k: float = (inv - 0.30) / 0.25
+			arm_x = lerp(0.15, -0.10, k)
+			arm_y = -side_sign * PI * 0.5
+			arm_z = 0.0
 		else:
-			pitch = lerp(-0.30, 0.0, (inv - 0.55) / 0.45)
+			# RECOVER: ease back to down-at-side rest pose.
+			var k: float = (inv - 0.55) / 0.45
+			arm_x = lerp(-0.10, 0.0, k)
+			arm_y = lerp(-side_sign * PI * 0.5, 0.0, k)
+			arm_z = lerp(0.0, arm_z_rest, k)
 		_skel.set_bone_pose_rotation(bone,
-			Quaternion.from_euler(Vector3(pitch, 0, arm_z_rest)))
+			Quaternion.from_euler(Vector3(arm_x, arm_y, arm_z)))
 	else:
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
