@@ -661,8 +661,9 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
 
-# Piston pump on the elbow — folded up during wind-up, snapped fully
-# extended at strike, then relaxes back.
+# Piston pump on the elbow — forearm RAISES UP during wind-up (sign
+# flipped from previous version), then snaps DOWN/forward on strike
+# while the body lunges forward.
 func _drive_elbow(bone: int, punch_t: float) -> void:
 	if bone == -1:
 		return
@@ -670,11 +671,12 @@ func _drive_elbow(bone: int, punch_t: float) -> void:
 		var inv: float = 1.0 - punch_t
 		var bend: float = 0.0
 		if inv < 0.36:
-			# WIND-UP: bend the elbow so the forearm folds up
-			bend = lerp(0.0, PI * 0.65, inv / 0.36)
+			# WIND-UP: forearm raises UP (negative bend = opposite of before)
+			bend = lerp(0.0, -PI * 0.75, inv / 0.36)
 		elif inv < 0.55:
-			# STRIKE: snap straight — elbow extends fast
-			bend = lerp(PI * 0.65, 0.0, (inv - 0.36) / 0.19)
+			# STRIKE: forearm snaps back to straight — fist goes
+			# forward (body has lunged + pitched forward by now)
+			bend = lerp(-PI * 0.75, 0.0, (inv - 0.36) / 0.19)
 		# Recover phase: stays at rest (bend = 0)
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(bend, 0, 0)))
