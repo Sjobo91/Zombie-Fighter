@@ -106,7 +106,17 @@ func _ready() -> void:
 	_skel = _find_skeleton(mesh)
 	if _skel:
 		_cache_bones()
-	# Hook up the model's AnimationPlayer if it has one.
+		# Dump bone names ONCE so we can match the procedural anim
+		# rotations to whatever rig this model uses.
+		var nb: int = _skel.get_bone_count()
+		print("[Reaper] Skeleton has ", nb, " bones:")
+		for i in range(min(nb, 80)):
+			print("  ", i, ": ", _skel.get_bone_name(i))
+		print("[Reaper] cached: LArm=", _b_l_arm, " RArm=", _b_r_arm,
+			" LLeg=", _b_l_up_leg, " RLeg=", _b_r_up_leg)
+	# AnimationPlayer is now reserved for the SMASH — we DON'T auto-play
+	# anything on spawn, so procedural anim is free to drive the
+	# skeleton for idle/walk/punch.
 	_anim_player = _find_anim_player(mesh)
 	if _anim_player:
 		_anim_list = _anim_player.get_animation_list()
@@ -115,11 +125,10 @@ func _ready() -> void:
 		for n in _anim_list:
 			print("  - ", n)
 		_pick_clip_aliases()
-		if _clip_idle != "":
-			_anim_player.play(_clip_idle)
-			_current_anim = _clip_idle
+		# explicitly stop so nothing auto-plays at scene load
+		_anim_player.stop()
 	else:
-		print("[Reaper] no AnimationPlayer — falling back to procedural anim")
+		print("[Reaper] no AnimationPlayer — procedural anim only")
 
 func _find_anim_player(n: Node) -> AnimationPlayer:
 	if n is AnimationPlayer:
@@ -191,12 +200,27 @@ func _find_skeleton(n: Node) -> Skeleton3D:
 func _cache_bones() -> void:
 	if _skel == null:
 		return
+	# Try Mixamo standard names first
 	for prefix in ["mixamorig_", "mixamorig:", "mixamorig1_", "mixamorig2_", ""]:
 		if _b_l_arm == -1:    _b_l_arm    = _skel.find_bone(prefix + "LeftArm")
 		if _b_r_arm == -1:    _b_r_arm    = _skel.find_bone(prefix + "RightArm")
 		if _b_l_up_leg == -1: _b_l_up_leg = _skel.find_bone(prefix + "LeftUpLeg")
 		if _b_r_up_leg == -1: _b_r_up_leg = _skel.find_bone(prefix + "RightUpLeg")
 		if _b_spine == -1:    _b_spine    = _skel.find_bone(prefix + "Spine")
+	# Fallback: custom rig naming with prefix + numeric suffix
+	# (e.g. "Arm1_L_00", "Leg1_R_019"). Match by prefix.
+	if _b_l_arm == -1:    _b_l_arm    = _find_bone_prefix("Arm1_L")
+	if _b_r_arm == -1:    _b_r_arm    = _find_bone_prefix("Arm1_R")
+	if _b_l_up_leg == -1: _b_l_up_leg = _find_bone_prefix("Leg1_L")
+	if _b_r_up_leg == -1: _b_r_up_leg = _find_bone_prefix("Leg1_R")
+
+func _find_bone_prefix(prefix: String) -> int:
+	if _skel == null:
+		return -1
+	for i in range(_skel.get_bone_count()):
+		if _skel.get_bone_name(i).begins_with(prefix):
+			return i
+	return -1
 
 func _tint_player(node: Node) -> void:
 	# Sober industrial-robot palette — cool gunmetal, brushed,
@@ -465,10 +489,20 @@ func _spawn_punch_burst(pos: Vector3, radius: float, ttl: float) -> void:
 # Skeleton3D arm/leg overrides when the model is Mixamo-rigged.
 func _update_proc_anim(delta: float, is_moving: bool,
 		is_sprint: bool, is_in_air: bool) -> void:
-	# Real animations override everything else when available.
+	# AnimationPlayer is reserved for the SMASH only. While the
+	# whirlwind clip plays, IT owns the skeleton (procedural bone
+	# overrides would be overwritten anyway). The rest of the time we
+	# stop the player so procedural drives everything.
+	var anim_owns_skeleton: bool = false
 	if _anim_player != null:
-		_drive_real_animations(is_moving, is_sprint)
-		return
+		if smash_anim_t > 0.0 and _clip_smash != "":
+			if _current_anim != _clip_smash:
+				_play_clip(_clip_smash, 1.6)
+			anim_owns_skeleton = true
+		else:
+			if _anim_player.is_playing():
+				_anim_player.stop()
+				_current_anim = ""
 	var rate: float = 1.6
 	if is_moving:
 		rate = 9.5 if is_sprint else 6.8
@@ -500,8 +534,9 @@ func _update_proc_anim(delta: float, is_moving: bool,
 	elif is_moving:
 		target_pitch = -0.20 if is_sprint else -0.10
 	mesh.rotation.x = lerp(mesh.rotation.x, target_pitch, 8.0 * delta)
-	# Skeleton overrides (only if bones found)
-	if _skel == null:
+	# Skeleton overrides (only when AnimationPlayer isn't owning the
+	# skeleton — otherwise our bone sets would be overwritten).
+	if _skel == null or anim_owns_skeleton:
 		return
 	var swing: float = sin(_walk_phase) * (0.45 if is_moving else 0.06)
 	var leg_swing: float = -sin(_walk_phase) * (0.55 if is_moving else 0.0)
