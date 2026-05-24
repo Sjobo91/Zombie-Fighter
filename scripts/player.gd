@@ -48,6 +48,9 @@ var _b_l_up_leg: int = -1
 var _b_r_up_leg: int = -1
 var _b_spine:    int = -1
 var _debug_t: float = 0.0
+# Set each frame in _physics_process; consumed by _update_proc_anim
+# to translate the mesh forward during the strike phase of a punch.
+var _punch_lunge_now: float = 0.0
 
 # Real animation — if the glb has an AnimationPlayer, we play named
 # clips from it instead of procedurally driving bones.
@@ -285,11 +288,12 @@ func _physics_process(delta: float) -> void:
 	smash_t  += delta
 	summon_t += delta
 	ult_t    += delta
-	# Decay punch/smash animation timers (used by the procedural anim)
+	# Decay punch/smash animation timers (used by the procedural anim).
+	# Longer punch window so the wind-up + strike + recover phases read.
 	if l_punch_t > 0.0:
-		l_punch_t = max(0.0, l_punch_t - delta / 0.18)
+		l_punch_t = max(0.0, l_punch_t - delta / 0.32)
 	if r_punch_t > 0.0:
-		r_punch_t = max(0.0, r_punch_t - delta / 0.18)
+		r_punch_t = max(0.0, r_punch_t - delta / 0.32)
 	if smash_anim_t > 0.0:
 		smash_anim_t = max(0.0, smash_anim_t - delta / 0.45)
 	if ult_active_t > 0.0:
@@ -331,19 +335,34 @@ func _physics_process(delta: float) -> void:
 			air_jumps_left -= 1
 	# Reaper faces the camera direction (third-person aim).
 	# Per-arm punch TWIST whips body left/right with each LMB.
-	# Smash-pitch tips body forward on RMB.
-	var twist: float = (l_punch_t * 1.0) - (r_punch_t * 1.0)
+	var twist: float = (l_punch_t * 0.7) - (r_punch_t * 0.7)
 	var target_y: float = yaw + PI + twist
 	mesh.rotation.y = lerp_angle(mesh.rotation.y, target_y, 22.0 * delta)
-	# Forward bow on smash. smash_anim_t goes 1.0 -> 0.0 over 0.45s.
-	# We tilt forward steeply (max -1.0 rad ≈ -57°) at peak smash.
-	var smash_pitch: float = -1.0 * smash_anim_t
-	# (don't fight the walk-lean from _update_proc_anim; that uses a
-	# slower lerp on rotation.x. Override here in physics so smash_pitch
-	# wins during the smash window.)
+	# 3-phase whole-body punch pitch — wind-up back, strike forward,
+	# recover. Inv goes 0 (just triggered) to 1 (done).
+	# Also lunge forward in the strike window so the punch reads as
+	# launched from the shoulder, not flapped from the elbow.
+	var max_punch: float = max(l_punch_t, r_punch_t)
+	var punch_lunge: float = 0.0
+	if max_punch > 0.0:
+		var inv: float = 1.0 - max_punch
+		var pitch: float = 0.0
+		if inv < 0.30:
+			pitch = lerp(0.0, 0.55, inv / 0.30)            # wind UP back
+		elif inv < 0.55:
+			pitch = lerp(0.55, -0.65, (inv - 0.30) / 0.25) # SLAM forward
+			punch_lunge = sin((inv - 0.30) / 0.25 * PI) * 0.65
+		else:
+			pitch = lerp(-0.65, 0.0, (inv - 0.55) / 0.45)
+		mesh.rotation.x = pitch
+	# Forward bow on smash. smash_anim_t decays 1.0 -> 0.0 over 0.45s.
 	if smash_anim_t > 0.0:
-		mesh.rotation.x = smash_pitch
+		mesh.rotation.x = -1.0 * smash_anim_t
 	move_and_slide()
+	# Store lunge so _update_proc_anim can apply the position offset
+	# alongside its mesh.position bookkeeping. (Set on self so the
+	# function can read it without another out-parameter.)
+	_punch_lunge_now = punch_lunge
 	# Procedural animation — mesh bob/sway + Skeleton3D bone overrides
 	var is_moving: bool = dir.length() > 0.0001
 	var is_sprint: bool = Input.is_action_pressed("sprint")
@@ -537,10 +556,14 @@ func _update_proc_anim(delta: float, is_moving: bool,
 	var rec_k: float = clamp(recoil_t / 0.20, 0.0, 1.0)
 	var fwd: Vector3 = mesh.basis * Vector3(0, 0, 1)
 	var recoil_off: Vector3 = -fwd * (0.55 * rec_k)
-	# Smash dip — when smashing, Reaper drops down and forward.
+	# Smash dip — Reaper drops down + slightly forward on RMB.
 	var smash_drop: float = -0.4 * smash_anim_t
+	# Punch LUNGE — translate forward during strike phase so the body
+	# shoots into the punch (set by _physics_process this frame).
+	# fwd is mesh's +Z (back of the model); forward is -fwd.
+	var lunge_off: Vector3 = -fwd * _punch_lunge_now
 	mesh.position = _mesh_base_pos + Vector3(sway, bob + smash_drop, 0) \
-		+ recoil_off
+		+ recoil_off + lunge_off
 	# Debug ping every ~1s so we can verify the function is running.
 	_debug_t += delta
 	if _debug_t > 1.0:
@@ -590,9 +613,23 @@ func _drive_arm(bone: int, punch_t: float, walk_swing: float,
 	if bone == -1:
 		return
 	if punch_t > 0.0:
-		var p: float = sin(punch_t * PI) * (PI * 0.65)
+		# 3-phase punch on the bicep — synced to the body wind-up.
+		# inv: 0 = just triggered, 1 = done.
+		var inv: float = 1.0 - punch_t
+		var arm_x: float = 0.0
+		if inv < 0.30:
+			# wind-up: pull bicep back (positive X = back)
+			arm_x = lerp(0.0, 0.55, inv / 0.30)
+		elif inv < 0.55:
+			# STRIKE: extend bicep forward HARD (large negative X)
+			arm_x = lerp(0.55, -PI * 0.95, (inv - 0.30) / 0.25)
+		else:
+			# recover back to rest swing pose
+			arm_x = lerp(-PI * 0.95, 0.0, (inv - 0.55) / 0.45)
+		# Reduce the rest-Z bias during the strike so the arm comes
+		# out straight rather than diagonal across the body.
 		_skel.set_bone_pose_rotation(bone,
-			Quaternion.from_euler(Vector3(-p, 0, arm_z_rest * 0.55)))
+			Quaternion.from_euler(Vector3(arm_x, 0, arm_z_rest * 0.30)))
 	else:
 		_skel.set_bone_pose_rotation(bone,
 			Quaternion.from_euler(Vector3(walk_swing, 0, arm_z_rest)))
