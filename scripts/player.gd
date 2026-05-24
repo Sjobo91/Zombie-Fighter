@@ -517,7 +517,10 @@ func _punch() -> void:
 				var p: Node = n.get_parent()
 				if p.has_method("take_damage"):
 					p.take_damage(dmg, global_position)
-		_spawn_punch_burst(end_point, 0.55, 0.18)        # impact spark
+		# Small explosion on impact — flash + shockwave ring + sparks
+		_spawn_explosion(end_point, 0.90,
+			Color(1.0, 0.85, 0.40, 0.85),
+			Color(1.0, 0.65, 0.20, 1))
 	# Fat white-yellow tracer streak — bigger so it actually reads
 	_spawn_tracer(muzzle, end_point, 0.20, 0.18,
 		Color(1.0, 0.95, 0.55, 1), Color(1.0, 0.80, 0.20, 1))
@@ -607,8 +610,10 @@ func _fire_gun() -> void:
 				.distance_to(end_point)
 			if d <= gun_splash_radius and z.has_method("take_damage"):
 				z.take_damage(splash_dmg, global_position)
-		# Big orange explosion at the impact
-		_spawn_punch_burst(end_point, gun_splash_radius * 0.9, 0.45)
+		# BIG orange explosion at the impact — flash, shockwave, sparks
+		_spawn_explosion(end_point, gun_splash_radius * 1.1,
+			Color(1.0, 0.50, 0.10, 0.92),
+			Color(1.0, 0.30, 0.05, 1))
 	# Big fat ORANGE tracer beam — heavy cannon round
 	_spawn_tracer(muzzle, end_point, 0.30, 0.40,
 		Color(1.0, 0.55, 0.15, 1), Color(1.0, 0.40, 0.08, 1))
@@ -623,6 +628,47 @@ func _fire_gun() -> void:
 		_anim_player.play(_clip_shoot, -1, 1.0)
 		_current_anim = _clip_shoot
 		_anim_play_t = 0.50
+
+# Bullet impact explosion — flash + expanding shockwave ring + scatter
+# sparks. Used for both gun impacts (LMB small radius, RMB big radius).
+func _spawn_explosion(pos: Vector3, radius: float,
+		color_albedo: Color = Color(1.0, 0.55, 0.15, 0.85),
+		color_emit: Color = Color(1.0, 0.40, 0.08, 1)) -> void:
+	# Central bright flash
+	_spawn_punch_burst(pos, radius * 0.55, 0.10)
+	# Expanding shockwave ring
+	var mi := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = radius * 0.65
+	tm.outer_radius = radius * 0.90
+	tm.ring_segments = 24
+	tm.rings = 8
+	mi.mesh = tm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = color_albedo
+	mat.emission_enabled = true
+	mat.emission = color_emit
+	mat.emission_energy_multiplier = 5.0
+	mi.material_override = mat
+	get_tree().current_scene.add_child(mi)
+	mi.global_position = pos
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(mi, "scale", Vector3(1.6, 0.4, 1.6), 0.35) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(mi, "modulate:a", 0.0, 0.35)
+	tween.chain().tween_callback(func ():
+		if is_instance_valid(mi):
+			mi.queue_free())
+	# Scatter sparks — small bursts radiating outward
+	var sparks: int = max(3, int(radius * 4))
+	for i in range(sparks):
+		var ang: float = randf() * TAU
+		var d: float = randf() * radius * 0.7
+		var sp_pos: Vector3 = pos + Vector3(cos(ang) * d,
+			randf() * radius * 0.4, sin(ang) * d)
+		_spawn_punch_burst(sp_pos, radius * 0.18, 0.22)
 
 # Glowing cylinder from muzzle to hit point — the bullet streak.
 # radius and color let LMB (small, white-yellow) differ from RMB
