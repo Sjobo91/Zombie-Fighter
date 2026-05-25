@@ -122,6 +122,43 @@
     letter-spacing: 1px; }
   #stats .pt { color: #e3bd57; }
 
+  /* ---- per-class HUD widget — slots just below the stats line ---- */
+  #classHud { margin-top: 8px; min-height: 18px; font-size: 11px;
+    letter-spacing: 2px; color: #b3a98f; font-weight: 800; }
+  #classHud .chLabel { color: #7d7668; margin-right: 8px; font-size: 9px;
+    letter-spacing: 3px; vertical-align: middle; }
+  /* Hunter draw bar */
+  #chDrawWrap { display: inline-block; width: 200px; height: 12px;
+    background: #160e08; border: 1px solid #3a2c1c; border-radius: 3px;
+    overflow: hidden; vertical-align: middle; }
+  #chDrawFill { height: 100%; width: 0%;
+    background: linear-gradient(90deg, #4a3a18, #d4a050, #ffe080);
+    transition: width .04s linear; }
+  #chDrawWrap.full { box-shadow: 0 0 10px rgba(255,224,128,.7);
+    border-color: #ffe080; }
+  /* Gunslinger ammo dots */
+  #chAmmo { display: inline-block; vertical-align: middle; }
+  #chAmmo .bullet { display: inline-block; width: 10px; height: 16px;
+    margin: 0 2px; background: #c9a23a; border: 1px solid #6a5020;
+    border-radius: 3px 3px 1px 1px; vertical-align: middle;
+    box-shadow: 0 0 6px rgba(216,150,30,.55); }
+  #chAmmo .bullet.empty { background: #2a2018; border-color: #1a1410;
+    box-shadow: none; }
+  #chAmmo .bullet.reloading { background: #5a4220; animation: bulletReload
+    .8s ease-in-out infinite; }
+  @keyframes bulletReload { 50% { background: #c9a23a; } }
+  /* Rogue strike pips — fourth one glows when next hit = guaranteed crit */
+  #chPips { display: inline-block; vertical-align: middle; }
+  #chPips .pip { display: inline-block; width: 11px; height: 11px;
+    margin: 0 2px; background: #2a2018; border: 1px solid #4a3a30;
+    border-radius: 50%; vertical-align: middle; }
+  #chPips .pip.hit { background: #c850a8;
+    box-shadow: 0 0 8px rgba(200,80,160,.7); }
+  #chPips .pip.next { background: #ffd23a; border-color: #ffd23a;
+    box-shadow: 0 0 14px rgba(255,210,60,.95);
+    animation: pipReady .65s ease-in-out infinite; }
+  @keyframes pipReady { 50% { transform: scale(1.25); } }
+
   #xpbar { position: absolute; left: 0; right: 0; bottom: 0; height: 7px;
     background: rgba(0,0,0,.7); }
   #xpfill { height: 100%; width: 0%;
@@ -349,6 +386,28 @@
     border: 1px solid #b070d0; border-radius: 10px; color: #e7b8ff;
     letter-spacing: 2px; }
 
+  /* ---- onboarding tutorial card (first-time players only) ---- */
+  #tutorialCard { width: 460px; max-width: 92vw; margin: 22px auto 0;
+    padding: 18px 22px 16px;
+    background: linear-gradient(180deg, #1a1626 0%, #110e18 60%, #0b0910 100%);
+    border: 1px solid #caa24a; border-radius: 12px;
+    box-shadow: 0 12px 36px rgba(0,0,0,.7),
+                0 0 32px rgba(216,150,30,.22);
+    text-align: center; pointer-events: auto; }
+  #tutorialCard.hidden { display: none; }
+  #tutorialCard .tcTitle { font-size: 13px; letter-spacing: 5px;
+    color: #f0cf72; font-weight: 800; margin-bottom: 12px;
+    text-shadow: 0 0 14px rgba(216,150,30,.5); }
+  #tutorialCard .tcBody { font-size: 12px; color: #b3a98f; line-height: 1.7;
+    text-align: left; margin-bottom: 14px; }
+  #tutorialCard .tcRow { padding: 4px 0; }
+  #tutorialCard .tcRow b { color: #e8ddc6; }
+  #tutorialCard .tcRed { color: #ff8a7a; }
+  #tutorialCard .tcRed b { color: #ff6a4a; }
+  #tutorialCard #tcDismiss { min-width: 0; padding: 9px 22px; font-size: 12px; }
+  body.touch #tutorialCard { width: 88vw; padding: 12px 14px; margin-top: 12px; }
+  body.touch #tutorialCard .tcBody { font-size: 10px; line-height: 1.55; }
+
   /* ---- soul forge screen ---- */
   #forgeScreen { z-index: 13; }
   .forgePanel { width: 720px; max-width: 92vw; }
@@ -381,8 +440,12 @@
     justify-content: space-between; }
   .forgeRow .frName { font-size: 14px; font-weight: 800; color: #e8ddc6;
     letter-spacing: 2px; }
+  .forgeRow .frName .frGlyph { display: inline-block; margin-right: 6px;
+    font-size: 18px; vertical-align: middle;
+    text-shadow: 0 0 10px currentColor; }
   .forgeRow .frRank { font-size: 11px; letter-spacing: 2px;
     color: #b070d0; font-weight: 800; }
+  .forgeRow.max .frRank { color: #f0cf72; }
   .forgeRow .frDesc { font-size: 12px; color: #9a937f; line-height: 1.35; }
   .forgeRow .frBuy { margin-top: 4px; padding: 7px 14px; font-size: 11px;
     font-weight: 800; letter-spacing: 2px; color: #e7b8ff;
@@ -787,6 +850,7 @@
     <div id="ragebar"><div id="ragefill"></div>
       <div id="ragetext">RAGE 0 / 100</div></div>
     <div id="stats">PWR 0 &nbsp; DEF 0 &nbsp; SPD 0</div>
+    <div id="classHud"></div>
   </div>
 
   <div id="hint"></div>
@@ -846,6 +910,19 @@
       <button id="btnNew" class="tbtn-menu">NEW GAME</button>
       <button id="btnForge" class="tbtn-menu">SOUL FORGE
         <span class="shardCount" id="titleShards">0</span></button>
+    </div>
+    <div id="tutorialCard" class="hidden">
+      <div class="tcTitle">HOW TO SURVIVE</div>
+      <div class="tcBody">
+        <div class="tcRow"><b>WASD</b> to run · <b>MOUSE</b> to look</div>
+        <div class="tcRow"><b>LMB</b> attack · <b>RMB</b> heavy skill ·
+          <b>SPACE</b> dash · <b>Q</b> ultimate</div>
+        <div class="tcRow"><b>SOUL SHARDS</b> drop from kills and waves.
+          Spend them at the <b>SOUL FORGE</b> between waves</div>
+        <div class="tcRow tcRed"><b>DEATH WIPES EVERYTHING.</b>
+          Gear, abilities, shards — all gone. Each run is its own life</div>
+      </div>
+      <button id="tcDismiss" class="tbtn-menu">GOT IT</button>
     </div>
   </div>
 
@@ -9338,9 +9415,13 @@ function startWave(n) {
   let count;
   // wave 1 is a softer opener now (was 78 → too many at once). It still
   // grows fast, so by wave 3-4 you're swarmed.
-  if (n === 1) count = 32;
-  else count = Math.round(waveCountPrev * 1.22) + 12;
-  count = Math.round(count * (1 + (level - 1) * 0.4));
+  // wave 1 is a real onboarding wave — fewer enemies so the player can
+  // learn the controls and find the Forge without instantly dying.
+  if (n === 1) count = 22;
+  else count = Math.round(waveCountPrev * 1.18) + 10;
+  // stage multiplier softer — was 0.4, now 0.28 per stage so stage 3+
+  // doesn't suddenly spawn 4× the horde on every wave
+  count = Math.round(count * (1 + (level - 1) * 0.28));
   waveCountPrev = count;
   // THE ABYSS (level >= 10) — every roll unlocks every type; rare zombies
   // become common, and the brute/giant/necro thresholds drop. The wave count
@@ -9461,10 +9542,13 @@ function spawnZombieAt(type, x, z, rare) {
     mound.receiveShadow = true;
     scene.add(mound);
   }
+  // wave HP curve — bosses ramp slower because they already start huge.
+  // level multiplier softened from 0.55 → 0.35 per stage so deep runs
+  // stay possible with a fresh-loadout post-death player.
   const hpScale = type === "boss"
-    ? 1 + Math.max(0, wave - 5) * 0.3
-    : 1 + (wave - 1) * 0.20;
-  const levelMul = 1 + (level - 1) * 0.55;
+    ? 1 + Math.max(0, wave - 5) * 0.25
+    : 1 + (wave - 1) * 0.18;
+  const levelMul = 1 + (level - 1) * 0.35;
   const hp = d.hp * hpScale * levelMul;
   const crawler = !!obj.userData.crawler;
   const z_rec = {
@@ -9958,6 +10042,7 @@ const UI = {
   lowhp: document.getElementById("lowhp"),
   hitDir: document.getElementById("hitDir"),
   perfHUD: document.getElementById("perfHUD"),
+  classHud: document.getElementById("classHud"),
 };
 const miniCtx = UI.minimap.getContext("2d");
 
@@ -10291,14 +10376,29 @@ const Meta = (() => {
   // run rewards — kept for the death-screen summary. Returns the amount
   // that was on the line (and now wiped) so the death screen can show it.
   function awardForRun() { return 0; }
-  // Player died — all banked shards are LOST. Gear, abilities, and stat
-  // ranks stay (those are real progression); shards are the "wager" the
-  // run was played for. Returns the amount wiped for the death screen.
+  // Player died — EVERYTHING goes. Pure roguelike: each run starts fresh,
+  // no permanent meta-progression sticks. Returns a summary of what burned
+  // so the death screen can display it. Total lifetime stats stay (just
+  // bookkeeping, not gameplay), and the current loadout / Forge state are
+  // wiped to zero.
   function loseAllShardsOnDeath() {
-    const lost = state.shards | 0;
+    const summary = {
+      shards: state.shards | 0,
+      weapon: state.gear ? (state.gear.weapon | 0) : 0,
+      armor:  state.gear ? (state.gear.armor  | 0) : 0,
+      abilities: Array.isArray(state.abilOwned) ? state.abilOwned.length : 0,
+      statRanks: 0,
+    };
+    for (const u of META_UPGRADES)
+      summary.statRanks += (state.upgrades[u.id] || 0);
+    // wipe — but keep totalEarned/totalSpent as lifetime stats
     state.shards = 0;
+    state.gear = { weapon: 0, armor: 0 };
+    state.abilOwned = [];
+    state.upgrades = {};
+    for (const u of META_UPGRADES) state.upgrades[u.id] = 0;
     persistNow();
-    return lost;
+    return summary;
   }
   // called by startGame() on a non-resume run — bakes purchased gear,
   // abilities, and stat ranks into the fresh player so the choices the
@@ -10723,6 +10823,51 @@ function currentDistrict(x, z) {
   if (z > 42 && Math.abs(x) < 104) return "THE MARKET";
   return "MORTIMER'S PLAZA";
 }
+// per-class HUD widget — populates the #classHud div based on the active
+// hero. Cheap string-build per frame; only re-renders when state changes.
+let _classHudCache = "";
+function updateClassHud() {
+  const cls = player.cls || "knight";
+  let html = "";
+  if (cls === "hunter") {
+    const k = player.drawing
+      ? clamp(player.drawT / (player.drawMax || 1.5), 0, 1) : 0;
+    const full = k >= 0.99 ? " full" : "";
+    html = '<span class="chLabel">DRAW</span>' +
+      '<span id="chDrawWrap" class="' + (full ? "full" : "") + '">' +
+      '<span id="chDrawFill" style="width:' + (k * 100) + '%"></span></span>';
+  } else if (cls === "gunslinger") {
+    const ammo = player.ammo | 0;
+    const reloading = (player.reloadT || 0) > 0;
+    let dots = "";
+    for (let i = 0; i < 6; i++) {
+      const cls2 = (i < ammo) ? "" : (reloading ? "reloading" : "empty");
+      dots += '<span class="bullet ' + cls2 + '"></span>';
+    }
+    html = '<span class="chLabel">AMMO</span>' +
+      '<span id="chAmmo">' + dots + '</span>' +
+      (reloading
+        ? ' <span style="color:#d4a050;font-size:10px">RELOADING</span>'
+        : "");
+  } else if (cls === "rogue") {
+    const hc = (player.hitCount || 0) % 4;     // 0..3, next-crit at 3 → 4th
+    let pips = "";
+    for (let i = 0; i < 4; i++) {
+      const isHit = i < hc;
+      const isNext = i === hc && hc === 3;
+      pips += '<span class="pip ' +
+        (isNext ? "next" : isHit ? "hit" : "") + '"></span>';
+    }
+    html = '<span class="chLabel">STRIKE</span>' +
+      '<span id="chPips">' + pips + '</span>';
+  }
+  // skip the DOM write when nothing actually changed — saves repaints
+  if (html !== _classHudCache) {
+    UI.classHud.innerHTML = html;
+    _classHudCache = html;
+  }
+}
+
 function updateHUD() {
   UI.lvl.textContent = "LEVEL " + player.level;
   UI.district.textContent = currentDistrict(player.x, player.z);
@@ -10751,6 +10896,8 @@ function updateHUD() {
     (player.statPoints > 0 ?
       '  ·  <span class="pt">' + player.statPoints +
       ' PTS</span>' : "");
+  // ── per-class widget — Hunter draw bar / Gunslinger ammo / Rogue pips ──
+  if (UI.classHud) updateClassHud();
   UI.xpfill.style.width = clamp(player.xp / player.xpNext, 0, 1) * 100 + "%";
   function cdb(bar, num, cd, max) {
     bar.style.top = (cd > 0 ? (1 - cd / max) * 100 : 100) + "%";
@@ -11478,20 +11625,36 @@ function gameOver() {
   Sound.death && Sound.death();
   // the run is over — wipe the autosave so the title screen offers a fresh start
   SaveLoad.clear();
-  // DEATH WIPES YOUR BANK — every Soul Shard you were carrying is lost.
-  // Forge purchases (weapons, armour, abilities, stat ranks) stay forever;
-  // only the un-spent shards burn with you. The deeper you push, the
-  // bigger the wager.
-  const lost = Meta.loseAllShardsOnDeath ? Meta.loseAllShardsOnDeath() : 0;
+  // DEATH WIPES EVERYTHING — shards, gear tiers, abilities, stat ranks.
+  // Pure roguelike: every run starts from scratch. The deeper you got,
+  // the more there was to lose.
+  const sum = Meta.loseAllShardsOnDeath
+    ? Meta.loseAllShardsOnDeath()
+    : { shards: 0, weapon: 0, armor: 0, abilities: 0, statRanks: 0 };
+  const totalLost = sum.shards + sum.weapon + sum.armor +
+    sum.abilities + sum.statRanks;
   Ambience.stop(); Music.stop();
+  let lostHtml;
+  if (totalLost === 0) {
+    lostHtml = '<br><span style="color:#7d7668">' +
+      'Nothing to lose. Begin again.</span>';
+  } else {
+    const bits = [];
+    if (sum.shards    > 0) bits.push(sum.shards    + " shards");
+    if (sum.weapon    > 0) bits.push("weapon T" + sum.weapon);
+    if (sum.armor     > 0) bits.push("armour T" + sum.armor);
+    if (sum.abilities > 0) bits.push(sum.abilities + " abilities");
+    if (sum.statRanks > 0) bits.push(sum.statRanks + " stat ranks");
+    lostHtml = '<br><span style="color:#ff6a4a;font-weight:800">' +
+      'BURNED: ' + bits.join(" · ") + '</span>' +
+      '<br><span style="color:#7d7668;font-size:11px">' +
+      'Every run starts from nothing.</span>';
+  }
   UI.overStats.innerHTML = "WAVE " + wave + "  &middot;  LEVEL " +
     player.level + "  &middot;  STAGE " + level + "<br>" +
     kills + " ENEMIES SLAIN  &middot;  " +
     Math.round(totalDmg).toLocaleString() + " TOTAL DAMAGE DEALT" +
-    (lost > 0
-      ? '<br><span style="color:#ff6a4a;font-weight:800">' + lost +
-        ' SOUL SHARDS LOST</span> &mdash; only what you spent stays'
-      : '<br><span style="color:#7d7668">No shards to lose this time.</span>');
+    lostHtml;
   UI.overAgain.style.visibility = "hidden";
   UI.over.classList.remove("hidden");
   crosshairEl.style.display = "none";
@@ -11507,8 +11670,29 @@ function refreshTitleMenu() {
     UI.btnContinue.classList.toggle("disabled", !has);
     UI.btnContinue.textContent = has ? "CONTINUE RUN" : "NO SAVED RUN";
   }
+  // first-time onboarding card — show it once, dismiss persists forever
+  const tc = document.getElementById("tutorialCard");
+  if (tc) {
+    let seen = false;
+    try { seen = localStorage.getItem("mortimer_seen_tutorial") === "1"; }
+    catch (e) { /* ignore */ }
+    tc.classList.toggle("hidden", seen);
+  }
 }
 refreshTitleMenu();
+// dismiss handler — only needs to attach once
+(function () {
+  const dismiss = document.getElementById("tcDismiss");
+  if (!dismiss) return;
+  dismiss.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    Sound.uiClick && Sound.uiClick();
+    try { localStorage.setItem("mortimer_seen_tutorial", "1"); }
+    catch (e) { /* ignore */ }
+    const tc = document.getElementById("tutorialCard");
+    if (tc) tc.classList.add("hidden");
+  });
+})();
 function primeAudio() { Sound.actx(); Audio_.apply(); Music.start(); }
 if (UI.btnContinue) {
   UI.btnContinue.addEventListener("mouseenter", () => Sound.uiTick && Sound.uiTick());
@@ -11677,7 +11861,8 @@ function renderForge() {
         desc = ABILITY_NAMES[ab.id][cls].d;
       }
       abilRows.push(makeForgeRow({
-        name: ab.glyph + "  " + name,
+        name: '<span class="frGlyph" style="color:' + ab.hex + '">' +
+          ab.glyph + '</span>' + name,
         desc: desc,
         owned: Meta.ownsAbility(ab.id),
         cost: cost,
@@ -12502,6 +12687,13 @@ function poseZombie(z, d, chillMul) {
   if (z.frozen) { er = 0; eg = 0.25; eb = 0.5; }
   else if (z.chill > 0) { eb = Math.max(eb, 0.22); }
   if (z.burn > 0) { er = Math.max(er, 0.35); eg = Math.max(eg, 0.12); }
+  // HUNTER'S MARK — pulsing green glow on marked targets so the player
+  // sees which zombies will take bonus damage on the next arrow
+  if (player && player.cls === "hunter" && player.markedZombies &&
+      player.markedZombies.has(z)) {
+    const pulse = 0.4 + Math.abs(Math.sin(z.t * 4)) * 0.3;
+    eg = Math.max(eg, pulse);
+  }
   for (const m of u.mats) m.emissive.setRGB(er, eg, eb);
   if (z.hp < z.maxHp) {
     u.hp.visible = true;
