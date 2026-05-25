@@ -1715,6 +1715,12 @@ function groundHeight(x, z) {
   const shore = clamp((z - 95) / 150, 0, 1);
   return h * (1 - shore) - shore * shore * 5.5;
 }
+// Unified "town deck" height. Roads, block slabs and town building bases
+// all sit at exactly this Y so the seams between them are invisible.
+// Town terrain is flattened to within ~±1.4 units of 0; the deck height
+// just needs to clear the noise crests with a little margin. Anything
+// outside the town (church/mall/beach) still uses groundHeight() per-prop.
+const TOWN_TOP_Y = 0.4;
 // terrain mesh — denser tessellation means the rendered surface tracks
 // the noise formula more accurately, so feet stop sinking into the
 // ground in concave spots. 320×320 vertices ≈ 1.8yd per cell.
@@ -1768,6 +1774,32 @@ function addWalkSlab(cx, cz, hw, hd, topY) {
     if (z < cz - hd || z > cz + hd) return null;
     return topY;
   });
+}
+/* groundLift(x, z, r): max terrain height inside the prop's footprint.
+   Single-sample groundHeight used to leave wide props (gravestones,
+   debris, statues) half-sunk on rolling ground; this samples 5 points
+   so the prop sits on the HIGHEST corner of its footprint instead. */
+function groundLift(x, z, r) {
+  r = r || 1.2;
+  let h = groundHeight(x, z);
+  let h2 = groundHeight(x + r, z); if (h2 > h) h = h2;
+  h2     = groundHeight(x - r, z); if (h2 > h) h = h2;
+  h2     = groundHeight(x, z + r); if (h2 > h) h = h2;
+  h2     = groundHeight(x, z - r); if (h2 > h) h = h2;
+  return h;
+}
+/* tiltToSlope(g, x, z, r): rotate a prop group so its local Y axis
+   matches the terrain normal. Clamped to ~±12° so it reads as
+   "weathered + placed on a slope" rather than flopping over.
+   Auto-skips when the prop is on a flat slab (town deck, bridge etc.)
+   because tilting to phantom terrain underneath the slab looks wrong. */
+function tiltToSlope(g, x, z, r) {
+  if (walkHeight(x, z) > groundHeight(x, z) + 0.05) return;
+  r = r || 1.5;
+  const dHx = (groundHeight(x + r, z) - groundHeight(x - r, z)) / (2 * r);
+  const dHz = (groundHeight(x, z + r) - groundHeight(x, z - r)) / (2 * r);
+  g.rotation.x = clamp(dHz, -0.21, 0.21);
+  g.rotation.z = clamp(-dHx, -0.21, 0.21);
 }
 function addHill(hx, hz, r, hh) {
   const sm = (d) => { const k = 1 - d / r; return k * k * (3 - 2 * k); };
@@ -2074,7 +2106,7 @@ function lineBlocked(x1, z1, x2, z2) {
 /* ─── arena: an irregular ruined graveyard, not a bare square ─────────────── */
 const braziers = [];
 function addBrazier(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z);
   const iron = mat(0x1a1a1e, 1);
   const post = new THREE.Mesh(
@@ -2096,7 +2128,17 @@ function addBrazier(x, z) {
   colliders.push({ x, z, r: 0.6 });
 }
 function addProp(kind, x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  // wide foundation props (grave / cross / wallchunk / debris / pillar /
+  // statue / rock) get the MAX terrain height in their footprint so the
+  // base never half-sinks into a dip. Narrow props (tree, hydrant) use
+  // walkHeight as before.
+  const wideFooted = (kind === "grave" || kind === "cross" ||
+    kind === "wallchunk" || kind === "debris" || kind === "pillar" ||
+    kind === "statue" || kind === "rock");
+  const y = wideFooted
+    ? Math.max(walkHeight(x, z), groundLift(x, z, 1.6))
+    : walkHeight(x, z);
+  const g = new THREE.Group();
   g.position.set(x, y, z);
   g.rotation.y = rand(0, TAU);
   const stone = () => mat(0x3a3a42, 1);
@@ -2105,7 +2147,10 @@ function addProp(kind, x, z) {
     m.position.y = 1.5; m.rotation.z = rand(-0.18, 0.18);
     m.castShadow = m.receiveShadow = true; g.add(m);
     colliders.push({ x, z, r: 1.15 });
+    tiltToSlope(g, x, z, 1.2);
   } else if (kind === "cross") {
+    // crosses use their existing random z-tilt for "decay" lean, so
+    // skip the slope-tilt helper (it'd overwrite the decay tilt)
     const v = new THREE.Mesh(new THREE.BoxGeometry(0.46, 3.8, 0.46), stone());
     v.position.y = 1.9;
     const h = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.48, 0.46), stone());
@@ -2137,6 +2182,7 @@ function addProp(kind, x, z) {
     base.castShadow = body.castShadow = head.castShadow = true;
     g.add(base, body, head);
     colliders.push({ x, z, r: 1.5, wall: true });
+    tiltToSlope(g, x, z, 1.6);
   } else if (kind === "rock") {
     for (let i = 0; i < 4; i++) {
       const r = new THREE.Mesh(
@@ -2146,6 +2192,7 @@ function addProp(kind, x, z) {
       r.castShadow = r.receiveShadow = true; g.add(r);
     }
     colliders.push({ x, z, r: 2.0, wall: true });
+    tiltToSlope(g, x, z, 1.8);
   } else if (kind === "pillar") {
     const h = rand(6, 11);
     const col = new THREE.Mesh(
@@ -2155,6 +2202,8 @@ function addProp(kind, x, z) {
     const cap = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.7, 2.3), stone());
     cap.position.y = h; cap.castShadow = true; g.add(cap);
     colliders.push({ x, z, r: 1.15, wall: true });
+    // pillars are tall — half the normal tilt so they don't lean far
+    tiltToSlope(g, x, z, 1.4); g.rotation.x *= 0.5; g.rotation.z *= 0.5;
   } else if (kind === "wallchunk") {
     const w = rand(5, 9), h = rand(3.5, 6.5);
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 1.7),
@@ -2163,6 +2212,7 @@ function addProp(kind, x, z) {
     const ang = g.rotation.y;
     colliders.push({ x, z, hw: Math.abs(Math.cos(ang)) * w / 2 + 0.8,
       hd: Math.abs(Math.sin(ang)) * w / 2 + 0.8, box: true, wall: true });
+    tiltToSlope(g, x, z, 2.4);
   } else if (kind === "car") {
     const rusted = mat(pick([0x6e3a2a, 0x4a4e44, 0x70582e, 0x39434e,
       0x5a3640]), 0.78);
@@ -2278,7 +2328,7 @@ function addProp(kind, x, z) {
   scene.add(g);
 }
 function addMausoleum(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z);
   const wall = mat(0x2a2a32, 1), roof = mat(0x1c1c22, 1);
   const body = new THREE.Mesh(new THREE.BoxGeometry(13, 9, 11), wall);
@@ -2308,7 +2358,7 @@ function addRoad(x1, z1, x2, z2, w) {
   }
 }
 function addBush(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const y = walkHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
   const m = mat(pick([0x1c2814, 0x222c16, 0x18240f]), 1);
   for (let i = 0; i < 3; i++) {
     const b = new THREE.Mesh(
@@ -2319,7 +2369,7 @@ function addBush(x, z) {
   scene.add(g);
 }
 function addLamp(x, z, lit) {
-  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const y = walkHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
   const iron = mat(0x1a1a1e, 1);
   const post = new THREE.Mesh(
     new THREE.CylinderGeometry(0.16, 0.26, 5.6, 6), iron);
@@ -2363,7 +2413,7 @@ function boxCollider(x, z, w, dp, rot) {
 }
 /* ─── interactive props — explosive barrels & breakable crates ────────────── */
 function addBarrel(x, z, explosive) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rand(0, TAU);
   const shell = metalMat(explosive ? 0xb53a1c
     : pick([0x3a4a3a, 0x4a3a2a, 0x39414a]), 0.35);
@@ -2393,7 +2443,7 @@ function addBarrel(x, z, explosive) {
     fuse: 0, dead: false });
 }
 function addCrate(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rand(0, TAU);
   const s = rand(1.7, 2.3);
   const wood = mat(pick([0x6a4e2e, 0x5a4226, 0x6e5436]), 0.95);
@@ -2418,7 +2468,7 @@ function addCrate(x, z) {
    zombies into them, but stepping in costs HP too. No collider so feet
    can walk through. */
 function addTarPit(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z);
   const r = rand(3.6, 5.2);
   // dark pool plane on the ground (rotated to lie flat)
@@ -2451,7 +2501,7 @@ function addTarPit(x, z) {
    spikes burst up and skewer everything in range. Resets after a cooldown
    so the same trap can fire repeatedly during a wave. */
 function addSpikeTrap(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z);
   const r = 2.4;
   // floor plate — a dark metal disc flush with the ground
@@ -2486,7 +2536,7 @@ function addSpikeTrap(x, z) {
     popT: 0 });     // 0 = down, >0 = spikes are up
 }
 function addHouse(x, z, rot) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rot;
   const w = rand(7, 10), dp = rand(7, 10), wh = rand(4.6, 6.4);
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
@@ -2514,7 +2564,7 @@ function addHouse(x, z, rot) {
   boxCollider(x, z, w, dp, rot);
 }
 function addShop(x, z, rot) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rot;
   const w = rand(8, 11), dp = rand(7, 9), wh = rand(4.6, 5.6);
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
@@ -2541,7 +2591,7 @@ function addShop(x, z, rot) {
   boxCollider(x, z, w, dp, rot);
 }
 function addChurch(x, z, big) {
-  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const y = walkHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
   const stone = mat(big ? 0x4a4650 : 0x46443e, 1);
   const w = big ? 16 : 9, dp = big ? 26 : 14, wh = big ? 13 : 8;
   const nave = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp), stone);
@@ -2580,7 +2630,7 @@ function addChurch(x, z, big) {
   colliders.push({ x, z: z + dp / 2 + w * 0.2, r: w * 0.34, wall: true });
 }
 function addMarketHall(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const y = walkHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
   const w = 34, dp = 20, wh = 9;
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
     mat(0x564e44, 1));
@@ -2612,7 +2662,7 @@ function addMarketHall(x, z) {
     wall: true });
 }
 function addStall(x, z, rot) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rot;
   const wood = mat(0x4a3722, 1);
   const table = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.3, 2.0), wood);
@@ -2639,7 +2689,7 @@ function addStall(x, z, rot) {
   colliders.push({ x, z, r: 2.3 });
 }
 function addBeachHut(x, z, rot) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rot;
   const w = rand(5, 7), dp = rand(5, 7), wh = rand(3.2, 4.2);
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
@@ -2680,7 +2730,7 @@ function addPier(x, zStart) {
   glowSprite(x, 2.9, zStart + len - 4, 5, 0xffc24a, 0.55);
 }
 function addFountain(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const y = walkHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
   const stone = mat(0x5a5650, 1);
   const basin = new THREE.Mesh(
     new THREE.CylinderGeometry(3.4, 3.8, 1.3, 16), stone);
@@ -2732,7 +2782,7 @@ function addLaneMarks(x1, z1, x2, z2) {
   }
 }
 function addBench(x, z, rot) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rot;
   const wood = mat(pick([0x5a4226, 0x4a3a26, 0x614a2e]), 0.95);
   const seat = new THREE.Mesh(new THREE.BoxGeometry(4, 0.3, 1.2), wood);
@@ -2749,7 +2799,7 @@ function addBench(x, z, rot) {
   colliders.push({ x, z, r: 1.7 });
 }
 function addGazebo(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const y = walkHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
   const wood = mat(0x6a5436, 0.95);
   const floor = new THREE.Mesh(
     new THREE.CylinderGeometry(5.5, 5.8, 0.6, 8), wood);
@@ -2768,7 +2818,7 @@ function addGazebo(x, z) {
   colliders.push({ x, z, r: 4.8 });
 }
 function addPlayground(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const y = walkHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
   const frame = metalMat(0xc24a3a, 0.4);
   for (const sx of [-3, 3]) for (const dz of [-1.4, 1.4]) {
     const leg = new THREE.Mesh(
@@ -2822,7 +2872,7 @@ function addRails(x1, z1, x2, z2) {
   }
 }
 function addTrainCar(x, z, rot, loco) {
-  const y = groundHeight(x, z), g = new THREE.Group();
+  const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rot;
   const body = new THREE.Mesh(new THREE.BoxGeometry(7.4, 6, 17),
     metalMat(loco ? 0x7a2c26 : pick([0x2a4a6a, 0x3a5a44, 0x6a6258]), 0.45));
@@ -2857,7 +2907,7 @@ function addTrainCar(x, z, rot, loco) {
     hd: (s * 7.4 + c * 17) / 2 + 0.5, box: true, wall: true });
 }
 function addTrainStation(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const y = walkHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
   const plat = new THREE.Mesh(new THREE.BoxGeometry(46, 1.6, 12),
     mat(0x6a655c, 1));
   plat.position.y = 0.8; plat.receiveShadow = true; g.add(plat);
@@ -2886,7 +2936,7 @@ function addTrainStation(x, z) {
     wall: true });
 }
 function addMall(x, z) {
-  const y = groundHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
+  const y = walkHeight(x, z), g = new THREE.Group(); g.position.set(x, y, z);
   const w = 48, dp = 32, wh = 11;
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, wh, dp),
     mat(0x847e72, 0.9));
@@ -3049,7 +3099,10 @@ function stoneTileTex() {
   return t;
 }
 function addTownBuilding(x, z, w, dp, stories, rot, kind) {
-  const y = groundHeight(x, z) + 0.15, g = new THREE.Group();
+  // Town buildings stand on the unified town deck so their concrete base
+  // is flush with the surrounding slab + road. Outside-town buildings
+  // (church, mall, beach huts) use their own placement helpers.
+  const y = TOWN_TOP_Y + 0.02, g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rot;
   const storyH = 4.3, h = stories * storyH;
   const wallHex = kind === "T" ? pick([0x6e7682, 0x5a626e, 0x76786e])
@@ -3102,22 +3155,25 @@ function buildTown() {
   // top still sits at the right walk-height but the bottom extends
   // well below the terrain — no more "floating" road slabs over the
   // natural terrain dips along their length.
+  // FIX: every town road + block slab now shares TOWN_TOP_Y so the
+  // boundaries between roads and plazas are perfectly flush. Previously
+  // road top was groundHeight(sx,0)+0.28 and block slab top was
+  // groundHeight(cx,cz)+0.37 — different X/Z samples + different offsets
+  // produced visible 0.3-0.8 unit steps where they met.
   const ROAD_H = 5;
   for (const sx of lines) {
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(ROADW, ROAD_H, SPAN * 2 + ROADW), roadMat);
-    const topY = groundHeight(sx, 0) + 0.28;
-    m.position.set(sx, topY - ROAD_H / 2, 0);
+    m.position.set(sx, TOWN_TOP_Y - ROAD_H / 2, 0);
     m.receiveShadow = true; scene.add(m);
-    addWalkSlab(sx, 0, ROADW / 2, SPAN + ROADW / 2, topY);
+    addWalkSlab(sx, 0, ROADW / 2, SPAN + ROADW / 2, TOWN_TOP_Y);
   }
   for (const sz of lines) {
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(SPAN * 2 + ROADW, ROAD_H, ROADW), roadMat);
-    const topY = groundHeight(0, sz) + 0.28;
-    m.position.set(0, topY - ROAD_H / 2, sz);
+    m.position.set(0, TOWN_TOP_Y - ROAD_H / 2, sz);
     m.receiveShadow = true; scene.add(m);
-    addWalkSlab(0, sz, SPAN + ROADW / 2, ROADW / 2, topY);
+    addWalkSlab(0, sz, SPAN + ROADW / 2, ROADW / 2, TOWN_TOP_Y);
   }
   addLaneMarks(0, -SPAN, 0, SPAN);
   addLaneMarks(-SPAN, 0, SPAN, 0);
@@ -3160,10 +3216,9 @@ function buildTown() {
     const cx = BC[cI], cz = BC[r], type = layout[r][cI];
     if (type === "H") { addHill(cx, cz, 25, 9); townGreen(cx, cz, 19);
       continue; }
-    // thick slab (was 0.5; now 6) so the bottom is deep below any
-    // terrain dip nearby — the slab no longer appears to float
+    // unified town deck — same Y as the roads so the seam is invisible
     const SLAB_H = 6;
-    const slabTopY = groundHeight(cx, cz) + 0.37;
+    const slabTopY = TOWN_TOP_Y;
     const slab = new THREE.Mesh(
       new THREE.BoxGeometry(44, SLAB_H, 44), swMat);
     slab.position.set(cx, slabTopY - SLAB_H / 2, cz);
@@ -3411,12 +3466,26 @@ function updatePeople(dt) {
       }
     }
     const sp = p.spd * (p.flee > 0 ? 2.5 : 1);
-    const nx = p.x + Math.sin(p.ang) * sp * dt;
-    const nz = p.z + Math.cos(p.ang) * sp * dt;
-    if (Math.abs(nx) > ARENA - 20 || nz < -ARENA + 20 || nz > ZSHORE - 16
-        || blocked(nx, nz, 1.4)) {
-      p.ang += 2.4; p.retarget = rand(0.6, 1.6);
-    } else { p.x = nx; p.z = nz; }
+    const stepX = Math.sin(p.ang) * sp * dt;
+    const stepZ = Math.cos(p.ang) * sp * dt;
+    const nx = p.x + stepX, nz = p.z + stepZ;
+    // arena-bounds check is hard — flip away if they reach the edge
+    const oob = Math.abs(nx) > ARENA - 20 ||
+      nz < -ARENA + 20 || nz > ZSHORE - 16;
+    if (oob) { p.ang += 2.4; p.retarget = rand(0.6, 1.6); }
+    else if (!blocked(nx, nz, 1.4)) { p.x = nx; p.z = nz; }
+    else {
+      // WALL-SLIDE pathfinding. Old behaviour was a hard 137° rotate
+      // every blocked frame → NPCs got stuck in corners and spun forever.
+      // Try the two axis-separated moves first; if either is clear we
+      // slide along the wall instead of bouncing off it. Only when both
+      // axes are blocked do we pick a new direction.
+      const tryX = !blocked(p.x + stepX, p.z, 1.4);
+      const tryZ = !blocked(p.x, p.z + stepZ, 1.4);
+      if (tryX) p.x += stepX;
+      else if (tryZ) p.z += stepZ;
+      else { p.ang += 2.4; p.retarget = rand(0.6, 1.6); }
+    }
     p.walkP += dt * sp * 1.7;
     p.g.position.set(p.x, walkHeight(p.x, p.z), p.z);
     p.g.rotation.y = p.ang;
