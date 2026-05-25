@@ -9456,31 +9456,15 @@ function killZombie(z) {
   score += Math.round(xp * comboMul);          // combo multiplies the haul
   gainXp(xp);
   const d = ETYPES[z.type], hy = z.y + d.h * 0.5;
-  // PERF: kill VFX is the second-largest particle sink after hitZombie.
-  // Trimmed counts + lowQ branches keep the pool from churning when a
-  // wave dies in quick succession.
-  spawnParts(z.x, hy, z.z, lowQ ? 4 : 10,
-    { color: 0x7c1109, speed: 14, up: 3 });
-  if (!lowQ) {
-    spawnGibs(z.x, hy, z.z, z.type === "giant" ? 8 :
-      (z.type === "brute" || z.rare) ? 5 : 3);
-  }
-  // splatter decal only for elite kills — regulars use the burn-out decal
-  if (z.boss || z.type === "giant" || z.type === "brute" || z.rare) {
-    splat(z.x, z.z,
-      (z.boss ? 5.5 : z.type === "giant" ? 4.0 : 2.6) * (z.sizeMul || 1));
-  }
-  flare(z.x, hy, z.z, 3, 0xff4a2a, 0.25, 0.5);
+  // PER USER REQUEST: NO kill particles. No blood spawn, no gibs, no
+  // splat decal, no flare. The corpse fade-out (z.dieT animation) still
+  // plays, and gameplay effects (sound, shards, XP, necro summon,
+  // boss loot) keep working — just no visual particle storm on kill.
   Sound.die();
   if (z.mound) { scene.remove(z.mound); z.mound = null; }
-  // SOUL REAPER — slain foes erupt, harrowing the dead around them
+  // SOUL REAPER — gameplay-effect kept (the chain damage), but the
+  // purple-burst particle spam is gone with the rest of the kill VFX
   if (hasA("soul")) {
-    spawnParts(z.x, hy, z.z, lowQ ? 12 : 22,
-      { color: 0xc06bff, speed: 19, up: 6, life: 0.85 });
-    for (let i = 0; i < (lowQ ? 2 : 3); i++)
-      flare(z.x + rand(-2, 2), z.y + rand(0.5, d.h), z.z + rand(-2, 2),
-        rand(3.5, 6), 0xc06bff, 0.42);
-    if (!lowQ) flashLight(z.x, z.y + 1.5, z.z, 0.36, 0xc06bff);
     boomRing.setColor(0xc06bff);
     boomRing.show(z.x, z.y + 0.2, z.z, 15, 0.42);
     const sd = (30 + player.level * 3.2) * player.dmgMul;
@@ -9507,13 +9491,10 @@ function killZombie(z) {
     spawnLoot(z.x - 1.4, z.z - 1.4, makeItem(
       Math.random() < 0.5 ? "weapon" : "armor", 3, 4));
   }
-  // NECROMANCER death summon — 3 shamblers claw up around the corpse. They
-  // count toward zombiesAlive so the wave doesn't end behind your back, and
-  // they obey the same scaling as the rest of the horde.
+  // NECROMANCER death summon — 3 shamblers claw up around the corpse.
+  // No particle burst on the necro itself (user wants no kill VFX); the
+  // summon sound still plays so the player hears reinforcements arrive.
   if (z.type === "necro") {
-    spawnParts(z.x, z.y + 0.6, z.z, 50,
-      { color: 0x9a40ff, speed: 18, up: 8, life: 0.9 });
-    flashLight(z.x, z.y + 1.6, z.z, 0.42, 0x9a40ff);
     Sound.zap && Sound.zap();
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * TAU + rand(-0.4, 0.4), d = rand(3, 5);
