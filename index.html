@@ -7532,70 +7532,65 @@ function releaseBowShot() {
 const CHANNEL_RANGE = 22;
 const CHANNEL_HALF_ARC = 0.42;          // ≈48° total cone — wide enough
 
-/* ── DRAGON-BREATH FLAME CONE ── two layered, additive-blended cone meshes
-   that visualise the channel. The geometry is built once and the meshes
-   are positioned + rotated to the wizard every frame while channeling.
-   Outer cone = orange flame envelope, inner cone = pale-blue frostfire
-   core. A small per-frame scale wobble sells the "breathing" feel. */
-const flameConeOuter = (() => {
-  const g = new THREE.ConeGeometry(4.0, CHANNEL_RANGE, 14, 1, true);
-  g.translate(0, -CHANNEL_RANGE * 0.5, 0);  // apex at origin, base ↘ -Y
-  g.rotateX(-Math.PI / 2);                  // axis now along +Z (forward)
-  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
-    color: 0xff7a2a, transparent: true, opacity: 0.55,
-    side: THREE.DoubleSide, depthWrite: false,
+/* ── DRAGON-BREATH FLAMETHROWER ── no static cone mesh (that read as a
+   flashlight beam). Instead a directional particle STREAM: each tick fires
+   ~30 particles all starting AT the source and flying forward with a small
+   perpendicular jitter, varied speed, varied life, and layered colours
+   (white-hot core → bright orange → deep red → smoky black). The illusion
+   of a continuous tongue of flame comes from many short-lived particles
+   refreshed each tick, like a real flamethrower. The mouth-of-the-flame
+   gets a single bright sprite that pulses so the source looks like an
+   actual ignition point. */
+const flameMouth = (() => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: 0xfff0c8, transparent: true,
+    opacity: 0, depthWrite: false,
     blending: THREE.AdditiveBlending }));
-  m.visible = false; scene.add(m);
-  return m;
+  s.scale.set(2.6, 2.6, 1); scene.add(s);
+  return s;
 })();
-const flameConeInner = (() => {
-  const g = new THREE.ConeGeometry(1.9, CHANNEL_RANGE * 0.94, 12, 1, true);
-  g.translate(0, -CHANNEL_RANGE * 0.47, 0);
-  g.rotateX(-Math.PI / 2);
-  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
-    color: 0x9adfff, transparent: true, opacity: 0.62,
-    side: THREE.DoubleSide, depthWrite: false,
-    blending: THREE.AdditiveBlending }));
-  m.visible = false; scene.add(m);
-  return m;
-})();
-// a real PointLight at the wizard's chest while channeling so the
-// flame actually illuminates the world. Limited to high-quality mode.
-const flameConeLight = (() => {
-  const l = new THREE.PointLight(0xff8a3a, 0, 18, 2);
-  scene.add(l);
-  return l;
+const flameLight = (() => {
+  const l = new THREE.PointLight(0xff8a3a, 0, 16, 2);
+  scene.add(l); return l;
 })();
 function updateFlameCone() {
-  // off when not channeling
   if (!player || !player.channeling) {
-    if (flameConeOuter.visible) {
-      flameConeOuter.visible = false;
-      flameConeInner.visible = false;
-      flameConeLight.intensity = 0;
-    }
+    if (flameMouth.material.opacity > 0) flameMouth.material.opacity = 0;
+    flameLight.intensity = 0;
     return;
   }
   const e = player;
-  const y = (e.y || 0) + 2.0;
   const t = e.channelT || 0;
-  // both cones share the wizard's stance + aim
-  flameConeOuter.position.set(e.x, y, e.z);
-  flameConeOuter.rotation.y = e.aim;
-  flameConeInner.position.set(e.x, y, e.z);
-  flameConeInner.rotation.y = e.aim;
-  // breathing wobble — sells "continuous flame"
-  const wob = 1 + Math.sin(t * 22) * 0.06;
-  flameConeOuter.scale.set(wob, wob, 1 + Math.sin(t * 13) * 0.04);
-  flameConeInner.scale.set(wob * 0.95, wob * 0.95, 1 + Math.cos(t * 17) * 0.05);
-  // flicker opacity slightly so it reads as living fire, not a static cone
-  flameConeOuter.material.opacity = 0.45 + Math.abs(Math.sin(t * 19)) * 0.18;
-  flameConeInner.material.opacity = 0.55 + Math.abs(Math.cos(t * 23)) * 0.14;
-  flameConeOuter.visible = true;
-  flameConeInner.visible = true;
-  flameConeLight.position.set(e.x + Math.sin(e.aim) * 2.5, y,
-                              e.z + Math.cos(e.aim) * 2.5);
-  flameConeLight.intensity = lowQ ? 0 : 3.2 + Math.sin(t * 15) * 0.7;
+  const y = (e.y || 0) + 2.0;
+  const dirX = Math.sin(e.aim), dirZ = Math.cos(e.aim);
+  // a bright sprite at the very mouth — flickers like a real ignition
+  const mx = e.x + dirX * 1.7;
+  const mz = e.z + dirZ * 1.7;
+  flameMouth.position.set(mx, y, mz);
+  flameMouth.material.opacity = 0.7 + Math.abs(Math.sin(t * 28)) * 0.3;
+  const sc = 2.4 + Math.abs(Math.sin(t * 22)) * 0.5;
+  flameMouth.scale.set(sc, sc, 1);
+  // a real light at the mouth so the flame reads as illuminating the world
+  flameLight.position.set(mx, y, mz);
+  flameLight.intensity = lowQ ? 0 : 4.5 + Math.sin(t * 19) * 1.2;
+  flameLight.color.setHex(0xff8a3a);
+}
+/* Write a single particle directly into the pool with an explicit direction
+   vector. spawnParts() randomises direction (spherical), which is wrong for
+   a flame stream — we need particles moving along the cone axis. */
+function spawnFlamePart(x, y, z, vx, vy, vz, life, color) {
+  const idx = pCursor; pCursor = (pCursor + 1) % PCOUNT;
+  const s = pState[idx];
+  s.vx = vx; s.vy = vy; s.vz = vz;
+  s.age = 0; s.life = life;
+  s.grav = -0.15;                 // slight upward float — flames lick up
+  pPos[idx*3]   = x;
+  pPos[idx*3+1] = y;
+  pPos[idx*3+2] = z;
+  _pc.set(color);
+  pCol[idx*3]   = _pc.r;
+  pCol[idx*3+1] = _pc.g;
+  pCol[idx*3+2] = _pc.b;
 }
 
 function wizardChannelTick(dt) {
@@ -7611,19 +7606,54 @@ function wizardChannelTick(dt) {
   const targetDps = warriorBase * 2;
   const impactPerTick = (targetDps * 0.25) * e.channelTickT;
   const burnDpsTarget = targetDps * 0.75;
-  // visual: embers riding alongside the cone — kept modest because the
-  // cone mesh itself does the heavy lifting visually
-  const sx = e.x + dirX * 1.6, sz = e.z + dirZ * 1.6;
-  const emberN = lowQ ? 2 : 4;
-  for (let i = 0; i < emberN; i++) {
-    const spread = rand(-CHANNEL_HALF_ARC * 0.85, CHANNEL_HALF_ARC * 0.85);
-    const a = e.aim + spread;
-    const r = rand(0.8, CHANNEL_RANGE * 0.85);
-    spawnParts(sx + Math.sin(a) * r,
-      (e.y || 0) + 2.0 + rand(-0.6, 0.8),
-      sz + Math.cos(a) * r, 1,
-      { color: pick([0xff7a2a, 0xffd06a, 0x9adfff, 0xfff2dc]),
-        speed: 18, up: 2, life: 0.55 });
+  // ── DRAGON-BREATH STREAM ── all particles start at the mouth and fly
+  // FORWARD along the aim with a small cone-spread + jitter. Three layers
+  // build the look of a real flame: bright white-hot core, the orange
+  // body, and a dim red/smoke trail that lags behind.
+  const my = (e.y || 0) + 2.0;
+  const mx = e.x + dirX * 1.7, mz = e.z + dirZ * 1.7;
+  // pre-compute perpendicular vector (to the aim, in the XZ plane) so we
+  // can offset particles sideways for a thick stream
+  const perpX = dirZ, perpZ = -dirX;
+  const NCORE = lowQ ? 4 : 7;     // very bright white-hot at the mouth
+  const NBODY = lowQ ? 8 : 14;    // orange flame body filling the cone
+  const NSMOKE = lowQ ? 2 : 4;    // dim red/smoke wisps trailing
+  // CORE — short-lived, fast, narrow spread
+  for (let i = 0; i < NCORE; i++) {
+    const sp = rand(20, 30);
+    const sa = rand(-0.14, 0.14);                       // narrow cone
+    const lat = rand(-0.6, 0.6);                        // sideways jitter
+    const yJit = rand(-0.25, 0.35);
+    const vx = (Math.sin(e.aim + sa)) * sp + perpX * lat * 4;
+    const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 4;
+    spawnFlamePart(mx + perpX * lat * 0.3, my + yJit,
+      mz + perpZ * lat * 0.3,
+      vx, rand(0, 1.5), vz,
+      rand(0.18, 0.32), pick([0xfff2cc, 0xffe0a0, 0xffd070]));
+  }
+  // BODY — the bulk of the flame; medium speed + life, wider cone
+  for (let i = 0; i < NBODY; i++) {
+    const sp = rand(12, 22);
+    const sa = rand(-CHANNEL_HALF_ARC * 0.55, CHANNEL_HALF_ARC * 0.55);
+    const lat = rand(-1.6, 1.6);
+    const yJit = rand(-0.5, 0.7);
+    const vx = (Math.sin(e.aim + sa)) * sp + perpX * lat * 2;
+    const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 2;
+    spawnFlamePart(mx + perpX * lat * 0.15, my + yJit,
+      mz + perpZ * lat * 0.15,
+      vx, rand(0.5, 2.5), vz,
+      rand(0.35, 0.65), pick([0xff8a3a, 0xff6a20, 0xff5a18, 0xffae50]));
+  }
+  // SMOKE — slow, long-lived, dim. Drifts at the edges, sells "burn aftermath"
+  for (let i = 0; i < NSMOKE; i++) {
+    const sp = rand(5, 9);
+    const sa = rand(-CHANNEL_HALF_ARC, CHANNEL_HALF_ARC);
+    const lat = rand(-2.4, 2.4);
+    const vx = (Math.sin(e.aim + sa)) * sp + perpX * lat * 1.5;
+    const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 1.5;
+    spawnFlamePart(mx, my + rand(-0.3, 0.9),
+      mz, vx, rand(0.8, 2.0), vz,
+      rand(0.6, 0.9), pick([0x6a3a2a, 0x4a2a1c, 0x2a1a14]));
   }
   // audio every ~0.5s instead of every other tick — the channel doesn't
   // need a roar at 10Hz to feel alive
