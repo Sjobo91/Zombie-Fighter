@@ -3328,10 +3328,10 @@ function buildTown() {
   }
 
   // ════════════ SEASIDE / BEACH (south edge) ════════════
-  // Huts in a coherent row along the waterline at z=176, facing the sea,
-  // evenly spaced. Each hut paired with a campfire (brazier) to the
-  // landward side. Two piers anchor the bay; lamps run the boardwalk.
-  const HUT_Z = 176, HUT_FACE = 0;             // rotation 0 = faces +Z (sea)
+  // Huts in a coherent row along the waterline at z=176, doors facing
+  // LANDWARD so players approaching from the town see entrances rather
+  // than blank back walls. Each hut paired with a campfire to one side.
+  const HUT_Z = 176, HUT_FACE = Math.PI;       // PI = door faces -Z (land)
   for (let i = 0; i < 7; i++) {
     const hx = -180 + i * 60;
     addBeachHut(hx, HUT_Z, HUT_FACE + rand(-0.08, 0.08));
