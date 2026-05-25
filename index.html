@@ -5113,6 +5113,14 @@ function buildZombie(type, rare) {
       g.add(blade);
     }
   }
+  // ── neck — short cylinder linking the head to the torso so the head
+  // doesn't appear to float when the zombie tilts. Shared geometry per
+  // type via the zGeo cache. ──
+  const neck = new THREE.Mesh(zGeo("neck:" + type, () =>
+    new THREE.CylinderGeometry(r * 0.16, r * 0.20, h * 0.14, 7)), flesh);
+  neck.position.set(0, h * 0.71, r * 0.20);
+  neck.rotation.x = 0.42;
+  g.add(neck);
   // ── head — always present. Now reads as a decaying SKULL not a
   // featureless sphere: skull-cap on top, hanging jaw, sunken eye
   // sockets with the glow INSIDE them rather than bulging marbles. ──
@@ -5185,47 +5193,73 @@ function buildZombie(type, rare) {
       g.add(eg);
     }
   }
-  // ── legs (skipped for crawlers; the groups still exist for poseZombie) ──
-  // PERF: shared leg geometry, no per-leg shin-bone variation, no
-  // per-limb castShadow. The torso shadow is enough for silhouette.
+  // ── legs ── now JOINTED at the knee so the run cycle can pump like a
+  // real sprinter instead of swinging stiff boards. upperLeg = the hip
+  // pivot Group (rotates as the femur). lowerLeg = a Group child at
+  // the knee position that rotates to bend the shin. The foot sits at
+  // the bottom of lowerLeg so it follows the shin naturally.
   const legs = [];
   for (const sx of [-r * 0.3, r * 0.3]) {
-    const leg = new THREE.Group(); leg.position.set(sx, h * 0.42, 0);
+    const upperLeg = new THREE.Group();
+    upperLeg.position.set(sx, h * 0.42, 0);
     if (!crawler) {
-      const ll = new THREE.Mesh(zGeo("leg:" + type, () =>
-        new THREE.BoxGeometry(r * 0.32, h * 0.46, r * 0.36)), cloth);
-      ll.position.y = -h * 0.23; leg.add(ll);
+      // thigh (hip → knee)
+      const thigh = new THREE.Mesh(zGeo("thigh:" + type, () =>
+        new THREE.BoxGeometry(r * 0.30, h * 0.24, r * 0.34)), cloth);
+      thigh.position.y = -h * 0.12; upperLeg.add(thigh);
+      // lower leg pivot — rotates around the knee
+      const lowerLeg = new THREE.Group();
+      lowerLeg.position.y = -h * 0.24;
+      const shin = new THREE.Mesh(zGeo("shin:" + type, () =>
+        new THREE.BoxGeometry(r * 0.26, h * 0.22, r * 0.30)), cloth);
+      shin.position.y = -h * 0.11; lowerLeg.add(shin);
+      const foot = new THREE.Mesh(zGeo("foot:" + type, () =>
+        new THREE.BoxGeometry(r * 0.34, 0.18, r * 0.5)), cloth);
+      foot.position.set(0, -h * 0.24, r * 0.12); lowerLeg.add(foot);
+      upperLeg.add(lowerLeg);
+      upperLeg.userData.lower = lowerLeg;
     } else {
-      leg.visible = false;
+      upperLeg.visible = false;
     }
-    g.add(leg); legs.push(leg);
+    g.add(upperLeg); legs.push(upperLeg);
   }
-  // ── arms — per-type length/width via Z_PROFILE so the silhouette
-  // varies by type. Claws are bigger (was 0.46 → 0.7 long), sharper
-  // (3 segments tapered like real talons), 4 per arm instead of 3. ──
+  // ── arms ── now JOINTED at the elbow. upperArm = shoulder pivot Group.
+  // Inside it: upper segment (shoulder→elbow) mesh + forearm pivot Group
+  // at the elbow. Forearm holds the lower segment, wrist bone, and claws.
+  // Run animation can bend the elbow naturally now instead of swinging
+  // stiff full-length sticks like a department-store mannequin.
   const arms = [];
   let ai = 0;
   for (const sx of [-r * 0.56, r * 0.56]) {
-    const a = new THREE.Group(); a.position.set(sx, h * 0.66, 0);
+    const upperArm = new THREE.Group();
+    upperArm.position.set(sx, h * 0.66, 0);
     if (missingArm === ai) {
       const stub = new THREE.Mesh(zGeo("stub:" + type, () =>
         new THREE.CylinderGeometry(r * 0.1, r * 0.13, r * 0.22, 5)), gore);
-      stub.position.z = r * 0.12; a.add(stub);
+      stub.position.z = r * 0.12; upperArm.add(stub);
     } else {
-      // dominant arm slightly longer than the off-arm so they don't look
-      // identically symmetric (subtle "wrong" feeling)
-      const len = h * (P.armLen + (ai === 0 ? 0.06 : 0));
-      const am = new THREE.Mesh(zGeo("arm:" + type + ":" + ai, () =>
-        new THREE.BoxGeometry(r * P.armW, r * P.armW, len)), flesh);
-      am.position.z = len * 0.5; a.add(am);
-      // bone wrist bump — small bone bead at the wrist for menace
+      // dominant arm slightly longer than the off-arm — asymmetric horror
+      const totalLen = h * (P.armLen + (ai === 0 ? 0.06 : 0));
+      const upperLen = totalLen * 0.50;
+      const lowerLen = totalLen * 0.50;
+      // upper segment (shoulder → elbow)
+      const upperBox = new THREE.Mesh(zGeo("uarm:" + type + ":" + ai, () =>
+        new THREE.BoxGeometry(r * P.armW, r * P.armW, upperLen)), flesh);
+      upperBox.position.z = upperLen * 0.5; upperArm.add(upperBox);
+      // forearm pivot at the elbow
+      const forearm = new THREE.Group();
+      forearm.position.z = upperLen;
+      const foreBox = new THREE.Mesh(zGeo("farm:" + type + ":" + ai, () =>
+        new THREE.BoxGeometry(r * P.armW * 0.88, r * P.armW * 0.88,
+          lowerLen)), flesh);
+      foreBox.position.z = lowerLen * 0.5; forearm.add(foreBox);
+      // wrist bump (HD)
       if (!lowQ) {
         const wrist = new THREE.Mesh(zGeo("wrist:" + type, () =>
           new THREE.SphereGeometry(r * (P.armW * 0.7), 5, 4)), bone);
-        wrist.position.z = len + 0.02; a.add(wrist);
+        wrist.position.z = lowerLen + 0.02; forearm.add(wrist);
       }
-      // claws — 4 on HD (was 3), longer and sharper. Each is a thin
-      // talon angled forward. Use 5-sided cone for a more vicious look.
+      // claws on the forearm tip
       const clawN = lowQ ? 2 : 4;
       const clawLen = r * (lowQ ? 0.42 : 0.72);
       const clawR = r * 0.06;
@@ -5233,14 +5267,16 @@ function buildZombie(type, rare) {
         const t = (c - (clawN - 1) / 2) * 0.09;
         const claw = new THREE.Mesh(zGeo("claw:" + type + ":" + clawN, () =>
           new THREE.ConeGeometry(clawR, clawLen, 5)), gore);
-        claw.position.set(t * r, 0, len + clawLen * 0.42);
+        claw.position.set(t * r, 0, lowerLen + clawLen * 0.42);
         claw.rotation.x = Math.PI / 2;
-        // slight outward fan + tip droop so they look like real talons
         claw.rotation.z = t * 1.2;
-        a.add(claw);
+        forearm.add(claw);
       }
+      upperArm.add(forearm);
+      upperArm.userData.lower = forearm;
     }
-    a.rotation.x = P.armBase; g.add(a); arms.push(a); ai++;
+    upperArm.rotation.x = P.armBase;
+    g.add(upperArm); arms.push(upperArm); ai++;
   }
   // ── FAINT AURA — a small dim halo around every zombie, tinted by
   // type. Sells "reanimated by dark magic" on the regular shambler that
@@ -5336,10 +5372,19 @@ function buildZombie(type, rare) {
     if (_zDynamic.has(c)) continue;
     if (c.isMesh || c.isSprite) freezeStaticMesh(c);
   }
-  for (const l of legs) for (const cc of l.children)
-    if (cc.isMesh || cc.isSprite) freezeStaticMesh(cc);
-  for (const a of arms) for (const cc of a.children)
-    if (cc.isMesh || cc.isSprite) freezeStaticMesh(cc);
+  // Freeze static meshes inside each leg/arm — also recurse into the
+  // lower-joint sub-group (knee / elbow pivot) so the shin/foot/forearm
+  // meshes get frozen too. The Group pivots themselves stay auto-update
+  // so their rotations can still drive the limb animation.
+  const freezeLimb = (root) => {
+    for (const cc of root.children) {
+      if (cc.isMesh || cc.isSprite) freezeStaticMesh(cc);
+      else if (cc.isGroup) for (const gc of cc.children)
+        if (gc.isMesh || gc.isSprite) freezeStaticMesh(gc);
+    }
+  };
+  for (const l of legs) freezeLimb(l);
+  for (const a of arms) freezeLimb(a);
   // hp.children[0] = bg (static), hp.children[1] = fill (scales per-frame)
   if (hp.children[0]) freezeStaticMesh(hp.children[0]);
   return g;
@@ -13840,8 +13885,18 @@ function poseZombie(z, d, chillMul) {
   const moving = (z.state === "chase" || z.dodgeT > 0) && chillMul > 0;
   const amp = moving ? 1.05 : 0.12;
   if (!z.crawler && fullPose) {
-    u.legs[0].rotation.x = Math.sin(z.walkP) * amp;
-    u.legs[1].rotation.x = Math.sin(z.walkP + Math.PI) * amp;
+    // hip swing (upper-leg pivot)
+    const lp0 = Math.sin(z.walkP) * amp;
+    const lp1 = Math.sin(z.walkP + Math.PI) * amp;
+    u.legs[0].rotation.x = lp0;
+    u.legs[1].rotation.x = lp1;
+    // knee bend (lower-leg pivot) — bends BACK when the leg is in the
+    // forward half of the swing, straightens when planted. Mimics the
+    // way a sprinter's heel kicks up behind them between strides.
+    const lo0 = u.legs[0].userData && u.legs[0].userData.lower;
+    const lo1 = u.legs[1].userData && u.legs[1].userData.lower;
+    if (lo0) lo0.rotation.x = -Math.max(0, lp0 * 1.7) - 0.08 * amp;
+    if (lo1) lo1.rotation.x = -Math.max(0, lp1 * 1.7) - 0.08 * amp;
   }
   // chase lean — body tilts FORWARD harder than before, like a sprinter
   // mid-stride. Attack lean is also bumped so the snap reads.
@@ -13865,20 +13920,38 @@ function poseZombie(z, d, chillMul) {
       const bite = 0.5 + 0.5 * Math.sin(z.t * 18);
       u.arms[0].rotation.x = -1.05 - bite * 0.95;
       u.arms[1].rotation.x = -1.05 - bite * 0.95;
+      // elbows extend FULLY when arms snap forward (claws reach for you)
+      const ao0 = u.arms[0].userData && u.arms[0].userData.lower;
+      const ao1 = u.arms[1].userData && u.arms[1].userData.lower;
+      if (ao0) ao0.rotation.x = -0.10 + bite * -0.30;
+      if (ao1) ao1.rotation.x = -0.10 + bite * -0.30;
       // head ducks forward as the jaw snaps shut on the player
       if (u.head) u.head.rotation.x = bite * 0.55;
     } else if (moving) {
       // RUNNING — arms PUMP in opposite phase to legs. Amplitude bumped
       // so the silhouette reads as an all-out sprint, not a stroll.
       const armSw = 1.25;
-      u.arms[0].rotation.x = -0.10 - Math.sin(z.walkP) * armSw;
-      u.arms[1].rotation.x = -0.10 + Math.sin(z.walkP) * armSw;
+      const ap0 = -0.10 - Math.sin(z.walkP) * armSw;
+      const ap1 = -0.10 + Math.sin(z.walkP) * armSw;
+      u.arms[0].rotation.x = ap0;
+      u.arms[1].rotation.x = ap1;
+      // elbow bend opposite to swing — arm forward = elbow STRAIGHTER,
+      // arm back = elbow BENT 90° like a real sprinter pumping
+      const ao0 = u.arms[0].userData && u.arms[0].userData.lower;
+      const ao1 = u.arms[1].userData && u.arms[1].userData.lower;
+      if (ao0) ao0.rotation.x = -0.55 - Math.max(0, -Math.sin(z.walkP)) * 0.8;
+      if (ao1) ao1.rotation.x = -0.55 - Math.max(0,  Math.sin(z.walkP)) * 0.8;
       if (u.head) u.head.rotation.x =
         lerp(u.head.rotation.x || 0, 0.18, 0.22);
     } else {
-      // IDLE — arms hang slightly forward, head level
+      // IDLE — arms hang slightly forward, head level. Elbows at a
+      // gentle resting bend so the silhouette isn't a stiff T-pose.
       u.arms[0].rotation.x = -0.35 + Math.sin(z.t * 1.5) * 0.05;
       u.arms[1].rotation.x = -0.35 + Math.cos(z.t * 1.4) * 0.05;
+      const ao0 = u.arms[0].userData && u.arms[0].userData.lower;
+      const ao1 = u.arms[1].userData && u.arms[1].userData.lower;
+      if (ao0) ao0.rotation.x = -0.45;
+      if (ao1) ao1.rotation.x = -0.45;
       if (u.head) u.head.rotation.x = lerp(u.head.rotation.x || 0, 0, 0.2);
     }
   }
