@@ -3268,53 +3268,119 @@ function buildTown() {
   addPerimeter();
   // ── the town itself — a grid of streets, blocks and buildings ──
   buildTown();
-  // ---- graveyard (far north-west) ----
-  addMausoleum(-188, -178);
-  addMausoleum(-150, -212);
-  addMausoleum(-218, -150);
-  for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) {
-    const gx = -228 + c * 15 + rand(-2.5, 2.5);
-    const gz = -228 + r * 15 + rand(-2.5, 2.5);
-    if (!blocked(gx, gz, 3.5))
-      addProp(Math.random() < 0.5 ? "grave" : "cross", gx, gz);
+
+  // ════════════ GRAVEYARD (far north-west) ════════════
+  // Mausolea anchor the back row. Graves laid out in neat ranks along a
+  // gravel path so the place reads as a real cemetery rather than props
+  // dumped at random. The fence to the south separates it from the church.
+  const GY_CX = -190, GY_CZ = -190;
+  addMausoleum(GY_CX -  4, GY_CZ - 38);          // back row, 3 in a line
+  addMausoleum(GY_CX - 38, GY_CZ - 38);
+  addMausoleum(GY_CX + 30, GY_CZ - 38);
+  // 6 ranks × 5 columns of graves, 7 units apart, alternating grave/cross
+  // with small jitter so each one looks individual without breaking row
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 5; c++) {
+    const gx = GY_CX - 28 + c * 14 + rand(-1.2, 1.2);
+    const gz = GY_CZ - 22 + r * 9  + rand(-0.7, 0.7);
+    if (blocked(gx, gz, 3.0)) continue;
+    addProp((r + c) % 2 ? "grave" : "cross", gx, gz);
   }
-  for (let i = 0; i < 8; i++) {
-    const px = rand(-232, -152), pz = rand(-232, -152);
+  // a few scattered weathered pieces along the perimeter for texture
+  for (let i = 0; i < 6; i++) {
+    const px = GY_CX + rand(-44, 44), pz = GY_CZ + rand(28, 44);
     if (!blocked(px, pz, 5))
-      addProp(pick(["statue", "cross", "rock", "wallchunk"]), px, pz);
+      addProp(pick(["wallchunk", "rock", "cross"]), px, pz);
   }
-  for (let i = 0; i < 5; i++)
-    addBrazier(-190 + rand(-40, 40), -190 + rand(-40, 40));
-  // ---- church (far west) ----
+  // braziers in the four corners — burning watch-fires
+  for (const c of [[-40,-40],[40,-40],[-40,40],[40,40]])
+    addBrazier(GY_CX + c[0], GY_CZ + c[1]);
+  // entrance lanterns
+  addLamp(GY_CX, GY_CZ + 50, true);
+  addLamp(GY_CX - 18, GY_CZ + 50, true);
+  addLamp(GY_CX + 18, GY_CZ + 50, true);
+
+  // ════════════ CHURCH GROUNDS (far west) ════════════
   addChurch(-196, 20, true);
   addChurch(-214, 104, false);
   addFenceRun(-162, -18, -162, 132);
-  for (let i = 0; i < 12; i++) {
-    const gx = -234 + rand(0, 58), gz = -10 + rand(0, 130);
+  // graves laid in two rows running along the fence (instead of random)
+  for (const row of [-148, -134]) for (let i = 0; i < 6; i++) {
+    const gx = row, gz = -10 + i * 22 + rand(-2, 2);
     if (!blocked(gx, gz, 4))
-      addProp(Math.random() < 0.5 ? "grave" : "cross", gx, gz);
+      addProp((i & 1) ? "grave" : "cross", gx, gz);
   }
   addLamp(-162, 24, true); addLamp(-162, 96, false);
-  // ---- the shopping mall (far east) ----
+
+  // ════════════ SHOPPING MALL (far east) ════════════
   addMall(196, 36);
+  // lamp posts framing the mall plaza
   for (const c of [[172, 8], [172, 64], [222, 12], [222, 60]])
     addLamp(c[0], c[1], true);
-  // ---- seaside (south edge) ----
+  // parking-lot debris and abandoned cars in the mall approach
+  for (let i = 0; i < 5; i++) {
+    const px = 168 + (i % 2) * 8, pz = 14 + Math.floor(i / 2) * 14;
+    if (!blocked(px, pz, 3.5)) addProp("car", px, pz);
+  }
+  // shopping carts (use sandbags as a stand-in cluster of low debris)
+  for (let i = 0; i < 4; i++) {
+    const px = 178 + rand(-6, 6), pz = 28 + i * 5;
+    if (!blocked(px, pz, 2.5)) addProp("debris", px, pz);
+  }
+
+  // ════════════ SEASIDE / BEACH (south edge) ════════════
+  // Huts in a coherent row along the waterline at z=176, facing the sea,
+  // evenly spaced. Each hut paired with a campfire (brazier) to the
+  // landward side. Two piers anchor the bay; lamps run the boardwalk.
+  const HUT_Z = 176, HUT_FACE = 0;             // rotation 0 = faces +Z (sea)
   for (let i = 0; i < 7; i++) {
-    const hx = -188 + i * 56 + rand(-8, 8);
-    addBeachHut(hx, rand(160, 184), rand(0, TAU));
+    const hx = -180 + i * 60;
+    addBeachHut(hx, HUT_Z, HUT_FACE + rand(-0.08, 0.08));
+    // a campfire between every other pair of huts, landward
+    if (i % 2 === 0)
+      addBrazier(hx + 30, HUT_Z - 12);
   }
   addPier(-86, 196); addPier(92, 196);
+  // boardwalk lamps in a regular spacing along the beach front
   for (let i = 0; i < 6; i++)
-    addLamp(-200 + i * 80, rand(172, 188), false);
-  // a stone bridge arches over the gap to the shore
-  addBridge(-40, 150, 40, 150, 7, 9);
-  // ---- the railway (north edge) ----
+    addLamp(-200 + i * 80, 168, false);
+  // beach detritus: rocks + debris washed up, on the wet sand
+  for (let i = 0; i < 8; i++) {
+    const bx = -200 + rand(0, 400), bz = 186 + rand(-4, 6);
+    if (Math.hypot(bx, bz) > 16 && !blocked(bx, bz, 3))
+      addProp(pick(["rock", "debris", "wallchunk"]), bx, bz);
+  }
+
+  // ════════════ BRIDGE (town → beach approach) ════════════
+  // Repositioned from a useless EW arch in open ground to a north-south
+  // arch on the town-to-beach road. The road now runs UP the bridge as
+  // you cross, with a lamp at each end.
+  addBridge(0, 144, 0, 178, 3.5, 11);
+  addLamp(-7, 142, true); addLamp(7, 142, true);
+  addLamp(-7, 180, false); addLamp(7, 180, false);
+
+  // ════════════ RAILWAY (north edge) ════════════
   addRails(-130, -224, 224, -224);
   addTrainStation(70, -210);
   addTrainCar(44, -224, Math.PI / 2, true);
   for (let i = 0; i < 3; i++)
     addTrainCar(64 + i * 19, -224, Math.PI / 2, false);
+  // platform lamps in a row + a few benches for the "station" feel
+  for (let i = 0; i < 5; i++) addLamp(40 + i * 14, -204, true);
+  if (typeof addBench === "function") {
+    addBench(46, -206, 0);
+    addBench(76, -206, 0);
+    addBench(106, -206, 0);
+  }
+  // crates + barrels piled near the station (freight that never shipped)
+  for (let i = 0; i < 4; i++) {
+    const cx = 22 + rand(-3, 3), cz = -214 + i * 3;
+    if (!blocked(cx, cz, 2)) addCrate(cx, cz);
+  }
+  for (let i = 0; i < 3; i++) {
+    const bx = 110 + rand(-3, 3), bz = -212 + i * 3;
+    if (!blocked(bx, bz, 2)) addBarrel(bx, bz, false);
+  }
+
   // ── roads linking the town out to the districts ──
   addRoad(0, -140, 0, -214, 11);   addLaneMarks(0, -140, 0, -214);
   addRoad(140, 0, 192, 24, 10);    addLaneMarks(140, 0, 192, 24);
