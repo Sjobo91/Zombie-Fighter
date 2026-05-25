@@ -2336,6 +2336,79 @@ function addCrate(x, z) {
   interactables.push({ type: "crate", x, z, r: s * 0.72, hp: 24,
     obj: g, glow: null, collider, fuse: 0, dead: false, s });
 }
+
+/* ─── TAR PIT ── a sticky black pool. Anyone standing in it gets slowed
+   and takes a small DoT every second. Permanent — the player can kite
+   zombies into them, but stepping in costs HP too. No collider so feet
+   can walk through. */
+function addTarPit(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z);
+  const r = rand(3.6, 5.2);
+  // dark pool plane on the ground (rotated to lie flat)
+  const poolGeo = new THREE.CircleGeometry(r, 18);
+  poolGeo.rotateX(-Math.PI / 2);
+  const pool = new THREE.Mesh(poolGeo, new THREE.MeshBasicMaterial({
+    color: 0x0a0608, transparent: true, opacity: 0.92,
+    depthWrite: false }));
+  pool.position.y = 0.05; g.add(pool);
+  // a brighter inner stain — the heart of the pit
+  const innerGeo = new THREE.CircleGeometry(r * 0.55, 14);
+  innerGeo.rotateX(-Math.PI / 2);
+  const inner = new THREE.Mesh(innerGeo, new THREE.MeshBasicMaterial({
+    color: 0x4a0a0a, transparent: true, opacity: 0.85,
+    depthWrite: false }));
+  inner.position.y = 0.07; g.add(inner);
+  // a low oily reflection sprite — adds depth without a light
+  const sheen = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+    color: 0x6a1010, transparent: true, opacity: 0.4,
+    depthWrite: false, blending: THREE.AdditiveBlending }));
+  sheen.scale.set(r * 1.4, r * 1.4, 1); sheen.position.y = 0.5;
+  g.add(sheen);
+  scene.add(g);
+  interactables.push({ type: "tarpit", x, z, r,
+    obj: g, sheen, dead: false, fuse: 0, hp: 0, collider: null,
+    bubbleT: rand(0, 1.4) });
+}
+
+/* ─── SPIKE TRAP ── nearly hidden until an entity walks over it, then
+   spikes burst up and skewer everything in range. Resets after a cooldown
+   so the same trap can fire repeatedly during a wave. */
+function addSpikeTrap(x, z) {
+  const y = groundHeight(x, z), g = new THREE.Group();
+  g.position.set(x, y, z);
+  const r = 2.4;
+  // floor plate — a dark metal disc flush with the ground
+  const plateGeo = new THREE.CircleGeometry(r, 14);
+  plateGeo.rotateX(-Math.PI / 2);
+  const plate = new THREE.Mesh(plateGeo, new THREE.MeshStandardMaterial({
+    color: 0x1c1614, roughness: 0.85, metalness: 0.3 }));
+  plate.position.y = 0.06; g.add(plate);
+  // a subtle warning rune in the centre — tiny red glyph
+  const rune = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+    color: 0x6a1010, transparent: true, opacity: 0.32,
+    depthWrite: false, blending: THREE.AdditiveBlending }));
+  rune.scale.set(1.3, 1.3, 1); rune.position.y = 0.15;
+  g.add(rune);
+  // the spikes themselves — grouped, scale-y animated when triggered
+  const spikes = new THREE.Group(); spikes.scale.y = 0.01;
+  const spMat = metalMat(0x9a9a9a, 0.5);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * TAU + rand(-0.1, 0.1);
+    const dr = rand(0.2, r * 0.85);
+    const sp = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.4, 6), spMat);
+    sp.position.set(Math.cos(a) * dr, 0.7, Math.sin(a) * dr);
+    sp.castShadow = true;
+    spikes.add(sp);
+  }
+  g.add(spikes);
+  scene.add(g);
+  interactables.push({ type: "spiketrap", x, z, r,
+    obj: g, rune, spikes, dead: false, fuse: 0,
+    hp: 0, collider: null,
+    armT: 0,        // 0 = ready, >0 = cooling down
+    popT: 0 });     // 0 = down, >0 = spikes are up
+}
 function addHouse(x, z, rot) {
   const y = groundHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z); g.rotation.y = rot;
@@ -3053,6 +3126,11 @@ function buildTown() {
   scatterStreet(10, 1, (x, z) => addProp("corpse", x, z));
   scatterStreet(14, 2, (x, z) => addBarrel(x, z, Math.random() < 0.6));
   scatterStreet(16, 2, (x, z) => addCrate(x, z));
+  // new world hazards — pitch-black tar pits that slow + burn, and
+  // hidden spike traps that pop up on contact. Both work on zombies AND
+  // the player, so they're a kite tool and a danger at the same time.
+  scatterStreet(8, 5, (x, z) => addTarPit(x, z));
+  scatterStreet(10, 4, (x, z) => addSpikeTrap(x, z));
 }
 /* ─── lay out the whole world ─────────────────────────────────────────────── */
 (function buildWorld() {
@@ -12775,10 +12853,128 @@ function hitInteractable(it, dmg) {
     if (it.hp <= 0) breakBarrel(it);
   }
 }
+/* ─── FALLING DEBRIS ── periodic timed event during a wave. A shadow
+   sprite paints a target on the ground; ~1.5s later a chunk of stone
+   crashes down with a small AoE damage burst. Telegraphed so the
+   player can dodge — and zombies that don't dodge eat the rock too. */
+const _debris = [];
+for (let i = 0; i < 4; i++) {
+  const g = new THREE.Group();
+  // shadow disc on the ground — the warning
+  const shadowGeo = new THREE.CircleGeometry(3.2, 18);
+  shadowGeo.rotateX(-Math.PI / 2);
+  const shadow = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({
+    color: 0x000000, transparent: true, opacity: 0,
+    depthWrite: false }));
+  shadow.position.y = 0.08;
+  g.add(shadow);
+  // a thin red warning ring on top of the shadow
+  const ringGeo = new THREE.RingGeometry(2.7, 3.1, 22);
+  ringGeo.rotateX(-Math.PI / 2);
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
+    color: 0xff3a1e, transparent: true, opacity: 0,
+    depthWrite: false, side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending }));
+  ring.position.y = 0.10;
+  g.add(ring);
+  // the falling rock — hidden until the warning expires
+  const rock = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.6, 0),
+    new THREE.MeshStandardMaterial({ color: 0x4a3a2a,
+      roughness: 0.95, metalness: 0.1 }));
+  rock.castShadow = true; rock.visible = false;
+  g.add(rock);
+  g.visible = false;
+  scene.add(g);
+  _debris.push({ g, shadow, ring, rock,
+    state: "idle",       // idle | warning | falling | done
+    t: 0, x: 0, z: 0 });
+}
+let _debrisNextT = 8;   // seconds until next event tries to fire
+function updateFallingDebris(dt) {
+  if (!player || !player.alive || state !== ST.PLAYING) return;
+  // tick the spawn timer
+  _debrisNextT -= dt;
+  if (_debrisNextT <= 0) {
+    _debrisNextT = rand(10, 18);
+    // pick an idle slot and a spot reasonably near the player
+    const slot = _debris.find(d => d.state === "idle");
+    if (slot) {
+      const ang = rand(0, TAU), dist = rand(10, 26);
+      slot.x = clamp(player.x + Math.cos(ang) * dist,
+        -ARENA + 6, ARENA - 6);
+      slot.z = clamp(player.z + Math.sin(ang) * dist,
+        -ARENA + 6, ZSHORE - 4);
+      slot.state = "warning"; slot.t = 1.4;
+      const gy = groundHeight(slot.x, slot.z);
+      slot.g.position.set(slot.x, gy, slot.z);
+      slot.g.visible = true;
+      slot.rock.visible = true;
+      slot.rock.position.set(0, 28, 0);          // start way up
+      Sound.tone && Sound.tone("triangle", 220, 360, 0.25, 0.12);
+    }
+  }
+  // tick active slots
+  for (const d of _debris) {
+    if (d.state === "warning") {
+      d.t -= dt;
+      const k = 1 - d.t / 1.4;
+      d.shadow.material.opacity = 0.25 + k * 0.45;
+      d.ring.material.opacity = 0.4 + Math.sin(clock * 22) * 0.4;
+      d.rock.position.y = 28 - k * 22;
+      d.rock.rotation.x += dt * 4;
+      d.rock.rotation.z += dt * 3;
+      if (d.t <= 0) {
+        d.state = "falling"; d.t = 0.2;
+        d.rock.position.y = 6;
+      }
+    } else if (d.state === "falling") {
+      d.t -= dt;
+      d.rock.position.y = 6 - (0.2 - d.t) * 30;
+      if (d.t <= 0) {
+        // IMPACT
+        d.rock.position.y = 0.6;
+        d.shadow.material.opacity = 0;
+        d.ring.material.opacity = 0;
+        Sound.boom && Sound.boom();
+        shake(0.8);
+        spawnParts(d.x, 0.5, d.z, 30,
+          { color: 0x4a3a2a, speed: 18, up: 8, life: 0.9, grav: 1.4 });
+        scorch(d.x, d.z, 3.8);
+        // damage in radius 3.6
+        const R2 = 3.6 * 3.6;
+        if (player && player.alive) {
+          const dpx = player.x - d.x, dpz = player.z - d.z;
+          if (dpx * dpx + dpz * dpz < R2)
+            hurtPlayer(45 + wave * 2, d);
+        }
+        for (const z of zombies) {
+          if (z.state === "die" || z.state === "rising") continue;
+          const dx = z.x - d.x, dz = z.z - d.z;
+          if (dx * dx + dz * dz < R2) {
+            z.hp -= 80 + wave * 4;
+            z.stagger = Math.max(z.stagger, 0.5);
+            if (z.hp <= 0) killZombie(z);
+          }
+        }
+        d.state = "done"; d.t = 2.5;
+      }
+    } else if (d.state === "done") {
+      d.t -= dt;
+      if (d.t <= 0) {
+        d.state = "idle";
+        d.g.visible = false;
+        d.rock.visible = false;
+      }
+    }
+  }
+}
+
 function damageInteractables(x, z, radius, dmg) {
   for (let i = interactables.length - 1; i >= 0; i--) {
     const it = interactables[i];
     if (it.dead || it.fuse > 0) continue;
+    if (it.type === "tarpit" || it.type === "spiketrap") continue; // hazards can't be killed
     if (Math.hypot(it.x - x, it.z - z) <= radius + it.r)
       hitInteractable(it, dmg);
   }
@@ -12866,6 +13062,96 @@ function explodeBarrel(b) {
 }
 function updateInteractables(dt) {
   for (const it of interactables) {
+    // ── TAR PIT ── permanent zone, slows + DoTs everything inside.
+    // No HP, can't be destroyed. Bubbles for ambience.
+    if (it.type === "tarpit") {
+      it.bubbleT -= dt;
+      if (it.bubbleT <= 0) {
+        it.bubbleT = rand(0.8, 1.8);
+        const a = rand(0, TAU), rr = rand(0, it.r * 0.7);
+        spawnParts(it.x + Math.cos(a) * rr, it.obj.position.y + 0.2,
+          it.z + Math.sin(a) * rr, 1,
+          { color: 0x4a0a0a, speed: 1.2, up: 2.5, life: 0.7, grav: 0.5 });
+      }
+      // tick damage every 0.5s for entities in radius
+      it._dotT = (it._dotT || 0) - dt;
+      if (it._dotT <= 0) {
+        it._dotT = 0.5;
+        const rSq = it.r * it.r;
+        if (player && player.alive) {
+          const dpx = player.x - it.x, dpz = player.z - it.z;
+          if (dpx * dpx + dpz * dpz < rSq) {
+            hurtPlayer(6 + wave, it);
+            // slow the player a bit by setting atkSlowT so movement dips
+            player.atkSlowT = Math.max(player.atkSlowT, 0.5);
+          }
+        }
+        for (const z of zombies) {
+          if (z.state === "die" || z.state === "rising") continue;
+          const dx = z.x - it.x, dz = z.z - it.z;
+          if (dx * dx + dz * dz < rSq) {
+            z.hp -= 8 + wave * 0.6;
+            z.chill = Math.max(z.chill, 0.6);
+            if (z.hp <= 0) killZombie(z);
+          }
+        }
+      }
+      continue;
+    }
+    // ── SPIKE TRAP ── triggers on entry. Pops up, deals damage, resets.
+    if (it.type === "spiketrap") {
+      if (it.armT > 0) it.armT -= dt;
+      if (it.popT > 0) {
+        it.popT -= dt;
+        // animated rise + slow retract
+        const k = it.popT > 0.35
+          ? 1 - (it.popT - 0.35) / 0.15
+          : (it.popT / 0.35);
+        it.spikes.scale.y = 0.04 + clamp(k, 0, 1) * 0.96;
+      } else if (it.armT <= 0) {
+        // not cooling — check for entrants
+        const rSq = it.r * it.r;
+        let triggered = false;
+        if (player && player.alive) {
+          const dpx = player.x - it.x, dpz = player.z - it.z;
+          if (dpx * dpx + dpz * dpz < rSq) triggered = true;
+        }
+        if (!triggered) {
+          for (const z of zombies) {
+            if (z.state === "die" || z.state === "rising") continue;
+            const dx = z.x - it.x, dz = z.z - it.z;
+            if (dx * dx + dz * dz < rSq) { triggered = true; break; }
+          }
+        }
+        if (triggered) {
+          it.popT = 0.5; it.armT = 3.0;     // 0.5s up, 3s cooldown
+          Sound.smash && Sound.smash();
+          shake(0.4);
+          spawnParts(it.x, it.obj.position.y + 0.4, it.z, 22,
+            { color: 0xb8b8b8, speed: 12, up: 8, life: 0.55 });
+          // hurt everything inside on the trigger frame
+          const rSq2 = it.r * it.r;
+          if (player && player.alive) {
+            const dpx = player.x - it.x, dpz = player.z - it.z;
+            if (dpx * dpx + dpz * dpz < rSq2)
+              hurtPlayer(35 + wave * 2, it);
+          }
+          for (const z of zombies) {
+            if (z.state === "die" || z.state === "rising") continue;
+            const dx = z.x - it.x, dz = z.z - it.z;
+            if (dx * dx + dz * dz < rSq2) {
+              z.hp -= 55 + wave * 4;
+              z.stagger = Math.max(z.stagger, 0.5);
+              if (z.hp <= 0) killZombie(z);
+            }
+          }
+        }
+      }
+      // glow the rune slightly when armed, dim when cooling
+      if (it.rune) it.rune.material.opacity = it.armT > 0 ? 0.08 : 0.36;
+      continue;
+    }
+    // ── existing destructibles (barrels with fuse / crates) ──
     if (it.dead || it.fuse <= 0) continue;
     it.fuse -= dt;
     if (it.glow)
@@ -12877,9 +13163,17 @@ function updateInteractables(dt) {
 }
 function resetInteractables() {
   for (const it of interactables) {
+    // hazards (tarpit / spiketrap) have no destructible state — they're
+    // permanent and re-arm naturally. Reset their per-trap timers only.
+    if (it.type === "tarpit" || it.type === "spiketrap") {
+      it.armT = 0; it.popT = 0;
+      if (it.spikes) it.spikes.scale.y = 0.04;
+      continue;
+    }
     if (it.dead) {
       it.dead = false; it.obj.visible = true;
-      if (colliders.indexOf(it.collider) < 0) colliders.push(it.collider);
+      if (it.collider && colliders.indexOf(it.collider) < 0)
+        colliders.push(it.collider);
     }
     it.fuse = 0;
     it.hp = it.type === "crate" ? 24 : (it.explosive ? 1 : 46);
@@ -13024,6 +13318,7 @@ function update(dt) {
   updateAnnihilator(dt);
   updateInteractables(dt);
   updatePortal(dt);
+  updateFallingDebris(dt);
   updateBuffs(dt);
   updateParts(dt);
   updateFlashes(dt);
