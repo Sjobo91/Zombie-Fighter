@@ -5748,6 +5748,17 @@ function recalc() {
   if (player.maxHp > before) player.hp += player.maxHp - before;
   player.hp = clamp(player.hp, 1, player.maxHp);
 }
+// resource-name helper — Wizard sees "SPIRIT" everywhere else the rest of
+// the cast sees "RAGE". Use for banners, ult-card descriptions, etc.
+function chargeName() {
+  const c = (player && player.cls) || chosenClass || "knight";
+  return c === "wizard" ? "SPIRIT" : "RAGE";
+}
+function localizeUltText(s) {
+  if (!s) return s;
+  if (chargeName() === "SPIRIT") return s.replace(/RAGE/g, "SPIRIT");
+  return s;
+}
 function gainRage(n) {
   // rage builds only between ultimates — while one is live the bar only drains.
   // once the ultimate has been spent for the run, rage is permanently locked
@@ -6753,7 +6764,9 @@ function tryUltimate() {
     Sound.hurt(); return;
   }
   if (e.rage < RAGE_MIN_ACTIVATE) {
-    banner("your rage has not yet risen", "NOT ENOUGH RAGE");
+    const cn = chargeName();
+    banner("your " + cn.toLowerCase() + " has not yet risen",
+      "NOT ENOUGH " + cn);
     Sound.hurt(); return;
   }
   e.ultActive = true; e.ultHitT = 0;
@@ -7641,6 +7654,9 @@ function wizardChannelTick(dt) {
       // first touch on a fresh zombie — a single proper hit + ignite token
       hitZombie(z, impactPerTick, false, Math.atan2(dx, dz), 0.4, true);
       z.frostfire = true;
+      // wizard charges Spirit on every fresh ignite — equivalent to the
+      // knight's per-cleave-hit rage gain
+      gainRage(RAGE_HIT);
     }
     if (z.state !== "die") {
       z.burn = Math.max(z.burn, 4.0);
@@ -11680,7 +11696,7 @@ function openUltimateChoice() {
       '<div class="emblem" style="background:#100d18;box-shadow:0 0 26px ' +
         u.hex + '">' + ultSVG(u.id) + '</div>' +
       '<div class="cn">' + u.n + '</div>' +
-      '<div class="cd2">' + u.d + '</div>' +
+      '<div class="cd2">' + localizeUltText(u.d) + '</div>' +
       '<div class="take">CLAIM YOUR ULTIMATE</div>';
     card.addEventListener("mouseenter", () => {
       if (!card.classList.contains("locked"))
@@ -12575,6 +12591,9 @@ function updateZombies(dt) {
     if (z.burn > 0) {
       z.burn -= dt;
       z.hp -= z.burnDps * dt;
+      // burn DoT charges rage / spirit so DoT-builds (wizard channel, fire
+      // ability) actually fuel the ultimate. ~1 rage/sec per burning zombie.
+      if (player && player.alive) gainRage(dt * 1.0);
       // burn-flames visual — cheaper rate on touch (mobile GPU friendly).
       // Only fires for zombies within a sensible camera range to avoid
       // the particle pool drowning when 100 zombies burn at once.
