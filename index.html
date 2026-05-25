@@ -1861,6 +1861,7 @@ const SEA_Y = -3.4;
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
     color: 0x1a3450, roughness: 0.16, metalness: 0.62 }));
   mesh.position.set(0, SEA_Y, ARENA + 300);
+  mesh.userData.dynamic = true;          // gentle bob via updateSea each frame
   scene.add(mesh);
   seaMesh = mesh;
   // a pale band of foam where the water meets the sand
@@ -1945,7 +1946,7 @@ const mists = [];
       transparent: true, opacity: 0.12, depthWrite: false }));
     m.position.set(rand(-ARENA, ARENA), rand(2.5, 6), rand(-ARENA, ARENA));
     m.userData = { vx: rand(-1.4, 1.4), vz: rand(-1.4, 1.4),
-      spin: rand(-0.1, 0.1) };
+      spin: rand(-0.1, 0.1), dynamic: true };  // dynamic: drifts per frame
     scene.add(m); mists.push(m);
   }
 })();
@@ -1958,6 +1959,29 @@ function mat(color, rough) {
 function metalMat(color, metal) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.4,
     metalness: metal == null ? 0.6 : metal });
+}
+/* PERF — matrix-freezing helpers.
+   Three.js recomputes every object's local matrix from position/rotation/scale
+   on EVERY frame, even if those values never change. With ~25 meshes per
+   zombie × 100 zombies + hundreds of static buildings, that's thousands of
+   wasted matrix recomputes per frame inside the renderer. Calling these
+   helpers flips matrixAutoUpdate off and bakes the current TRS into the
+   local matrix once. Caller MUST guarantee the object's TRS won't change
+   afterwards — otherwise it'll render at the wrong spot.
+   freezeStaticMesh: freeze ONE Mesh / Sprite.
+   freezeStaticTree:  freeze every Mesh / Sprite descendant of root. */
+function freezeStaticMesh(o) {
+  o.matrixAutoUpdate = false;
+  o.updateMatrix();
+}
+function freezeStaticTree(root) {
+  root.traverse(o => {
+    if (o.userData && o.userData.dynamic) return;
+    if (o.isMesh || o.isSprite) {
+      o.matrixAutoUpdate = false;
+      o.updateMatrix();
+    }
+  });
 }
 /* a soft radial sprite — used for every glow, flare, lamp and firefly */
 const flareTex = (() => {
@@ -2062,6 +2086,7 @@ function addBrazier(x, z) {
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.9, 8),
     new THREE.MeshBasicMaterial({ color: 0xff9a3a }));
   flame.position.y = 4.6;
+  flame.userData.dynamic = true;            // flame.scale modulated per frame
   g.add(post, bowl, flame);
   const light = new THREE.PointLight(0xff7a2e, 2.6, 38, 1.8);
   light.position.y = 4.8; g.add(light);
@@ -3270,6 +3295,12 @@ const crows = [];
       w.position.x = sx * 1.25;
       pivot.add(w); g.add(pivot); wings.push(pivot);
     }
+    // g.position + wing rotations change every frame; static-freeze skips
+    // any descendant tagged dynamic. Group transforms aren't frozen anyway,
+    // but tagging the inner wing mesh lets the freeze-helper leave it
+    // alone while it's free to rotate as the wing flaps.
+    g.userData.dynamic = true;
+    for (const p of wings) for (const w of p.children) w.userData.dynamic=true;
     scene.add(g);
     crows.push({ g, wings,
       cx: rand(-110, 110), cz: rand(-120, 70),
@@ -3293,6 +3324,7 @@ const smokeCols = [];
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
         color: 0x14110f, transparent: true, opacity: 0.3,
         depthWrite: false }));
+      s.userData.dynamic = true;        // puffs animate (position + scale)
       scene.add(s);
       puffs.push({ s, off: i * 8 });
     }
@@ -3306,6 +3338,7 @@ const litter = [];
       new THREE.MeshBasicMaterial({
         color: pick([0xb8ad94, 0x8a8270, 0x6a5a3a, 0x9a8a64]),
         side: THREE.DoubleSide, transparent: true, opacity: 0.92 }));
+    m.userData.dynamic = true;          // wind tumbles litter every frame
     scene.add(m);
     litter.push({ m, x: rand(-150, 150), z: rand(-150, 110),
       spin: rand(-7, 7), tum: rand(0, TAU) });
@@ -3338,6 +3371,12 @@ const people = [];
     const armR = new THREE.Mesh(armGeo, cl);
     armL.position.set(-0.78, 3.05, 0); armR.position.set(0.78, 3.05, 0);
     g.add(torso, head, legL, legR, armL, armR);
+    // person group + limbs animate every frame (walk cycle, flee turn).
+    // Mark them dynamic so the static-freeze sweep below leaves them be —
+    // but torso + head are static in the group, those still freeze.
+    g.userData.dynamic = true;
+    legL.userData.dynamic = legR.userData.dynamic = true;
+    armL.userData.dynamic = armR.userData.dynamic = true;
     scene.add(g);
     people.push({ g, legs: [legL, legR], arms: [armL, armR],
       x: rand(-130, 130), z: rand(-150, 60),
@@ -3345,6 +3384,16 @@ const people = [];
       retarget: rand(0, 3), flee: 0 });
   }
 })();
+/* PERF — world-static freeze sweep.
+   At this point every static building, prop, fence, brazier post, lamp,
+   bridge stone, gravestone, debris pile and rail tie is in the scene.
+   The dynamic stuff (mists, crow groups, smoke puffs, litter, people
+   limbs) has been pre-tagged with userData.dynamic so the helper skips
+   them. Everything else gets matrixAutoUpdate flipped off and its local
+   matrix baked once. Saves hundreds of per-frame matrix recomputes
+   inside Three.js' scene traversal — the dominant cost in our recent
+   profiling capture (16.5s of 29s spent inside the renderer). */
+freezeStaticTree(scene);
 function updatePeople(dt) {
   for (const p of people) {
     let danger = false;
@@ -4729,7 +4778,9 @@ function buildZombie(type, rare) {
   const head = new THREE.Mesh(zGeo("head:" + type, () =>
     new THREE.SphereGeometry(r * 0.4, 10, 8)), flesh);
   head.position.set(0, h * 0.79, r * 0.36); head.scale.set(1, 1.16, 1.05);
-  head.castShadow = true; g.add(head);
+  // PERF: head castShadow dropped — the torso shadow already reads the
+  // silhouette and head-shadow doubled the per-zombie shadow pass cost.
+  g.add(head);
   // HD-only head bits — skull cap, jaw, teeth, drip, sinew
   if (!lowQ) {
     const skullCap = new THREE.Mesh(zGeo("skullCap:" + type, () =>
@@ -4867,6 +4918,27 @@ function buildZombie(type, rare) {
   }
   g.userData = { mats: [flesh, cloth], legs, arms, torso, head, eyes,
     hp, hpFill: fill, hpW, crawler };
+  // PERF — freeze every static body mesh. After this, Three.js no longer
+  // recomputes matrices for the torso, gore details, eyes, claws, ribs,
+  // halo sprites, etc. on every frame. Only the parts that genuinely
+  // animate stay matrix-auto: the leg/arm GROUPS (rotation), the head
+  // (bite-tilt), the hp Group (faces the camera), and hpFill (scales as
+  // damage lands). Inside the leg/arm groups the inner mesh is static,
+  // so we freeze it. Inside the hp group only bg is static — fill scales.
+  const _zDynamic = new Set();
+  for (const l of legs) _zDynamic.add(l);
+  for (const a of arms) _zDynamic.add(a);
+  _zDynamic.add(head); _zDynamic.add(hp);
+  for (const c of g.children) {
+    if (_zDynamic.has(c)) continue;
+    if (c.isMesh || c.isSprite) freezeStaticMesh(c);
+  }
+  for (const l of legs) for (const cc of l.children)
+    if (cc.isMesh || cc.isSprite) freezeStaticMesh(cc);
+  for (const a of arms) for (const cc of a.children)
+    if (cc.isMesh || cc.isSprite) freezeStaticMesh(cc);
+  // hp.children[0] = bg (static), hp.children[1] = fill (scales per-frame)
+  if (hp.children[0]) freezeStaticMesh(hp.children[0]);
   return g;
 }
 
