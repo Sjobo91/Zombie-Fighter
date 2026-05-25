@@ -2,15 +2,33 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="theme-color" content="#05040a" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="icon" href="data:," />
 <title>Mortimer's Horde</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #05040a; overflow: hidden;
-    font-family: 'Arial Narrow', Arial, sans-serif; color: #d8cdbb; }
+  /* the playable area must respect notches / browser chrome on phones */
+  :root {
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+  }
+  html, body { margin: 0; height: 100%; width: 100%;
+    background: #05040a; overflow: hidden;
+    font-family: 'Arial Narrow', Arial, sans-serif; color: #d8cdbb;
+    /* lock to landscape feel: no pull-to-refresh, no scroll-bounce */
+    overscroll-behavior: none; touch-action: none; }
   #game { display: block; position: fixed; inset: 0; z-index: 0; }
-  #ui { position: fixed; inset: 0; z-index: 10; pointer-events: none;
-    user-select: none; -webkit-user-select: none; }
+  /* the HUD container honours the safe-area so phone notches and browser
+     chrome don't eat the corners; touch buttons place themselves relative
+     to it via the existing top/bottom/left/right positions. */
+  #ui { position: fixed; top: var(--safe-t); right: var(--safe-r);
+    bottom: var(--safe-b); left: var(--safe-l); z-index: 10;
+    pointer-events: none; user-select: none; -webkit-user-select: none; }
 
   /* ---- in-game HUD ---- */
   .topbar { position: absolute; top: 14px; left: 0; right: 0; display: flex;
@@ -53,6 +71,19 @@
     height: 190px; border: 2px solid #3a3640; border-radius: 8px;
     background: rgba(8,7,12,.66); box-shadow: 0 0 20px rgba(0,0,0,.6); }
 
+  /* ---- audio button — bottom-right, above the hint, away from the HUD ---- */
+  #audioBtn { position: fixed; right: 26px; bottom: 92px; width: 44px;
+    height: 30px; padding: 0; border: 1px solid #4a4358;
+    background: rgba(8,7,12,.85); border-radius: 6px; color: #d4c89a;
+    font-size: 14px; font-weight: 800; letter-spacing: 1px; cursor: pointer;
+    pointer-events: auto; z-index: 20; display: flex; align-items: center;
+    justify-content: center; box-shadow: 0 0 10px rgba(0,0,0,.55);
+    transition: background .15s, color .15s, border-color .15s; }
+  #audioBtn:hover { background: rgba(40,32,16,.92); color: #f0cf72;
+    border-color: #caa24a; }
+  #audioBtn .av { font-size: 9px; letter-spacing: 1.5px; margin-left: 4px;
+    color: #8b8478; }
+
   #hpwrap { position: absolute; left: 26px; bottom: 30px; width: 290px; }
   #hpbar { height: 22px; background: #1c0707; border: 2px solid #3a2018;
     border-radius: 4px; overflow: hidden; box-shadow: 0 0 14px rgba(0,0,0,.7);
@@ -61,10 +92,10 @@
     background: linear-gradient(90deg, #6e0d09, #e8362a); transition: width .12s; }
   #hptext { position: absolute; inset: 0; text-align: center; line-height: 22px;
     font-size: 13px; font-weight: 700; color: #f0e6da; }
-  #stambar { height: 9px; margin-top: 5px; background: #0c0c14;
-    border: 1px solid #2a2a36; border-radius: 3px; overflow: hidden; }
-  #stamfill { height: 100%; width: 100%;
-    background: linear-gradient(90deg, #2c6e8c, #6fd0ff); transition: width .08s; }
+  /* stamina bar — kept in the DOM for legacy code paths but hidden
+     because sprint is the default and the bar never drains anymore. */
+  #stambar { display: none; }
+  #stamfill { display: none; }
   #ragebar { height: 15px; margin-top: 5px; background: #160810;
     border: 1px solid #45202a; border-radius: 3px; overflow: hidden;
     position: relative; }
@@ -75,6 +106,15 @@
     border-color: #ff9a3a; }
   #ragebar.full #ragefill { animation: ragepulse .9s ease-in-out infinite; }
   @keyframes ragepulse { 50% { filter: brightness(1.35); } }
+  /* once the ultimate has been spent, the bar greys out — no more refills */
+  #ragebar.spent { border-color: #3a3640; box-shadow: none; opacity: .55; }
+  #ragebar.spent #ragefill { background: #2a2a36; }
+  /* WIZARD: rage becomes "Spirit" — deep arcane blue instead of fire-red */
+  body.cls-wizard #ragebar { background: #060814; border-color: #2040a8; }
+  body.cls-wizard #ragefill {
+    background: linear-gradient(90deg, #0a1a4a, #2a5aff, #6a9aff); }
+  body.cls-wizard #ragebar.full { box-shadow: 0 0 12px rgba(80,140,255,.85);
+    border-color: #8aaaff; }
   #ragetext { position: absolute; inset: 0; text-align: center;
     line-height: 15px; font-size: 10px; font-weight: 800; letter-spacing: 2px;
     color: #f0d8c0; text-shadow: 0 1px 2px #000; }
@@ -156,18 +196,26 @@
     justify-content: center; }
   #abilDesc { position: absolute; left: 50%; top: 132px;
     transform: translateX(-50%); width: 430px; max-width: 86vw;
-    padding: 15px 22px 17px; background: rgba(10,9,14,.93);
-    border: 2px solid #caa24a; border-radius: 11px; text-align: center;
+    padding: 16px 22px 18px; background: rgba(10,9,14,.95);
+    border: 2px solid #caa24a; border-radius: 12px; text-align: center;
     opacity: 0; transition: opacity .3s; pointer-events: none;
-    box-shadow: 0 0 34px rgba(0,0,0,.75); }
+    box-shadow: 0 0 34px rgba(0,0,0,.75),
+                0 0 64px rgba(216,150,30,.25);
+    /* clean clamp so a long description doesn't overflow off-screen */
+    max-height: 60vh; overflow: hidden; }
   #abilDesc.show { opacity: 1; }
-  #abilDesc .adGlyph { font-size: 42px; line-height: 1; }
+  #abilDesc .adGlyph { font-size: 56px; line-height: 1; margin-bottom: 4px;
+    filter: drop-shadow(0 0 16px currentColor); }
   #abilDesc .adName { font-size: 22px; font-weight: 800; letter-spacing: 2px;
-    margin: 5px 0 6px; }
+    margin: 4px 0 6px; }
   #abilDesc .adKind { font-size: 11px; letter-spacing: 3px; color: #8b8478;
     font-weight: 700; }
   #abilDesc .adDesc { font-size: 14.5px; color: #cdc5b4; line-height: 1.5;
-    margin-top: 5px; }
+    margin-top: 6px; }
+  body.touch #abilDesc { width: 320px; padding: 12px 16px 14px; top: 90px; }
+  body.touch #abilDesc .adGlyph { font-size: 44px; }
+  body.touch #abilDesc .adName { font-size: 17px; }
+  body.touch #abilDesc .adDesc { font-size: 12px; }
   .buffchip .btf { height: 100%; background: currentColor; }
 
   #crosshair { position: absolute; width: 26px; height: 26px; margin: -13px;
@@ -226,6 +274,94 @@
   @keyframes blink { 50% { opacity: .35; } }
   .fell { font-size: 80px; font-weight: 800; color: #7c1b12;
     text-shadow: 0 0 22px rgba(0,0,0,.9); margin: 0; }
+
+  /* ---- title menu (continue / new / forge) ---- */
+  #titleMenu { display: flex; flex-direction: column; gap: 14px;
+    margin-top: 36px; align-items: center; }
+  /* on short / mobile-landscape screens the buttons stack tightly */
+  body.touch #titleMenu { gap: 8px; margin-top: 14px; flex-direction: row;
+    flex-wrap: wrap; justify-content: center; max-width: 90vw; }
+  body.touch .title-main { font-size: 36px; }
+  body.touch #title .rule { width: 280px; margin: 8px 0; }
+  body.touch #title .muted { font-size: 11px; }
+  body.touch #title .controls { font-size: 10px; line-height: 1.5; }
+  body.touch .tbtn-menu { min-width: 0; padding: 9px 16px;
+    font-size: 12px; letter-spacing: 2px; }
+  .tbtn-menu { min-width: 260px; padding: 14px 26px; font-size: 16px;
+    font-weight: 800; letter-spacing: 4px; color: #d4c89a;
+    background: linear-gradient(180deg, #1f1a2a, #100d18);
+    border: 1px solid #4c4660; border-radius: 8px; cursor: pointer;
+    box-shadow: 0 4px 18px rgba(0,0,0,.55),
+                0 1px 0 rgba(216,183,90,.18) inset;
+    transition: background .15s, color .15s, border-color .15s,
+                transform .1s, box-shadow .15s; pointer-events: auto;
+    text-shadow: 0 2px 4px rgba(0,0,0,.7); }
+  .tbtn-menu:hover { background: linear-gradient(180deg, #2c2440, #1a1626);
+    border-color: #caa24a; color: #f0cf72;
+    box-shadow: 0 0 24px rgba(216,150,30,.4),
+                0 6px 22px rgba(0,0,0,.7); }
+  .tbtn-menu:active { transform: translateY(1px); }
+  .tbtn-menu.primary { background: linear-gradient(180deg, #4c2a18, #2a160a);
+    color: #f4d8a0; border-color: #c97a30; }
+  .tbtn-menu.primary:hover { background: linear-gradient(180deg, #6c3e22, #381c0e);
+    border-color: #f0cf72; color: #fff0c8;
+    box-shadow: 0 0 28px rgba(220,140,60,.55),
+                0 6px 22px rgba(0,0,0,.7); }
+  .tbtn-menu.disabled { opacity: .35; cursor: default; }
+  .tbtn-menu.disabled:hover { background: linear-gradient(180deg, #1f1a2a, #100d18);
+    border-color: #4c4660; color: #d4c89a; box-shadow: none; }
+  .tbtn-menu .shardCount { display: inline-block; margin-left: 12px;
+    padding: 2px 9px; font-size: 12px; background: rgba(180,120,200,.2);
+    border: 1px solid #b070d0; border-radius: 10px; color: #e7b8ff;
+    letter-spacing: 2px; }
+
+  /* ---- soul forge screen ---- */
+  #forgeScreen { z-index: 13; }
+  .forgePanel { width: 720px; max-width: 92vw; }
+  #forgeShards { text-align: center; font-size: 12px; letter-spacing: 4px;
+    color: #b070d0; margin: 0 0 22px; }
+  #forgeShards b { font-size: 28px; color: #e7b8ff; margin-left: 8px;
+    text-shadow: 0 0 16px rgba(176,112,208,.6); }
+  #forgeList { display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px; max-height: 60vh; overflow-y: auto; padding-right: 6px; }
+  #forgeList::-webkit-scrollbar { width: 8px; }
+  #forgeList::-webkit-scrollbar-thumb { background: #3a3640; border-radius: 4px; }
+  /* section divider — spans both grid columns so weapon/armor/abilities
+     clearly group together inside the same scroll area. */
+  .forgeSection { grid-column: 1 / -1; margin-top: 10px;
+    padding: 4px 0 0; border-top: 1px solid #322d3c; }
+  .forgeSection:first-child { margin-top: 0; border-top: none; }
+  .frSecTitle { font-size: 12px; letter-spacing: 4px; color: #f0cf72;
+    font-weight: 800; margin: 8px 0 2px;
+    text-shadow: 0 0 12px rgba(216,150,30,.35); }
+  .frSecBlurb { font-size: 11px; letter-spacing: 1px; color: #7d7668;
+    margin-bottom: 8px; }
+  body.touch #forgeList { grid-template-columns: 1fr; gap: 8px; }
+  body.touch .forgePanel { width: 92vw; padding: 16px 16px 18px; }
+  .forgeRow { background: linear-gradient(135deg, #241f31, #15121d);
+    border: 1px solid #3a3550; border-left: 3px solid #6a4090; border-radius: 9px;
+    padding: 12px 14px; text-align: left;
+    display: flex; flex-direction: column; gap: 6px; }
+  .forgeRow.max { border-left-color: #f0cf72; opacity: .85; }
+  .forgeRow .frHead { display: flex; align-items: center;
+    justify-content: space-between; }
+  .forgeRow .frName { font-size: 14px; font-weight: 800; color: #e8ddc6;
+    letter-spacing: 2px; }
+  .forgeRow .frRank { font-size: 11px; letter-spacing: 2px;
+    color: #b070d0; font-weight: 800; }
+  .forgeRow .frDesc { font-size: 12px; color: #9a937f; line-height: 1.35; }
+  .forgeRow .frBuy { margin-top: 4px; padding: 7px 14px; font-size: 11px;
+    font-weight: 800; letter-spacing: 2px; color: #e7b8ff;
+    background: linear-gradient(180deg, #2a1f3a, #1a0f2a);
+    border: 1px solid #6a4090; border-radius: 6px; cursor: pointer;
+    transition: background .12s, color .12s; }
+  .forgeRow .frBuy:hover:not(:disabled) {
+    background: linear-gradient(180deg, #4a2f5e, #2a0f3a);
+    color: #fff; border-color: #b070d0;
+    box-shadow: 0 0 16px rgba(176,112,208,.45); }
+  .forgeRow .frBuy:disabled { opacity: .35; cursor: default; }
+  #forgeClose { margin-top: 18px; text-align: center; font-size: 11px;
+    letter-spacing: 2px; color: #6f6a60; }
 
   /* ---- class selection screen ---- */
   #classSelect { z-index: 12; }
@@ -419,7 +555,84 @@
   #charClose { margin-top: 20px; font-size: 11px; letter-spacing: 2px;
     color: #6f6a60; height: 16px; }
 
-  /* ---- inventory / gear screen ---- */
+  /* ---- round-end popup — big countdown + stat allocation ---- */
+  #roundPopup { z-index: 18;
+    background: radial-gradient(ellipse at center,
+      rgba(8,6,12,.78) 0%, rgba(4,3,7,.94) 80%); }
+  .rpCard { width: 460px; max-width: 92vw;
+    background: linear-gradient(180deg, #1a1626 0%, #110e18 52%, #0b0910 100%);
+    border: 1px solid #4c4660; border-radius: 16px;
+    padding: 24px 28px 26px;
+    box-shadow: 0 26px 72px rgba(0,0,0,.82),
+                0 1px 0 rgba(240,207,114,.16) inset;
+    text-align: center; pointer-events: auto; }
+  #rpTitle { font-size: 22px; font-weight: 800; color: #d8b75a;
+    letter-spacing: 5px; margin-bottom: 6px;
+    text-shadow: 0 0 16px rgba(216,150,30,.4); }
+  #rpCountdown { font-size: 120px; font-weight: 800; color: #f4ecdc;
+    line-height: 1; margin: 8px 0 0;
+    text-shadow: 0 0 32px rgba(240,207,114,.6), 0 4px 12px rgba(0,0,0,.75); }
+  #rpCountdown.urgent { color: #ff6a4a;
+    text-shadow: 0 0 36px rgba(255,90,60,.85), 0 4px 12px rgba(0,0,0,.85);
+    animation: rpPulse .55s ease-in-out infinite; }
+  @keyframes rpPulse { 50% { transform: scale(1.18); } }
+  #rpCdLabel { font-size: 11px; letter-spacing: 4px; color: #7d7668;
+    margin-bottom: 18px; }
+  #rpPoints { font-size: 12px; letter-spacing: 3px; color: #9a937f;
+    margin: 10px 0 14px;
+    padding: 10px; border-radius: 8px;
+    background: rgba(216,183,90,.07); border: 1px solid rgba(216,183,90,.22); }
+  #rpPoints b { font-size: 20px; color: #f0cf72; margin-left: 6px; }
+  #rpPoints.has { border-color: rgba(216,183,90,.6);
+    box-shadow: 0 0 16px rgba(216,183,90,.25); }
+  #rpPoints.has b { animation: ptpulse 1.1s ease-in-out infinite; }
+  #rpStats { display: flex; flex-direction: column; gap: 8px;
+    margin-bottom: 16px; }
+  .rpRow { display: flex; align-items: center; gap: 9px; padding: 9px 11px;
+    background: linear-gradient(135deg, #241f31, #15121d);
+    border: 1px solid #36313f; border-radius: 9px; }
+  .rpRow .sdot { width: 13px; height: 13px; border-radius: 50%; flex: none;
+    box-shadow: 0 0 11px currentColor; }
+  .rpRow .sinfo { flex: 1; text-align: left; min-width: 0; }
+  .rpRow .sn { font-size: 13px; font-weight: 800; color: #e8ddc6;
+    letter-spacing: 1px; }
+  .rpRow .sd { font-size: 10px; color: #857f72; line-height: 1.3;
+    margin-top: 2px; }
+  .rpRow .cval { font-size: 20px; font-weight: 800; color: #f4ecdc;
+    width: 28px; text-align: center; }
+  .rpRow .sbtn { width: 30px; height: 30px; font-size: 19px;
+    border-radius: 7px; }
+  .rpBtns { display: flex; gap: 10px; justify-content: center;
+    flex-wrap: wrap; }
+  #rpShards { font-size: 11px; letter-spacing: 3px; color: #b070d0;
+    margin: 6px 0 10px; }
+  #rpShards b { font-size: 19px; color: #e7b8ff; margin-left: 6px;
+    text-shadow: 0 0 10px rgba(176,112,208,.6); }
+  #rpStart, .rpBtnAlt { padding: 12px 22px; font-size: 13px; font-weight: 800;
+    letter-spacing: 3px; color: #f4d8a0; cursor: pointer;
+    background: linear-gradient(180deg, #4c2a18, #2a160a);
+    border: 1px solid #c97a30; border-radius: 8px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.55); }
+  #rpStart:hover { background: linear-gradient(180deg, #6c3e22, #381c0e);
+    color: #fff0c8; border-color: #f0cf72; }
+  .rpBtnAlt { background: linear-gradient(180deg, #2a1f3a, #1a0f2a);
+    color: #e7b8ff; border-color: #6a4090; }
+  .rpBtnAlt:hover { background: linear-gradient(180deg, #4a2f5e, #2a0f3a);
+    color: #fff; border-color: #b070d0;
+    box-shadow: 0 0 16px rgba(176,112,208,.45),
+                0 4px 18px rgba(0,0,0,.55); }
+  body.touch .rpCard { width: 380px; padding: 18px 22px 20px; }
+  body.touch #rpCountdown { font-size: 84px; }
+  body.touch #rpTitle { font-size: 18px; }
+  body.touch .rpRow { padding: 7px 10px; }
+  body.touch .rpRow .sbtn { width: 36px; height: 36px; font-size: 21px; }
+
+  /* ---- legacy inventory + character screens ----
+     Inventory is gone (gear auto-equips), and the character sheet is
+     replaced by a round-end stat popup. Hide both so the title hint hooks
+     don't accidentally surface them on touch devices. */
+  #invScreen { display: none !important; }
+  #charScreen { display: none !important; }
   #invScreen .panel { width: 640px; }
   .gearslots { display: flex; gap: 16px; margin-bottom: 18px; }
   .gslot { flex: 1; background: #1a1822; border: 2px solid #3a3640;
@@ -459,42 +672,58 @@
   #game { touch-action: none; }
   body.touch #hint, body.touch #abilities,
   body.touch #minimap { display: none; }
+  /* HP wrap moves to top-left on touch, just below the topbar so the
+     LEVEL / DISTRICT line above it stays readable. */
+  body.touch #hpwrap { top: 38px; left: 14px; bottom: auto;
+    width: 220px; max-width: 44vw; }
+  body.touch #score { font-size: 14px; letter-spacing: 1px; }
+  body.touch #score .slab { font-size: 9px; }
+  body.touch .topbar { padding: 0 16px; }
+  body.touch #lvl { font-size: 14px; }
+  body.touch #district { font-size: 9px; letter-spacing: 1.5px; }
+  body.touch #wave { font-size: 16px; letter-spacing: 1px; }
+  body.touch #stats { font-size: 10px; letter-spacing: .5px; }
+  /* on touch the bottom-right is the attack-button cluster, so the audio
+     toggle moves to the top-right corner above the topbar score. */
+  /* on touch the bottom-right is the attack-button cluster, so the audio
+     toggle moves to the top-right corner above the topbar score. */
+  body.touch #audioBtn { top: 12px; bottom: auto; right: 12px;
+    width: 40px; height: 28px; font-size: 12px; }
+  /* also push the topbar score in a touch — leaves room for the audio btn */
+  body.touch .topbar { padding: 0 60px 0 16px; }
   #touchUI { position: fixed; inset: 0; z-index: 30; display: none;
     pointer-events: none; }
   #touchUI.on { display: block; }
   #touchUI > * { pointer-events: auto; touch-action: none; }
-  #joyBase { position: absolute; left: 40px; bottom: 140px; width: 152px;
-    height: 152px; border-radius: 50%; background: rgba(10,10,16,.3);
+  /* joystick — bottom-left, ~30% smaller than before so it fits a thumb */
+  #joyBase { position: absolute; left: 22px; bottom: 22px; width: 110px;
+    height: 110px; border-radius: 50%; background: rgba(10,10,16,.3);
     border: 2px solid rgba(200,180,140,.32); }
-  #joyKnob { position: absolute; left: 50%; top: 50%; width: 68px;
-    height: 68px; margin: -34px 0 0 -34px; border-radius: 50%;
+  #joyKnob { position: absolute; left: 50%; top: 50%; width: 50px;
+    height: 50px; margin: -25px 0 0 -25px; border-radius: 50%;
     background: rgba(212,192,150,.46);
     border: 2px solid rgba(232,212,172,.66);
     box-shadow: 0 0 16px rgba(0,0,0,.55); }
   .tbtn { position: absolute; border-radius: 50%; display: flex;
     align-items: center; justify-content: center; font-weight: 800;
-    font-size: 14px; letter-spacing: 1px; color: #f0e6d2;
+    font-size: 12px; letter-spacing: 1px; color: #f0e6d2;
     background: rgba(16,13,20,.6); border: 2px solid rgba(150,140,120,.42);
     text-shadow: 0 2px 4px #000; }
   .tbtn.held { background: rgba(150,58,38,.74); border-color: #e8a050; }
   .tbtn .tcd { position: absolute; inset: -2px; border-radius: 50%;
     background: rgba(4,4,8,.66); display: none; align-items: center;
-    justify-content: center; font-size: 25px; color: #fff; }
+    justify-content: center; font-size: 20px; color: #fff; }
   .tbtn.cooling .tcd { display: flex; }
   .tbtn.cooling { color: #6b6660; }
-  #tb-atk { right: 40px; bottom: 72px; width: 120px; height: 120px;
-    font-size: 16px; }
-  #tb-smash { right: 172px; bottom: 100px; width: 92px; height: 92px; }
-  #tb-leap { right: 70px; bottom: 204px; width: 86px; height: 86px; }
-  #tb-ult { right: 186px; bottom: 212px; width: 82px; height: 82px;
+  /* action buttons — bottom-right, ~30% smaller, biggest is the attack */
+  #tb-atk { right: 22px; bottom: 22px; width: 86px; height: 86px;
+    font-size: 14px; }
+  #tb-smash { right: 116px; bottom: 60px; width: 64px; height: 64px; }
+  #tb-leap { right: 30px; bottom: 118px; width: 60px; height: 60px; }
+  #tb-ult { right: 96px; bottom: 138px; width: 58px; height: 58px;
     color: #ffd23a; }
-  #tb-sprint { right: 282px; bottom: 80px; width: 76px; height: 76px;
-    font-size: 13px; }
-  #tb-char, #tb-inv { width: 58px; height: 58px; font-size: 12px; }
-  #tb-char { left: 20px; top: 84px; }
-  #tb-inv { left: 20px; top: 150px; }
-  #qualityBtn { position: absolute; left: 20px; top: 216px; width: 58px;
-    height: 44px; border-radius: 10px; font-size: 12px; }
+  #qualityBtn { position: absolute; right: 12px; top: 12px; width: 46px;
+    height: 30px; border-radius: 8px; font-size: 11px; }
   #rotateMsg { position: fixed; inset: 0; z-index: 95; display: none;
     background: #07060c; color: #d8cdbb; text-align: center;
     align-items: center; justify-content: center; font-size: 21px;
@@ -560,6 +789,8 @@
   <div id="bossbar"><div class="bn">BOSS</div>
     <div class="bbar"><div class="bfill"></div></div></div>
   <canvas id="minimap" width="190" height="190"></canvas>
+  <button id="audioBtn" title="Audio (M to mute)">
+    <span class="ag">&#x1F50A;</span><span class="av">100</span></button>
   <div id="crosshair"></div>
 
   <div id="ach"><div class="emb"></div>
@@ -570,10 +801,25 @@
     <h1 class="title-main">MORTIMER'S HORDE</h1>
     <div class="rule"></div>
     <div class="muted">A GOTHIC ARPG — RISE THROUGH THE GRAVEYARD, GROW IN POWER</div>
-    <div class="controls">WASD MOVE &middot; SHIFT SPRINT &middot; MOUSE AIM &middot;
-      CLICK ATTACK &middot; Q / RMB POWER &middot; SPACE DASH<br>
-      C CHARACTER SHEET &middot; I GEAR &amp; INVENTORY</div>
-    <div class="blink">CLICK TO CHOOSE YOUR HERO</div>
+    <div class="controls">WASD MOVE (always sprinting) &middot; MOUSE LOOK
+      &middot; CLICK ATTACK &middot; RMB SMASH &middot; SPACE LEAP
+      &middot; Q ULTIMATE</div>
+    <div id="titleMenu">
+      <button id="btnContinue" class="tbtn-menu primary">CONTINUE RUN</button>
+      <button id="btnNew" class="tbtn-menu">NEW GAME</button>
+      <button id="btnForge" class="tbtn-menu">SOUL FORGE
+        <span class="shardCount" id="titleShards">0</span></button>
+    </div>
+  </div>
+
+  <div id="forgeScreen" class="overlay hidden">
+    <div class="panel forgePanel">
+      <h2>SOUL FORGE</h2>
+      <div class="ph">SPEND SHARDS WON FROM EVERY FALLEN CHAMPION</div>
+      <div id="forgeShards">SHARDS <b id="forgeShardCount">0</b></div>
+      <div id="forgeList"></div>
+      <div id="forgeClose">ESC &mdash; CLOSE</div>
+    </div>
   </div>
 
   <div id="classSelect" class="overlay hidden">
@@ -700,6 +946,21 @@
     <div class="blink" id="over-again" style="visibility:hidden">
       CLICK TO RISE AGAIN</div>
   </div>
+
+  <div id="roundPopup" class="overlay hidden">
+    <div class="rpCard">
+      <div id="rpTitle">WAVE CLEARED</div>
+      <div id="rpCountdown">10</div>
+      <div id="rpCdLabel">NEXT WAVE BEGINS IN</div>
+      <div id="rpShards">SOUL SHARDS: <b id="rpShardNum">0</b></div>
+      <div id="rpPoints">UNSPENT STAT POINTS: <b id="rpPtsNum">0</b></div>
+      <div id="rpStats"></div>
+      <div class="rpBtns">
+        <button id="rpForge" class="rpBtnAlt">SOUL FORGE</button>
+        <button id="rpStart">START NEXT WAVE</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
@@ -784,11 +1045,10 @@ const ATK_SLOW_DUR = 0.5, ATK_SLOW_AMT = 0.26;
    up (looking for rooftop divers) should the arc lift significantly.
    A small dead-zone near horizontal + a softer multiplier give that. */
 function aimPitchAngle() {
-  const off = 0.5 - camPitch;           // +ve = looking up, -ve = down
-  // dead zone of ±0.1 — small tilts don't change aim
-  const sign = off < 0 ? -1 : 1;
-  const mag = Math.max(0, Math.abs(off) - 0.1);
-  return sign * mag * 0.7;              // 0.7 multiplier — was 1.35
+  // aim is now fully decoupled from camera pitch — projectiles always fly
+  // horizontally forward. On a phone you can tilt the camera to scout
+  // without your shots arcing away from the horde at your feet.
+  return 0;
 }
 const RISE_DUR = 1.45;
 // stat-point yields — deliberately small. Your real power comes from the
@@ -816,12 +1076,45 @@ const ETYPES = {
   brute:    { hp: 160,  speed: 7.0,  dmg: 30, r: 2.1,  h: 5.0,  xp: 48 },
   giant:    { hp: 560,  speed: 5.4,  dmg: 54, r: 3.5,  h: 7.6,  xp: 200 },
   revenant: { hp: 380,  speed: 11.4, dmg: 34, r: 1.85, h: 4.7,  xp: 160 },
+  // NECROMANCER — fragile mid-wave caster. On death, raises 3 fresh shamblers
+  // out of the earth nearby; the death summons honour the wave HP scaling so
+  // they aren't free trash kills late-game.
+  necro:    { hp: 220,  speed: 6.5,  dmg: 22, r: 1.55, h: 4.3,  xp: 95 },
   boss:     { hp: 1700, speed: 5.0,  dmg: 46, r: 5.4,  h: 12.5, xp: 950 },
 };
 // per-wave compounding — late waves become a true test
 const DMG_SCALE = 1.075;    // gentle per-wave damage ramp
-const DISTRICTS = ["THE BONEYARD", "THE IRON GATE", "THE OLD STREETS",
-                   "THE MARKET SQUARE", "THE OUTER WARD", "THE BLACK CATHEDRAL"];
+// Stage themes — every "level" (stage) has a name + atmosphere tint. The
+// player progresses through these by stepping through the portal at the end
+// of a stage. Stage 10+ is THE ABYSS — the endgame zone with infinite waves
+// (see startWave) and the harshest atmosphere.
+const STAGES = [
+  { name: "THE BONEYARD",      fog: 0x39404e, fogD: 0.0078,
+    sky: 0x9badc8, ground: 0x4c4738, moon: 0xd8d9e2 },
+  { name: "THE IRON GATE",     fog: 0x3a342e, fogD: 0.0086,
+    sky: 0xa89488, ground: 0x4a3a2c, moon: 0xe6c8a0 },
+  { name: "THE OLD STREETS",   fog: 0x303a2e, fogD: 0.009,
+    sky: 0x90a888, ground: 0x4a4730, moon: 0xc8d0a8 },
+  { name: "THE MARKET SQUARE", fog: 0x4a3a26, fogD: 0.0095,
+    sky: 0xb89a68, ground: 0x504028, moon: 0xf0c890 },
+  { name: "THE OUTER WARD",    fog: 0x2a2e44, fogD: 0.0102,
+    sky: 0x6a82b0, ground: 0x3a3a52, moon: 0x9ab4f0 },
+  { name: "THE BLACK CATHEDRAL", fog: 0x2a1a3a, fogD: 0.0118,
+    sky: 0x6850a0, ground: 0x3a2848, moon: 0xc09aff },
+  // ─── beyond the cathedral ─── three new districts past the original six
+  { name: "THE CRIMSON QUAY",  fog: 0x4a1a1c, fogD: 0.0124,
+    sky: 0xa84a4a, ground: 0x501818, moon: 0xff8a7a },
+  { name: "THE SUNKEN KEEP",   fog: 0x1c3a3e, fogD: 0.0136,
+    sky: 0x4a8aa0, ground: 0x1e3a3e, moon: 0x7afff0 },
+  { name: "THE HOLLOW CROWN",  fog: 0x4a3e1a, fogD: 0.0148,
+    sky: 0xd8c060, ground: 0x584828, moon: 0xfff0a0 },
+  // ─── endgame ─── from stage 10 onward, every wave is THE ABYSS
+  { name: "THE ABYSS",         fog: 0x08060c, fogD: 0.022,
+    sky: 0x2a1a3a, ground: 0x0a0610, moon: 0x9a4aff },
+];
+function stageTheme(lvl) {
+  return STAGES[Math.min(STAGES.length - 1, Math.max(0, lvl - 1))];
+}
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const TAU = Math.PI * 2;
@@ -872,7 +1165,9 @@ function resize() {
 addEventListener("resize", resize); resize();
 
 /* ─── lights ──────────────────────────────────────────────────────────────── */
-scene.add(new THREE.HemisphereLight(0x9badc8, 0x4c4738, 1.0));
+// keep a ref so stageTheme transitions can re-tint hemisphere on stage advance
+const hemi = new THREE.HemisphereLight(0x9badc8, 0x4c4738, 1.0);
+scene.add(hemi);
 const moon = new THREE.DirectionalLight(0xd8d9e2, 0.95);
 moon.position.set(62, 100, 44);
 moon.castShadow = true;
@@ -886,6 +1181,19 @@ moon.shadow.camera.top = 60; moon.shadow.camera.bottom = -60;
 moon.shadow.bias = -0.0015;
 scene.add(moon);
 scene.add(moon.target);
+
+/* re-tint the world to the current stage's theme — fog colour + density,
+   hemisphere sky/ground tint, moon colour, and the canvas background so
+   the horizon under fog feels right. Called on resetGame and advanceLevel. */
+function applyStageTheme(lvl) {
+  const t = stageTheme(lvl);
+  scene.fog.color.setHex(t.fog);
+  scene.fog.density = t.fogD;
+  scene.background.setHex(t.fog);    // horizon blends with fog
+  hemi.color.setHex(t.sky);
+  hemi.groundColor.setHex(t.ground);
+  moon.color.setHex(t.moon);
+}
 
 /* ─── audio — a proper gothic mix: stone-hall reverb, layered SFX ─────────── */
 const Sound = (() => {
@@ -946,8 +1254,14 @@ const Sound = (() => {
     s.start(t); s.stop(t + dur + 0.03);
   }
   function thud(f, dur, vol) { tone("sine", f, f * 0.4, dur, vol, 0, 0.15); }
+  // master volume — multiplies the baseline 0.82 mix; persists via Audio settings.
+  // Called every time the user adjusts the audio button, and once at load.
+  function setVolume(v) {
+    const c = actx(); if (!c || !master) return;
+    master.gain.setTargetAtTime(0.82 * v, c.currentTime, 0.05);
+  }
   return {
-    actx, tone, noise, master: () => master,
+    actx, tone, noise, master: () => master, setVolume,
     swing() { noise(0.28, 0.3, "bandpass", 700, 3000, 1.2, 0.2); },
     hit()   { noise(0.12, 0.5, "lowpass", 1500, 480); thud(150, 0.18, 0.5);
               tone("triangle", 230, 90, 0.09, 0.2); },
@@ -1059,6 +1373,65 @@ const Sound = (() => {
       tone("sine", 320, 1200, 0.2, 0.16, 0, 0.4);
       tone("sine", 1200, 320, 0.22, 0.13, 0.05, 0.4);
     },
+    // a monstrous boss roar — long, deep, layered, used when a boss claws up
+    bossRoar() {
+      const f = 42;
+      tone("sawtooth", f, f * 0.55, 2.2, 0.32, 0, 0.7);
+      tone("triangle", f * 1.6, f * 1.2, 1.8, 0.18, 0.04, 0.65);
+      tone("sawtooth", f * 2.4, f * 1.5, 1.4, 0.12, 0.08, 0.6);
+      noise(1.6, 0.42, "lowpass", 720, 200, 0, 0.6);
+      noise(2.0, 0.18, "bandpass", 1500, 600, 1.2, 0.5);
+    },
+    // a final death stinger — sombre, the world dims
+    death() {
+      tone("sawtooth", 220, 28, 1.4, 0.34, 0, 0.7);
+      tone("sine",     320, 60, 1.6, 0.22, 0.1, 0.6);
+      noise(1.2, 0.4, "lowpass", 600, 120, 0, 0.6);
+      tone("sine", 110, 44, 2.0, 0.16, 0.4, 0.7);
+    },
+    // bright, triumphant unlock — used for achievements / new abilities
+    fanfare() {
+      [0, 0.09, 0.18, 0.30].forEach((o, i) =>
+        tone("triangle", 523 * Math.pow(1.26, i),
+                          523 * Math.pow(1.26, i),
+                          0.45, 0.16, o, 0.5));
+      tone("sine", 1568, 1568, 0.55, 0.10, 0.42, 0.55);
+      noise(0.32, 0.18, "highpass", 4000, 7200, 0, 0.35);
+    },
+    // soft round chime — wave is over, the dead have fallen
+    waveDone() {
+      [0, 0.12, 0.24].forEach((o, i) =>
+        tone("sine", 440 * Math.pow(1.5, i),
+                     440 * Math.pow(1.5, i),
+                     0.55, 0.13, o, 0.6));
+    },
+    // rage meter just hit full — the fire ignites
+    rageReady() {
+      tone("sawtooth", 180, 540, 0.32, 0.22, 0, 0.4);
+      tone("triangle", 720, 280, 0.28, 0.18, 0.05, 0.45);
+      noise(0.22, 0.22, "bandpass", 900, 2400, 1, 0.4);
+    },
+    // a heavy magical warp — used when stepping through the level portal
+    warp() {
+      tone("sawtooth", 80, 1600, 0.7, 0.22, 0, 0.55);
+      tone("triangle", 1600, 80, 0.7, 0.18, 0.05, 0.55);
+      noise(0.5, 0.3, "bandpass", 400, 2600, 0.7, 0.6);
+      tone("sine", 540, 220, 0.5, 0.12, 0.1, 0.5);
+    },
+    // stamina ran dry — a soft, lung-empty thud
+    stamOut() {
+      tone("sine", 220, 110, 0.32, 0.14, 0, 0.3);
+      noise(0.22, 0.16, "lowpass", 700, 220, 0, 0.3);
+    },
+    // soft UI tick — used on hover so it never gets annoying
+    uiTick() {
+      tone("sine", 1400, 1200, 0.05, 0.06, 0, 0.15);
+    },
+    // crisp UI click — used when you pick a card or button
+    uiClick() {
+      tone("triangle", 880, 1320, 0.07, 0.14, 0, 0.2);
+      tone("sine", 1760, 1320, 0.06, 0.08, 0.02, 0.2);
+    },
   };
 })();
 
@@ -1122,7 +1495,7 @@ const Ambience = (() => {
    a loop while you're in the world. Falls back gracefully if the MP3
    isn't reachable. Volume eases in/out so transitions feel natural.    */
 const Music = (() => {
-  const TARGET_VOL = 0.22;             // soft, lets the SFX breathe
+  let TARGET_VOL = 0.22;               // soft, lets the SFX breathe
   const FADE = 1.6;
   const audio = new Audio("assets/audio/lantern-horde.mp3");
   audio.loop = true;
@@ -1155,8 +1528,13 @@ const Music = (() => {
       if (fadeT >= FADE) { dir = 0; try { audio.pause(); } catch (e) {} }
     }
   }
+  // user-adjustable music level — 0.22 is the natural target, scales linearly
+  function setVolume(v) {
+    TARGET_VOL = 0.22 * v;
+    if (on && dir === 0) audio.volume = TARGET_VOL;
+  }
   // expose audio so the title click can prime playback (autoplay rules)
-  return { start, update, stop, _audio: audio };
+  return { start, update, stop, setVolume, _audio: audio };
 })();
 
 /* ─── terrain — a rolling land that sinks to a southern shore ─────────────── */
@@ -4236,6 +4614,28 @@ function buildZombie(type, rare) {
   hp.add(bg, fill);
   hp.position.y = (crawler ? h * 0.55 : h) + 0.8; hp.visible = false;
   g.add(hp);
+  // NECROMANCER visual marker — a violet aura sprite + halo are cheap.
+  // The PointLight is only added on the desktop high-quality path because
+  // many extra real lights tank fragment-shading on mobile GPUs.
+  if (type === "necro") {
+    const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+      color: 0x9a40ff, transparent: true, opacity: 0.62, depthWrite: false,
+      blending: THREE.AdditiveBlending }));
+    aura.scale.setScalar(h * 0.95); aura.position.y = h * 0.52;
+    g.add(aura);
+    const halo = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 0.55, 0.07, 6, 18),
+      new THREE.MeshStandardMaterial({ color: 0xb56aff,
+        emissive: 0x9a40ff, emissiveIntensity: 1.4,
+        roughness: 0.4, metalness: 0.2 }));
+    halo.position.set(0, h * 0.96, r * 0.36);
+    halo.rotation.x = Math.PI / 2;
+    g.add(halo);
+    if (!lowQ) {
+      const necroLight = new THREE.PointLight(0x9a40ff, 1.4, 9, 2);
+      necroLight.position.y = h * 0.7; g.add(necroLight);
+    }
+  }
   g.userData = { mats: [flesh, cloth], legs, arms, torso, head, eyes,
     hp, hpFill: fill, hpW, crawler };
   return g;
@@ -4518,6 +4918,60 @@ function updateScorch(dt) {
   }
 }
 
+/* ─── blood splatter decals — lingering on the ground where the dead fell ──
+   A pool of 30 quads, sharing one canvas-baked texture. killZombie picks
+   the next slot, places + scales + rotates the quad at the corpse's feet,
+   and lets it fade over ~30s. Cheap (one draw call per decal, no shaders)
+   yet the world starts to feel inhabited by a real horde over time. */
+const splatTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d");
+  // a soft red splat with darker droplet specks for texture
+  const gr = g.createRadialGradient(32, 32, 4, 32, 32, 30);
+  gr.addColorStop(0,    "rgba(86,8,8,0.95)");
+  gr.addColorStop(0.45, "rgba(58,4,4,0.7)");
+  gr.addColorStop(1,    "rgba(20,2,2,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 9; i++) {           // small droplet specks
+    g.beginPath();
+    g.arc(32 + (Math.random() - 0.5) * 50, 32 + (Math.random() - 0.5) * 50,
+      0.8 + Math.random() * 2.4, 0, TAU);
+    g.fillStyle = "rgba(34,3,3," + (0.4 + Math.random() * 0.5) + ")";
+    g.fill();
+  }
+  return new THREE.CanvasTexture(c);
+})();
+const splats = [];
+(function () {
+  const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2);
+  for (let i = 0; i < 30; i++) {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      map: splatTex, transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false; scene.add(m);
+    splats.push({ m, age: 0, life: 0 });
+  }
+})();
+let splatCur = 0;
+function splat(x, z, r) {
+  const s = splats[splatCur]; splatCur = (splatCur + 1) % splats.length;
+  s.age = 0; s.life = rand(22, 32);
+  s.m.visible = true;
+  s.m.position.set(x, groundHeight(x, z) + 0.06, z);
+  s.m.scale.set(r * 1.4, 1, r * 1.4);
+  s.m.material.rotation = Math.random() * TAU;   // unique orientation per kill
+  s.m.material.opacity = 0.9;
+}
+function updateSplats(dt) {
+  for (const s of splats) {
+    if (s.age >= s.life) continue;
+    s.age += dt;
+    if (s.age >= s.life) { s.m.visible = false; continue; }
+    // hold near full opacity for the first half, then fade
+    const t = s.age / s.life;
+    s.m.material.opacity = t < 0.5 ? 0.9 : 0.9 * (1 - (t - 0.5) * 2);
+  }
+}
+
 /* ─── busted ground — fracture cracks & heaved slabs from heavy impacts ───── */
 const crackTex = (() => {
   const c = document.createElement("canvas"); c.width = c.height = 128;
@@ -4635,6 +5089,41 @@ function updateFireflies(dt, t) {
     m.position.z += Math.cos(t * f.sp * 0.8 + f.phase) * dt * 1.5;
     m.position.y += Math.sin(t * 1.6 + f.phase) * dt * f.bob;
     m.material.opacity = 0.28 + Math.abs(Math.sin(t * 2 + f.phase)) * 0.5;
+  }
+}
+
+/* ─── volumetric fog haze sprites ─────────────────────────────────────────────
+   Large additive-blended sprites that drift slowly at low Y across the world,
+   giving the fog a sense of body and depth instead of just a flat hue. Only
+   12 sprites — each is ~18 units wide, so they cover the playable arena even
+   at sparse counts. */
+const haze = [];
+(function () {
+  for (let i = 0; i < 12; i++) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+      color: 0xeae0d0, transparent: true, opacity: 0,
+      depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.position.set(rand(-ARENA + 30, ARENA - 30), rand(2, 5),
+      rand(-ARENA + 30, 130));
+    m.scale.setScalar(rand(14, 22));
+    scene.add(m);
+    haze.push({ m, phase: rand(0, TAU), sp: rand(0.05, 0.13),
+      baseY: m.position.y, drift: rand(0.4, 0.9) });
+  }
+})();
+function updateHaze(dt, t) {
+  for (const h of haze) {
+    const m = h.m;
+    m.position.x += Math.sin(t * h.sp + h.phase) * dt * h.drift;
+    m.position.z += Math.cos(t * h.sp * 0.7 + h.phase) * dt * h.drift;
+    m.position.y = h.baseY + Math.sin(t * 0.4 + h.phase) * 0.6;
+    // breathe in/out — never fully solid, never fully gone
+    m.material.opacity = 0.08 + Math.abs(Math.sin(t * 0.35 + h.phase)) * 0.18;
+    // wrap on world edges so they don't all drift to one side over a long run
+    if (m.position.x >  ARENA - 12) m.position.x = -ARENA + 30;
+    if (m.position.x < -ARENA + 12) m.position.x =  ARENA - 30;
+    if (m.position.z >  ZSHORE - 8) m.position.z = -ARENA + 30;
+    if (m.position.z < -ARENA + 12) m.position.z =  ZSHORE - 12;
   }
 }
 
@@ -4944,9 +5433,37 @@ let chosenClass = "knight";
 function makePlayer() {
   // pass the chosen class into the builder via a window-side flag
   window.__heroClass = chosenClass;
+  // tag the body so per-class CSS (e.g. wizard's Spirit-blue rage bar)
+  // can kick in. Clear any previous class first to handle re-runs.
+  document.body.classList.remove("cls-knight", "cls-wizard",
+    "cls-gunslinger", "cls-hunter", "cls-rogue");
+  document.body.classList.add("cls-" + chosenClass);
+  // touch-button label for the right-click skill is per-class — wizard
+  // calls it BLAZE, everyone else still calls it SMASH.
+  const smashBtn = document.getElementById("tb-smash");
+  if (smashBtn) {
+    const label = (chosenClass === "wizard") ? "BLAZE" : "SMASH";
+    smashBtn.innerHTML = label + '<div class="tcd"></div>';
+  }
   const cls = CLASSES[chosenClass] || CLASSES.knight;
   const obj = buildSurvivor();
   scene.add(obj);
+  // ── HERO GLOW ── two graphics-polish helpers attached to the player:
+  //   1. a soft ground sprite under the feet so the hero pops against dark
+  //      backgrounds without needing post-processing.
+  //   2. a small back-rim point light at chest height tinted by the class
+  //      color so the silhouette catches a hint of class-fantasy glow.
+  const heroPad = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+    color: 0xfff0d8, transparent: true, opacity: 0.22, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  heroPad.scale.set(7, 7, 1);
+  heroPad.position.y = 0.05;
+  // sprites face the camera by default — tilt against world up via raycast
+  // wouldn't matter visually because additive blend ignores orientation
+  obj.add(heroPad);
+  const heroRim = new THREE.PointLight(cls.color || 0xfff0d8, 0.9, 7, 2.2);
+  heroRim.position.set(0, 2.4, -0.6);
+  obj.add(heroRim);
   const baseHp = Math.round(P.baseHp * cls.hpMul);
   return {
     obj, x: 0, z: 0, y: 0, aim: 0, t: 0,
@@ -4985,9 +5502,11 @@ function makePlayer() {
     shieldReady: chosenClass === "wizard", shieldT: 0,
     // hunter mark — Set of zombie refs that are currently marked
     markedZombies: new Set(),
-    ultId: null, ultChosen: false, ultActive: false,
+    // wizard channel — hold LMB to spew frostfire instead of single bolts
+    channeling: false, channelT: 0, channelTickT: 0,
+    ultId: null, ultChosen: false, ultActive: false, ultSpent: false,
     ultImmune: false, ultHitT: 0,
-    rage: 0, maxRage: RAGE_BASE,
+    rage: 0, maxRage: RAGE_BASE, rageHitT: 0,
     buffs: [], permaBuffs: [],
     perma: { dmg: 0, hp: 0, spd: 0, crit: 0, life: 0 },
     lifesteal: 0, dmgTakenMul: 1, sizeMul: 1,
@@ -5041,21 +5560,32 @@ function recalc() {
   player.hp = clamp(player.hp, 1, player.maxHp);
 }
 function gainRage(n) {
-  // rage builds only between ultimates — while one is live the bar only drains
-  if (!player.alive || player.ultActive) return;
+  // rage builds only between ultimates — while one is live the bar only drains.
+  // once the ultimate has been spent for the run, rage is permanently locked
+  // at 0 (per spec). Every hit resets the idle-decay timer.
+  if (!player.alive || player.ultActive || player.ultSpent) return;
+  player.rageHitT = 0;
+  const wasFull = player.rage >= player.maxRage;
   player.rage = clamp(player.rage + n, 0, player.maxRage);
+  // a one-shot cue the moment rage caps — fires once per "fill", not per hit
+  if (!wasFull && player.rage >= player.maxRage)
+    Sound.rageReady && Sound.rageReady();
 }
 
 /* ─── gear / loot ─────────────────────────────────────────────────────────── */
-const RARITY = ["Common", "Rare", "Epic", "Legendary", "Mythic"];
-const RCOL = ["#9aa0aa", "#4aa3ff", "#b85cff", "#f0a52a", "#ff5fb0"];
-const RHEX = [0x9aa0aa, 0x4aa3ff, 0xb85cff, 0xf0a52a, 0xff5fb0];
+// Six rarities — the sixth, "Ancient", drops only from bosses (see killZombie).
+// Its colour is a brilliant cyan/teal so the beacon stands out from the
+// existing Mythic pink and Legendary orange.
+const RARITY = ["Common", "Rare", "Epic", "Legendary", "Mythic", "Ancient"];
+const RCOL = ["#9aa0aa", "#4aa3ff", "#b85cff", "#f0a52a", "#ff5fb0", "#7af0ff"];
+const RHEX = [0x9aa0aa, 0x4aa3ff, 0xb85cff, 0xf0a52a, 0xff5fb0, 0x7af0ff];
 const WPREFIX = [
   ["Rusted", "Notched", "Pitted", "Cracked"],
   ["Iron", "Tempered", "Keen", "Soldier's"],
   ["Grave", "Bloodforged", "Vicious", "Executioner's"],
   ["Doomforged", "Ancient", "Mortis", "Godcleaving"],
   ["Voidforged", "Worldsunder", "Apocrypha", "Hellrend"],
+  ["Primordial", "Antediluvian", "Eldritch", "Aeonic"],
 ];
 const APREFIX = [
   ["Threadbare", "Worn", "Tattered", "Patched"],
@@ -5063,6 +5593,7 @@ const APREFIX = [
   ["Gravewatch", "Warded", "Vicious", "Grave-touched"],
   ["Undying", "Ancient", "Doomforged", "Eternal"],
   ["Apocalypse", "Worldscale", "Eternity", "Voidwoven"],
+  ["Primal", "Antediluvian", "Aeonic", "Eldritch"],
 ];
 const WEAPON_BASE = {
   greatsword: ["Greatsword", "Warblade", "Claymore", "Zweihander"],
@@ -5092,8 +5623,9 @@ const ARMOR_BASE = {
   plate:   ["Knight's Plate", "Steel Cuirass", "Bulwark Harness"],
   warlord: ["Warlord's Aegis", "Doomplate", "Sepulchre Armour"],
 };
-const WVAL = [[3, 8], [9, 16], [17, 28], [30, 48], [55, 88]];
-const AVAL = [[14, 34], [40, 75], [85, 140], [160, 260], [310, 470]];
+// Ancient (index 5) values are a clean step beyond Mythic — boss reward feel.
+const WVAL = [[3, 8], [9, 16], [17, 28], [30, 48], [55, 88], [100, 160]];
+const AVAL = [[14, 34], [40, 75], [85, 140], [160, 260], [310, 470], [560, 820]];
 function makeItem(slot, minR, maxR) {
   const rarity = irand(minR, maxR);
   if (slot === "weapon") {
@@ -5107,7 +5639,9 @@ function makeItem(slot, minR, maxR) {
         pick(WEAPON_BASE[model] || WEAPON_BASE.greatsword),
       value: irand(r[0], r[1]) };
   }
-  let oi = rarity;
+  // outfit pool only has 5 entries — clamp the lookup so Ancient armour
+  // re-uses the warlord outfit visual but keeps its own rarity + name + value.
+  let oi = Math.min(4, rarity);
   if (Math.random() < 0.35) oi = Math.min(4, oi + 1);
   const outfit = OUTFIT_KEYS[oi];
   const r = AVAL[rarity];
@@ -5120,57 +5654,24 @@ function itemTypeLabel(it) {
     return it.model.charAt(0).toUpperCase() + it.model.slice(1);
   return OUTFITS[it.outfit] ? OUTFITS[it.outfit].label : "Armour";
 }
+// In-game gear is gone — weapons and armour now come from the Soul Forge.
+// Every legacy entry-point that used to drop a chest or auto-equip an item
+// is reduced to a small shard bonus, so objectives + bosses still feel
+// rewarding. Items themselves persist only via Meta.gear in localStorage.
 let loot = [];
-const chestGeo = new THREE.BoxGeometry(1.5, 1.1, 1.1);
 function spawnLoot(x, z, item) {
-  const m = new THREE.Group();
-  const box = new THREE.Mesh(chestGeo, mat(0x2a1c10, 0.9));
-  box.castShadow = true;
-  const lid = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 1.2),
-    metalMat(0x6a5a30, 0.5));
-  lid.position.y = 0.7;
-  const glow = new THREE.PointLight(RHEX[item.rarity], 2.4, 14, 2);
-  glow.position.y = 1.4;
-  // a beacon of light so loot is findable across the whole world
-  const beacon = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.45, 0.9, 40, 7, 1, true),
-    new THREE.MeshBasicMaterial({ color: RHEX[item.rarity],
-      transparent: true, opacity: 0.3, depthWrite: false,
-      side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
-  beacon.position.y = 20;
-  const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
-    color: RHEX[item.rarity], transparent: true, opacity: 0.75,
-    depthWrite: false, blending: THREE.AdditiveBlending }));
-  spark.position.y = 1.6; spark.scale.setScalar(4.6);
-  m.add(box, lid, glow, beacon, spark);
-  m.position.set(x, groundHeight(x, z) + 0.9, z);
-  scene.add(m);
-  loot.push({ obj: m, x, z, item, t: rand(0, TAU) });
-}
-function pickupItem(item) {
-  player.inventory.push(item);
-  Sound.loot();
-  showToast((player.gear[item.slot] &&
-      item.value > player.gear[item.slot].value ? "UPGRADE! " : "LOOT  ") +
-    "[" + RARITY[item.rarity] + "] " + item.name + "  (" +
-    (item.slot === "weapon" ? "+" + item.value + " DMG" :
-      "+" + item.value + " HP") + ")  —  press I",
-    RCOL[item.rarity]);
-}
-function updateLoot(dt) {
-  for (let i = loot.length - 1; i >= 0; i--) {
-    const o = loot[i]; o.t += dt;
-    o.obj.position.y = groundHeight(o.x, o.z) + 0.9 +
-      Math.sin(o.t * 3) * 0.2;
-    o.obj.rotation.y += dt * 1.4;
-    if (Math.hypot(player.x - o.x, player.z - o.z) < 3) {
-      pickupItem(o.item);
-      spawnParts(o.x, o.obj.position.y + 0.5, o.z, 18,
-        { color: RHEX[o.item.rarity], speed: 9, up: 4 });
-      scene.remove(o.obj); loot.splice(i, 1);
-    }
+  // Convert the would-be drop into a shard bonus scaled by rarity.
+  // Common = 8 shards … Ancient = 80 shards. The player banks them and
+  // spends at the Forge between waves.
+  if (Meta && typeof Meta.awardShards === "function") {
+    const tier = (item && item.rarity != null) ? item.rarity : 0;
+    const bonus = 8 + tier * 14;
+    Meta.awardShards(bonus, "GEAR");
   }
 }
+function autoEquip(item) { /* gear no longer drops mid-run */ }
+function pickupItem(item) { /* gear no longer drops mid-run */ }
+function updateLoot(dt) { /* no chest drops anymore */ }
 
 /* ─── buff drops — 20 ability powers; gold-ringed ones are permanent ──────── */
 const BUFFS = [
@@ -5234,6 +5735,20 @@ const BUFFS = [
   { id:"e_hunger", n:"ETERNAL HUNGER", glyph:"\u{1F9B7}", col:0xf0c040,
     hex:"#f0c040", perma:true, mod:{ life:5 },
     d:"PERMANENT — +5 lifesteal on every hit, for the whole run." },
+  // ── new content pass ── two temporary buffs that fill thematic gaps, plus
+  // two permanent powers so the gold-ring pool has more variety.
+  { id:"vampire", n:"VAMPIRIC", glyph:"\u{1F9DB}", col:0x8a1a2a,
+    hex:"#c83a48", perma:false, mod:{ dmgMul:1.2, lifesteal:30 },
+    d:"+120% damage and 30 lifesteal — drink deep from the dead." },
+  { id:"crystal", n:"CRYSTALLIZE", glyph:"\u{1F48E}", col:0x6fe0d2,
+    hex:"#6fe0d2", perma:false, mod:{ dmgTakenMul:0.35, dmgMul:0.6 },
+    d:"Take 65% less damage and hit for +60% — an unyielding bastion." },
+  { id:"e_savage", n:"ETERNAL SAVAGERY", glyph:"\u{1FA93}", col:0xf0c040,
+    hex:"#f0c040", perma:true, mod:{ crit:0.06, dmg:8 },
+    d:"PERMANENT — +6% critical chance AND +8 weapon damage." },
+  { id:"e_swift", n:"ETERNAL SWIFTNESS", glyph:"\u{1F451}", col:0xf0c040,
+    hex:"#f0c040", perma:true, mod:{ spd:0.08, hp:30 },
+    d:"PERMANENT — +8% speed AND +30 maximum health." },
 ];
 const buffTexCache = {};
 function buffTex(buff) {
@@ -6043,6 +6558,11 @@ function tryUltimate() {
   const e = player;
   if (!e.ultId || !e.alive) return;
   if (e.ultActive) { endUltimate(); return; }    // press Q again to cancel it
+  // ultimate is now a once-per-run weapon — once spent, never again this run
+  if (e.ultSpent) {
+    banner("your fury is forever spent", "ULTIMATE GONE");
+    Sound.hurt(); return;
+  }
   if (e.rage < RAGE_MIN_ACTIVATE) {
     banner("your rage has not yet risen", "NOT ENOUGH RAGE");
     Sound.hurt(); return;
@@ -6073,18 +6593,24 @@ function tryUltimate() {
 }
 function endUltimate() {
   player.ultActive = false; player.ultImmune = false;
+  // once the ultimate ends the player's rage is locked at 0 for the rest
+  // of the run — they can keep hitting all they want, the bar won't fill.
+  player.ultSpent = true;
+  player.rage = 0;
   clearTornadoes();
   clearVoidRift();
   clearJudgmentPillars();
   recalc();
-  banner("the power fades", "ULTIMATE SPENT");
+  banner("the power fades — your rage is gone", "ULTIMATE SPENT");
 }
 function updateUltimate(dt) {
   const e = player;
-  // out of combat, rage slowly bleeds away — it can't be hoarded between fights
-  if (!e.ultActive && e.alive && e.rage > 0 && comboOut >= 3) {
-    e.rage -= e.rage * RAGE_DECAY * dt;
-    if (e.rage < 1) e.rage = 0;
+  // rage decays whenever the player isn't actively landing hits — every
+  // gainRage() call resets rageHitT. Drain rate ~6/sec means a fully-charged
+  // bar empties in ~15-30s of just running around.
+  if (!e.ultActive && e.alive && e.rage > 0) {
+    e.rageHitT = (e.rageHitT || 0) + dt;
+    if (e.rageHitT > 0.3) e.rage = Math.max(0, e.rage - 6 * dt);
   }
   if (!e.ultActive) return;
   e.rage -= e.maxRage * RAGE_ULT_DRAIN * dt;   // ult burns 5% of max rage/sec
@@ -6727,6 +7253,16 @@ function tryAttack() {
     }
     return;
   }
+  // wizard — LMB opens the frostfire channel instead of single-shot bolts.
+  // updatePlayer ticks damage while channeling is true; mouseup turns it off.
+  if (cls.weapon === "staff") {
+    if (!player.channeling) {
+      player.channeling = true; player.channelT = 0;
+      // a soft ignite cue — actual roar is the per-tick noise
+      Sound.tone && Sound.tone("sawtooth", 80, 200, 0.18, 0.08);
+    }
+    return;
+  }
   player.atk = true; player.atkT = 0;
   player.atkW = P.atkWindup / player.atkSpeed;
   player.atkS = P.atkStrike / player.atkSpeed;
@@ -6785,6 +7321,113 @@ function releaseBowShot() {
     flashLight(sx, sy, sz, 0.32, 0x9aeac0);
   }
 }
+
+/* ─── WIZARD FROSTFIRE CHANNEL ───────────────────────────────────────────────
+   Called every frame from updatePlayer while player.channeling is true.
+   Hits a forward cone with a tiny instant impact and stacks burn DoT that
+   does the real work (≈ 2× a knight's normal-hit damage per second).
+   Burning zombies spread fire to their neighbours so the horde lights up. */
+const CHANNEL_RANGE = 22;
+const CHANNEL_HALF_ARC = 0.42;          // ≈48° total cone — wide enough
+function wizardChannelTick(dt) {
+  const e = player;
+  e.channelT += dt;
+  e.channelTickT -= dt;
+  // slower tick (0.12s = ~8/sec) — still smooth, far less GC pressure
+  if (e.channelTickT > 0) return;
+  e.channelTickT = 0.12;
+  const dirX = Math.sin(e.aim), dirZ = Math.cos(e.aim);
+  const warriorBase = P.baseDmg * (CLASSES.knight.dmgMul || 1) +
+    (e.level || 1) * 2;
+  const targetDps = warriorBase * 2;
+  const impactPerTick = (targetDps * 0.25) * e.channelTickT;
+  const burnDpsTarget = targetDps * 0.75;
+  // visual: a thin spurt of flame — only 2 particles per tick now
+  const sx = e.x + dirX * 1.6, sz = e.z + dirZ * 1.6;
+  for (let i = 0; i < 2; i++) {
+    const spread = rand(-CHANNEL_HALF_ARC * 0.7, CHANNEL_HALF_ARC * 0.7);
+    const a = e.aim + spread;
+    const r = rand(0.5, 6);
+    spawnParts(sx + Math.sin(a) * r, (e.y || 0) + 2.0 + rand(-0.2, 0.4),
+      sz + Math.cos(a) * r, 1,
+      { color: pick([0x6fa8ff, 0x9adfff, 0xff8a3a]),
+        speed: 22, up: 1, life: 0.5 });
+  }
+  // audio every ~0.5s instead of every other tick — the channel doesn't
+  // need a roar at 10Hz to feel alive
+  e._channelSndT = (e._channelSndT || 0) - dt;
+  if (e._channelSndT <= 0) {
+    e._channelSndT = 0.5;
+    Sound.tone && Sound.tone("sawtooth", 90 + Math.random() * 50,
+      50, 0.18, 0.06);
+  }
+  // hit zombies inside the forward cone — squared-distance compare avoids sqrt.
+  // The channel does NOT call hitZombie per tick (that path spawns 30+ blood
+  // particles + plays a sound for every zombie). Instead the channel just
+  // stacks the burn DoT — the burn tick in updateZombies deals the damage
+  // gradually so the channel can hit 30 enemies without flooding the
+  // particle pool. Only the FIRST touch of a fresh zombie gets a proper hit
+  // (so the player feels the connection); refreshes just top up the burn.
+  const rngSq = CHANNEL_RANGE * CHANNEL_RANGE;
+  for (let i = 0; i < zombies.length; i++) {
+    const z = zombies[i];
+    if (z.state === "die" || z.state === "rising") continue;
+    const dx = z.x - e.x, dz = z.z - e.z;
+    const dd = dx * dx + dz * dz;
+    if (dd > rngSq) continue;
+    if (Math.abs(angDiff(e.aim, Math.atan2(dx, dz))) > CHANNEL_HALF_ARC)
+      continue;
+    if (lineBlocked(e.x, e.z, z.x, z.z)) continue;
+    if (z.burn < 0.1) {
+      // first touch on a fresh zombie — a single proper hit + ignite token
+      hitZombie(z, impactPerTick, false, Math.atan2(dx, dz), 0.4, true);
+      z.frostfire = true;
+    }
+    if (z.state !== "die") {
+      z.burn = Math.max(z.burn, 4.0);
+      z.burnDps = Math.max(z.burnDps, burnDpsTarget);
+    }
+  }
+}
+
+/* fire spread — STRICTLY BOUNDED. Only zombies the wizard directly hits
+   carry the spread token (z.frostfire). Each tokened zombie spreads ONCE
+   to a few nearby neighbours, then the token clears. Spread targets get
+   the burn DoT but NOT the token, so the chain never cascades past one
+   step. A hard per-frame budget caps the work even in a 100-zombie horde. */
+const SPREAD_BUDGET = 8;          // max spread events processed per frame
+const SPREAD_RADIUS = 5.5;
+const SPREAD_MAX_TARGETS = 3;     // each burning source touches at most 3
+function spreadFrostfire(dt) {
+  let budget = SPREAD_BUDGET;
+  for (let i = 0; i < zombies.length && budget > 0; i++) {
+    const z = zombies[i];
+    if (!z.frostfire) continue;
+    if (z.burn <= 0 || z.state === "die" || z.state === "rising") {
+      z.frostfire = false; continue;
+    }
+    // each source spreads ONCE then clears its token — no cascade
+    z.frostfire = false;
+    budget--;
+    let touched = 0;
+    for (let j = 0; j < zombies.length && touched < SPREAD_MAX_TARGETS; j++) {
+      const o = zombies[j];
+      if (o === z) continue;
+      if (o.burn > 0) continue;
+      if (o.state === "die" || o.state === "rising") continue;
+      const dx = o.x - z.x, dz = o.z - z.z;
+      const dd = dx * dx + dz * dz;     // squared compare — no sqrt
+      const rng = SPREAD_RADIUS + o.r;
+      if (dd > rng * rng) continue;
+      // light up the neighbour with a fraction of the source's burn
+      o.burn = Math.max(o.burn, z.burn * 0.65);
+      o.burnDps = Math.max(o.burnDps, z.burnDps * 0.55);
+      // NO o.frostfire — keeps the chain from re-triggering
+      touched++;
+    }
+  }
+}
+
 /* RIGHT MOUSE — a committed, heavy SMASH with the weapon you wield.
    It overrides a light swing in progress — the SMASH always takes over. */
 function trySmash() {
@@ -6805,11 +7448,11 @@ function smashStrike() {
   hitStop = 0.1;
   // ── class-specific power attacks ──
   const cls = e.classDef || CLASSES.knight;
-  if (cls.weapon === "staff") { arcaneNova(dmg); return; }
+  if (cls.weapon === "staff") { wizardBlaze(dmg); return; }
   if (cls.weapon === "pistol") { explosiveBarrage(dmg); return; }
   if (cls.weapon === "bow") { multishot(dmg); return; }
   if (cls.weapon === "daggers") { shadowStep(dmg); return; }
-  if (cls.weapon === "greatsword") { holyCharge(dmg); return; }
+  if (cls.weapon === "greatsword") { knightGroundSmash(dmg); return; }
   if (ham) {
     const ix = e.x + Math.sin(e.aim) * 6.2;
     const iz = e.z + Math.cos(e.aim) * 6.2;
@@ -6952,8 +7595,154 @@ function holyCharge(baseDmg) {
   hitStop = 0.08;
 }
 
+/* ─── KNIGHT GROUND SMASH ─── the right-mouse Smash for the Knight. The
+   sword is driven straight down into the earth — NO forward leap. A wide
+   ring of force pulses outward, dealing 3x weapon damage to anything in the
+   front arc and chilling them for 2.5s so the horde literally slows down. */
+function knightGroundSmash(baseDmg) {
+  const e = player;
+  // Smash damage = 3x the player's base weapon damage. The smashStrike caller
+  // already multiplied by 3.0 (or 4.2 with the hammer), so we DIVIDE by that
+  // multiplier here and reapply a clean 3.0 — guarantees the spec.
+  const ham = hasA("hammer");
+  const norm = e.dmg * e.dmgMul + e.level * 4;       // a clean "normal hit"
+  const dmg = norm * (ham ? 4.0 : 3.0);              // exactly 3x, 4x w/ hammer
+  const range = P.atkRange * 1.85;
+  const arc = P.atkArc * 1.6;
+  Sound.quake(); Sound.smash(); shake(1.6); hitStop = 0.1;
+  screenFlash("#ffe2a0", 0.32);
+  // ground rings — inner force, outer shock, dust halo
+  smashRing.setColor(0xffe2a0);
+  smashRing.show(e.x, e.y + 0.2, e.z, range, 0.55);
+  boomRing.setColor(0xc89a36);
+  boomRing.show(e.x, e.y + 0.2, e.z, range * 1.3, 0.78);
+  windRing.setColor(0x8a6c44);
+  windRing.show(e.x, e.y + 0.3, e.z, range * 0.8, 0.46);
+  // scorched + cracked earth in front of the strike
+  scorch(e.x, e.z, range * 0.9);
+  bustGround(e.x, e.z, range * 0.9);
+  // a column of dust + sparks where the blade lands
+  spawnParts(e.x, e.y + 0.4, e.z, 110,
+    { color: 0x6a5236, speed: 32, up: 18, life: 1.1 });
+  spawnParts(e.x, e.y + 0.4, e.z, 50,
+    { color: 0xfff2dc, speed: 24, up: 9, life: 0.65 });
+  for (let i = 0; i < 8; i++)
+    flare(e.x + rand(-3.5, 3.5), e.y + rand(0.4, 3.6),
+      e.z + rand(-3.5, 3.5),
+      rand(5, 9), pick([0xffe2a0, 0xfff2dc, 0xc89a36]), rand(0.4, 0.7));
+  flashLight(e.x, e.y + 2.6, e.z, 0.55, 0xffd06a);
+  grassFlatten = { x: e.x, z: e.z, r: range, t: 0 };
+  // damage + slow every zombie inside the front arc
+  for (const z of zombies) {
+    if (z.state === "die" || z.state === "rising") continue;
+    const dx = z.x - e.x, dz = z.z - e.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > range + z.r) continue;
+    if (Math.abs(angDiff(e.aim, Math.atan2(dx, dz))) > arc) continue;
+    if (lineBlocked(e.x, e.z, z.x, z.z)) continue;
+    hitZombie(z, dmg, true, Math.atan2(dx, dz), 5.0);
+    if (z.state !== "die") {
+      // earthquake slow — chill 2.5s + a quake stagger so the horde lurches
+      z.chill = Math.max(z.chill, 2.5);
+      z.quake = Math.max(z.quake, 3.0);
+      z.stagger = Math.max(z.stagger, 0.4);
+      if (hasA("fire")) { z.burn = 4; z.burnDps = 9 + e.level * 1.6; }
+      if (hasA("frost")) applyChill(z);
+    }
+  }
+  damageInteractables(e.x, e.z, range, dmg);
+  gainRage(RAGE_SMASH);
+}
+
 /* ─── ARCANE NOVA — the wizard's RMB. A pulse of arcane magic explodes
    outward from the caster. No earthquake — pure radiant force.  ─────────── */
+/* ─── WIZARD BLAZE ─── right-mouse for the wizard. The caster ignites in
+   a 360° corona that burns + freezes nearby foes, AND launches a forward
+   trail of frostfire that does the same down a corridor. Damage rides on
+   the burn DoT, not the impact, so the spell scales with how long enemies
+   stay locked in the freeze. */
+function wizardBlaze(baseDmg) {
+  const e = player;
+  const ringR = 14;                              // 360° freeze-burn radius
+  const trailLen = 28;                           // forward corridor reach
+  const trailHalfW = 3.6;                        // corridor half-width
+  // damage: instant impact is small; the DoT is where the real numbers live
+  const norm = e.dmg * e.dmgMul + e.level * 4;
+  const impact = norm * 0.6;
+  const burnDps = norm * 1.4;                    // hefty DoT
+  Sound.freeze && Sound.freeze();
+  Sound.boom();
+  Sound.tone && Sound.tone("sawtooth", 60, 110, 0.5, 0.18);
+  shake(1.5); screenFlash("#9adfff", 0.42);
+  // 360° corona around the wizard
+  smashRing.setColor(0x9adfff);
+  smashRing.show(e.x, e.y + 0.2, e.z, ringR, 0.55);
+  boomRing.setColor(0x6aaaff);
+  boomRing.show(e.x, e.y + 0.2, e.z, ringR * 1.25, 0.75);
+  windRing.setColor(0xff8a3a);
+  windRing.show(e.x, e.y + 0.3, e.z, ringR * 0.7, 0.4);
+  // a pool of frost + scorch under the cast
+  scorch(e.x, e.z, ringR * 0.7);
+  // particles: blue ice + orange embers, layered
+  spawnParts(e.x, e.y + 0.6, e.z, 60,
+    { color: 0x9adfff, speed: 24, up: 8, life: 0.9 });
+  spawnParts(e.x, e.y + 0.6, e.z, 40,
+    { color: 0xff8a3a, speed: 22, up: 7, life: 0.7 });
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU;
+    flare(e.x + Math.cos(a) * ringR * 0.6,
+      e.y + rand(0.6, 3.0),
+      e.z + Math.sin(a) * ringR * 0.6,
+      rand(5, 8), pick([0x9adfff, 0x6fa8ff, 0xff8a3a]), 0.55);
+  }
+  flashLight(e.x, e.y + 2.4, e.z, 0.55, 0x9adfff);
+  // forward trail — a corridor of frostfire stretching out ahead of the aim
+  const ang = e.aim;
+  const dirX = Math.sin(ang), dirZ = Math.cos(ang);
+  const trailEndX = e.x + dirX * trailLen;
+  const trailEndZ = e.z + dirZ * trailLen;
+  smashRing.setColor(0x6fa8ff);
+  smashRing.show(trailEndX, e.y + 0.2, trailEndZ, 5, 0.45);
+  for (let i = 1; i <= 7; i++) {
+    const k = i / 7;
+    const sx = e.x + dirX * trailLen * k;
+    const sz = e.z + dirZ * trailLen * k;
+    scorch(sx, sz, 4.5);
+    spawnParts(sx, e.y + 1.2, sz, 14,
+      { color: pick([0x9adfff, 0x6fa8ff, 0xff8a3a, 0xe0f0ff]),
+        speed: 18, up: 5, life: 0.7 });
+    flare(sx + rand(-1, 1), e.y + rand(0.8, 2.4),
+      sz + rand(-1, 1), rand(4, 7),
+      pick([0x9adfff, 0xff8a3a]), 0.55);
+  }
+  flashLight(trailEndX, e.y + 2, trailEndZ, 0.4, 0xff8a3a);
+  // damage + freeze + burn — anything inside the corona OR the trail
+  for (const z of zombies) {
+    if (z.state === "die" || z.state === "rising") continue;
+    const dx = z.x - e.x, dz = z.z - e.z;
+    const dRing = Math.hypot(dx, dz);
+    const inRing = dRing < ringR + z.r;
+    const dPath = segDist(e.x, e.z, trailEndX, trailEndZ, z.x, z.z);
+    const inTrail = !inRing && dPath < trailHalfW + z.r &&
+      (z.x - e.x) * dirX + (z.z - e.z) * dirZ > -1; // forward of caster
+    if (!inRing && !inTrail) continue;
+    if (lineBlocked(e.x, e.z, z.x, z.z) && !inTrail) continue;
+    hitZombie(z, impact, false, Math.atan2(dx, dz), 2.5);
+    if (z.state !== "die") {
+      // freeze in place: stun 3s, chill 4s, sets a frozen flag for visual
+      z.stun = Math.max(z.stun, 3.0);
+      z.chill = Math.max(z.chill, 4.0);
+      z.frozen = true;
+      // long DoT — they melt while frozen
+      z.burn = Math.max(z.burn, 6.0);
+      z.burnDps = Math.max(z.burnDps, burnDps);
+      z.frostfire = true;
+    }
+  }
+  damageInteractables(e.x, e.z, ringR, impact);
+  gainRage(RAGE_SMASH);
+}
+
 function arcaneNova(baseDmg) {
   const e = player;
   const dmg = baseDmg * 1.15;
@@ -7558,9 +8347,11 @@ function leapLand() {
   }
   gainRage(RAGE_LEAP);
   e.leapSlowT = 3;                               // crushing recovery
-  const smashBase = e.dmg * e.dmgMul * (hasA("hammer") ? 4.2 : 3.0)
-    + e.level * 4;
-  const dmg = smashBase * 5;                     // 5x a right-click SMASH
+  // KNIGHT LEAP — lands like a god: 5x normal weapon damage in a huge crater.
+  // The "normal" baseline is the player's raw weapon damage, not the smash
+  // damage, so the spec ("5x normal attack damage") matches what's printed.
+  const norm = e.dmg * e.dmgMul + e.level * 4;
+  const dmg = norm * (hasA("hammer") ? 6.5 : 5.0);
   Sound.quake(); Sound.boom(); Sound.smash();
   shake(2.4); hitStop = 0.1; screenFlash("#f4c850", 0.6);
   smashRing.setColor(0xf4c850); smashRing.show(e.x, e.y + 0.2, e.z, 44, 0.74);
@@ -7595,7 +8386,8 @@ function leapLand() {
       const fall = dLand < 19 ? clamp(1 - dLand / 46, 0.5, 1)
         : clamp(1 - dPath / 32, 0.45, 1);
       hitZombie(z, dmg * fall, true, Math.atan2(z.x - e.x, z.z - e.z), 5.5);
-      if (z.state !== "die") { z.stun = 1.5; z.quake = 5.0; }
+      // 3-second stun on the landing — anyone caught in the crater is rooted
+      if (z.state !== "die") { z.stun = 3.0; z.quake = 5.0; }
     } else if (dLand < 52) {
       z.quake = Math.max(z.quake, 4.2);
       z.stagger = Math.max(z.stagger, 0.4);
@@ -8276,6 +9068,12 @@ function killZombie(z) {
   z.state = "die"; z.dieT = 0;
   zombiesAlive--;
   kills++;
+  // shard reward per kill — bosses are worth a lot more, rares a bit more
+  if (typeof Meta !== "undefined" && Meta.awardShards) {
+    const tier = z.boss ? 50 : z.type === "giant" ? 12 :
+      (z.type === "brute" || z.rare) ? 4 : 1;
+    Meta.awardShards(tier, "KILL");
+  }
   // GUNSLINGER DEAD-EYE — each kill stacks +8% crit (capped at 60%)
   if (player) {
     const cls = player.classDef || CLASSES.knight;
@@ -8295,6 +9093,12 @@ function killZombie(z) {
   spawnParts(z.x, hy, z.z, 40, { color: 0x7c1109, speed: 14, up: 3 });
   spawnGibs(z.x, hy, z.z, z.type === "giant" ? 18 :
     (z.type === "brute" || z.rare) ? 12 : 7);
+  // a lingering blood splatter where the corpse fell — boss/giant kills get
+  // a much larger smear, regular zombies a small one. sizeMul keeps the
+  // late-game's enlarged corpses splashing proportionally.
+  splat(z.x, z.z,
+    (z.boss ? 5.5 : z.type === "giant" ? 4.0 :
+      (z.type === "brute" || z.rare) ? 2.6 : 1.6) * (z.sizeMul || 1));
   flare(z.x, hy, z.z, 4, 0xff4a2a, 0.3, 0.7);
   Sound.die();
   if (z.mound) { scene.remove(z.mound); z.mound = null; }
@@ -8322,6 +9126,31 @@ function killZombie(z) {
   if (Math.random() < (z.boss || z.type === "giant" || z.rare ? 1 :
       z.type === "brute" ? 0.4 : 0.1))
     spawnOrb(z.x, z.z);
+  // BOSS REWARD — a guaranteed Ancient-tier drop, the highest rarity in the
+  // game. Rolls weapon OR armor 50/50, with Ancient (5) as the absolute
+  // minimum. Mythic remains the cap for objective chests and crates.
+  if (z.boss) {
+    spawnLoot(z.x + 1.4, z.z + 1.4, makeItem(
+      Math.random() < 0.5 ? "weapon" : "armor", 5, 5));
+    // a second, slightly lower roll so the boss feels truly bountiful
+    spawnLoot(z.x - 1.4, z.z - 1.4, makeItem(
+      Math.random() < 0.5 ? "weapon" : "armor", 3, 4));
+  }
+  // NECROMANCER death summon — 3 shamblers claw up around the corpse. They
+  // count toward zombiesAlive so the wave doesn't end behind your back, and
+  // they obey the same scaling as the rest of the horde.
+  if (z.type === "necro") {
+    spawnParts(z.x, z.y + 0.6, z.z, 50,
+      { color: 0x9a40ff, speed: 18, up: 8, life: 0.9 });
+    flashLight(z.x, z.y + 1.6, z.z, 0.42, 0x9a40ff);
+    Sound.zap && Sound.zap();
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU + rand(-0.4, 0.4), d = rand(3, 5);
+      const nx = z.x + Math.cos(a) * d, nz = z.z + Math.sin(a) * d;
+      // walkable + arena-bounds clamp so spawns don't escape the map
+      spawnZombieAt("shambler", nx, nz);
+    }
+  }
   // notify the objective system that a zombie has fallen
   if (typeof objectiveOnKill === "function") objectiveOnKill(z);
 }
@@ -8329,6 +9158,8 @@ function killZombie(z) {
 /* ─── progression & waves ─────────────────────────────────────────────────── */
 let wave = 0, kills = 0, score = 0, zombiesAlive = 0, totalDmg = 0, level = 1;
 let waveState = "fight", toSpawn = [], spawnT = 0, waveCountPrev = 0;
+// which boss flavour this wave spawns — set in startWave, read in spawnZombieAt
+let currentBossVariant = "slam";
 let portal = null, portalActive = false, portalT = 0;
 let levelFx = 0;
 // ─── combat combo — sustained fighting compounds your score multiplier ───
@@ -8375,6 +9206,11 @@ function startWave(n) {
   else count = Math.round(waveCountPrev * 1.22) + 12;
   count = Math.round(count * (1 + (level - 1) * 0.4));
   waveCountPrev = count;
+  // THE ABYSS (level >= 10) — every roll unlocks every type; rare zombies
+  // become common, and the brute/giant/necro thresholds drop. The wave count
+  // also gets a 20% kicker on top of the regular ramp.
+  const abyss = level >= 10;
+  if (abyss) count = Math.round(count * 1.2);
   for (let i = 0; i < count; i++) {
     const r = Math.random();
     let t = "shambler";
@@ -8382,14 +9218,39 @@ function startWave(n) {
     if (n >= 4 && r >= 0.72 && r < 0.84) t = "charger";
     if (n >= 5 && r >= 0.84 && r < 0.92) t = "lunger";
     if (n >= 6 && r >= 0.92) t = "brute";
+    // NECROMANCER — rare mid-wave caster (wave 7+). Always less than 4% of
+    // a wave; sits between brute and giant in the type roll.
+    if (n >= 7 && r >= 0.965 && r < 0.985) t = "necro";
     if (n >= 9 && r >= 0.985) t = "giant";
+    // Abyss override — gives shamblers a much smaller share, every other
+    // archetype lands at floor-7-equivalent thresholds. Means a fresh Abyss
+    // wave already feels like wave 9+ even when "n" is small.
+    if (abyss && r < 0.42) {
+      const elite = ["runner", "charger", "lunger", "brute", "necro", "giant"];
+      t = pick(elite);
+    }
     toSpawn.push(t);
   }
-  if (n % 5 === 0) toSpawn.push("boss");        // every 5th wave: a BOSS
+  // ABYSS waves get a boss every 3rd, the rest every 5th
+  const bossWave = abyss ? (n % 3 === 0) : (n % 5 === 0);
+  if (bossWave) toSpawn.push("boss");
+  // pick the boss variant for this wave. Two flavours rotate by stage so the
+  // player learns to read which threat is incoming. Stage 1 = SLAM (current
+  // crushing colossus), stage 2 = LORD (smaller cadre that summons shamblers
+  // mid-fight). Later stages cycle: 3 = SLAM, 4 = LORD, …
+  currentBossVariant = (level % 2 === 0) ? "lord" : "slam";
   spawnT = 0.35;
   waveState = "fight";
-  banner(n % 5 === 0 ? "A monstrous thing stirs below" : "The dead rise",
-    "WAVE " + n);
+  if (bossWave) {
+    banner(currentBossVariant === "lord"
+      ? "A NECROMANCER LORD STIRS BELOW"
+      : "A monstrous thing stirs below",
+      "WAVE " + n);
+  } else if (abyss) {
+    banner("The Abyss is hungry", "WAVE " + n);
+  } else {
+    banner("The dead rise", "WAVE " + n);
+  }
   Sound.wave();
 }
 function updateWaves(dt) {
@@ -8418,7 +9279,6 @@ const moundGeo = (() => {
   return g;
 })();
 function spawnZombie(type, rare) {
-  const d = ETYPES[type];
   let x, z, ok = false, tries = 0;
   while (!ok && tries < 50) {
     tries++;
@@ -8438,13 +9298,18 @@ function spawnZombie(type, rare) {
   }
   if (!ok) { x = clamp(x, -ARENA + 12, ARENA - 12);
     z = clamp(z, -ARENA + 12, ZSHORE - 8); }
-  // use the walkable surface height (hill/bridge top), NOT raw ground —
-  // otherwise zombies spawned on hills appear half-buried.
+  spawnZombieAt(type, x, z, rare);
+}
+/* construct a zombie at explicit world coords — used by spawnZombie after it
+   picks a random position, and by the necromancer death-summon which needs
+   to drop fresh shamblers around the corpse. Coords are clamped to keep
+   summons inside the playable arena. */
+function spawnZombieAt(type, x, z, rare) {
+  x = clamp(x, -ARENA + 9, ARENA - 9);
+  z = clamp(z, -ARENA + 9, ZSHORE - 4);
+  const d = ETYPES[type];
   const gy = walkHeight(x, z);
-  // distant spawns skip the rising delay — they're already up and hunting.
-  // anything past 35 yards just walks in — no mound, no claw-up animation.
   const farSpawn = Math.hypot(x - player.x, z - player.z) > 35;
-  // the horde swells in stature as the waves climb
   const sizeMul = 1 + Math.min(wave, 24) * (type === "boss" ? 0.008 : 0.014);
   const obj = buildZombie(type, rare);
   obj.scale.setScalar(sizeMul);
@@ -8460,14 +9325,13 @@ function spawnZombie(type, rare) {
     mound.receiveShadow = true;
     scene.add(mound);
   }
-  // wave 1 stays a 2-hit warm-up; the horde toughens noticeably each wave
   const hpScale = type === "boss"
     ? 1 + Math.max(0, wave - 5) * 0.3
     : 1 + (wave - 1) * 0.20;
-  const levelMul = 1 + (level - 1) * 0.55;        // each level toughens the horde
+  const levelMul = 1 + (level - 1) * 0.55;
   const hp = d.hp * hpScale * levelMul;
   const crawler = !!obj.userData.crawler;
-  zombies.push({
+  const z_rec = {
     obj, mound, type, rare: !!rare, boss: type === "boss", x, z, y: gy,
     hp: hp, maxHp: hp, sizeMul: sizeMul, crawler,
     speed: d.speed * (1 + Math.min(wave, 26) * 0.016) * (crawler ? 0.5 : 1),
@@ -8481,11 +9345,34 @@ function spawnZombie(type, rare) {
     spCd: rand(2.5, 5), spState: 0, spT: 0, spAng: 0, spH: 0,
     lsx: 0, lsz: 0, ltx: 0, ltz: 0,
     steerBias: Math.random() < 0.5 ? 1 : -1,
-  });
+  };
+  // BOSS VARIANT tagging — picked at wave start, attached here so the AI
+  // and visual layers can read it. "lord" variant gets a violet aura and a
+  // periodic summon attack on top of the slam.
+  if (type === "boss") {
+    z_rec.bossVariant = currentBossVariant;
+    z_rec.summonCd = 7.0;   // first summon ~7s after spawn, then every 7s
+    if (currentBossVariant === "lord") {
+      const aura = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: flareTex, color: 0xb45aff, transparent: true,
+        opacity: 0.55, depthWrite: false,
+        blending: THREE.AdditiveBlending }));
+      aura.scale.setScalar(d.h * 1.35);
+      aura.position.y = d.h * 0.55;
+      obj.add(aura);
+      // skip the extra real light on low-quality so mobile doesn't choke
+      if (!lowQ) {
+        const lordLight = new THREE.PointLight(0xb45aff, 2.4, 14, 2);
+        lordLight.position.y = d.h * 0.65; obj.add(lordLight);
+      }
+    }
+  }
+  zombies.push(z_rec);
   zombiesAlive++;
   spawnParts(x, gy + 0.3, z, 20,
     { color: 0x3a2c1c, speed: 8, up: 5, life: 0.8 });
-  Sound.rise();
+  if (type === "boss") Sound.bossRoar && Sound.bossRoar();
+  else Sound.rise();
 }
 
 /* ─── rooftop dive — a zombie launches off a building toward the hero ─────── */
@@ -8615,19 +9502,27 @@ function moveVec() {
 
 addEventListener("keydown", (e) => {
   keys[e.code] = true;
+  // M — toggle audio volume; works in every state, even on the title screen.
+  // Skip when the user is typing in a form field (none today, but future-proof).
+  if (e.code === "KeyM" && !/^(INPUT|TEXTAREA)$/.test(
+        (e.target && e.target.tagName) || "")) {
+    Sound.actx(); Audio_.cycle();
+    return;
+  }
+  // Escape from the Forge — fires whenever the forge overlay is open,
+  // regardless of whether it was reached from the title or the round popup.
+  if (e.code === "Escape" && UI.forgeScreen &&
+      !UI.forgeScreen.classList.contains("hidden")) {
+    closeForge(); return;
+  }
   if (state === ST.PLAYING) {
     if (e.code === "Space") { e.preventDefault(); tryDash(); }
     if (e.code === "KeyE") trySmash();
     if (e.code === "KeyQ") tryUltimate();
-    if (e.code === "KeyC") openChar(false);
-    if (e.code === "KeyI") openInv();
+    // Character + Inventory are gone — gear is auto-equipped, stats are set
+    // at the round-end popup. The C and I keys are now no-ops.
     // ANNIHILATOR — one-shot, only if you've picked it up
     if (e.code === "Digit1") detonateAnnihilator();
-  } else if (state === ST.CHAR) {
-    if (e.code === "KeyC" || e.code === "Escape") closeChar();
-    if (e.code === "KeyI") openInv();
-  } else if (state === ST.INVENTORY) {
-    if (e.code === "KeyI" || e.code === "Escape") closeInv();
   }
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
@@ -8652,6 +9547,7 @@ addEventListener("mouseup", (e) => {
   if (e.button === 0) {
     mouseDown = false;
     if (player && player.drawing) releaseBowShot();
+    if (player && player.channeling) player.channeling = false;
   }
 });
 addEventListener("contextmenu", (e) => e.preventDefault());
@@ -8691,15 +9587,15 @@ function setupTouchControls() {
   if (!isTouch) return;
   const ui = document.createElement("div");
   ui.id = "touchUI";
+  // smash label reads "BLAZE" for the wizard — class-specific name
+  const smashLabel = (chosenClass === "wizard") ? "BLAZE" : "SMASH";
   ui.innerHTML =
     '<div id="joyBase"><div id="joyKnob"></div></div>' +
     '<div class="tbtn" id="tb-atk">ATTACK</div>' +
-    '<div class="tbtn" id="tb-smash">SMASH<div class="tcd"></div></div>' +
+    '<div class="tbtn" id="tb-smash">' + smashLabel +
+      '<div class="tcd"></div></div>' +
     '<div class="tbtn" id="tb-leap">LEAP<div class="tcd"></div></div>' +
     '<div class="tbtn" id="tb-ult">ULT<div class="tcd"></div></div>' +
-    '<div class="tbtn" id="tb-sprint">RUN</div>' +
-    '<div class="tbtn" id="tb-char">HERO</div>' +
-    '<div class="tbtn" id="tb-inv">BAG</div>' +
     '<div class="tbtn" id="qualityBtn">HD</div>';
   document.body.appendChild(ui);
   const rot = document.createElement("div");
@@ -8791,21 +9687,11 @@ function setupTouchControls() {
   btn("tb-atk",
     () => { touchAttackHeld = true; if (state === ST.PLAYING) tryAttack(); },
     () => { touchAttackHeld = false;
-      if (player && player.drawing) releaseBowShot(); });
+      if (player && player.drawing) releaseBowShot();
+      if (player && player.channeling) player.channeling = false; });
   btn("tb-smash", () => { if (state === ST.PLAYING) trySmash(); });
   btn("tb-leap", () => { if (state === ST.PLAYING) tryDash(); });
   btn("tb-ult", () => { if (state === ST.PLAYING) tryUltimate(); });
-  btn("tb-sprint",
-    () => { keys["ShiftLeft"] = true; },
-    () => { keys["ShiftLeft"] = false; });
-  btn("tb-char", () => {
-    if (state === ST.PLAYING) openChar(false);
-    else if (state === ST.CHAR) closeChar();
-  });
-  btn("tb-inv", () => {
-    if (state === ST.PLAYING) openInv();
-    else if (state === ST.INVENTORY) closeInv();
-  });
   btn("qualityBtn", () => {
     lowQ = !lowQ;
     renderer.setPixelRatio(lowQ ? 1 : Math.min(devicePixelRatio, 2));
@@ -8867,8 +9753,396 @@ const UI = {
   bossFill: document.querySelector("#bossbar .bfill"),
   minimap: document.getElementById("minimap"),
   annHud: document.getElementById("annHud"),
+  audioBtn: document.getElementById("audioBtn"),
+  btnContinue: document.getElementById("btnContinue"),
+  btnNew: document.getElementById("btnNew"),
+  btnForge: document.getElementById("btnForge"),
+  titleShards: document.getElementById("titleShards"),
+  forgeScreen: document.getElementById("forgeScreen"),
+  forgeShardCount: document.getElementById("forgeShardCount"),
+  forgeList: document.getElementById("forgeList"),
+  roundPopup: document.getElementById("roundPopup"),
+  rpTitle: document.getElementById("rpTitle"),
+  rpCountdown: document.getElementById("rpCountdown"),
+  rpPoints: document.getElementById("rpPoints"),
+  rpPtsNum: document.getElementById("rpPtsNum"),
+  rpStats: document.getElementById("rpStats"),
+  rpStart: document.getElementById("rpStart"),
+  rpForge: document.getElementById("rpForge"),
+  rpShardNum: document.getElementById("rpShardNum"),
 };
 const miniCtx = UI.minimap.getContext("2d");
+
+/* ─── audio settings — volume cycler with localStorage persistence ────────── */
+const Audio_ = (() => {
+  const KEY = "mortimer_audio_v";
+  // ordered low → high; clicking cycles forward so users see a clear progression
+  const LEVELS = [
+    { v: 0,    label: "MUTE", icon: "\u{1F507}" },
+    { v: 0.35, label: "30",   icon: "\u{1F509}" },
+    { v: 0.7,  label: "70",   icon: "\u{1F50A}" },
+    { v: 1.0,  label: "100",  icon: "\u{1F50A}" },
+  ];
+  let idx = 3;
+  try {
+    const s = localStorage.getItem(KEY);
+    if (s != null) {
+      const i = parseInt(s, 10);
+      if (i >= 0 && i < LEVELS.length) idx = i;
+    }
+  } catch (e) { /* private mode — ignore */ }
+  function apply() {
+    const lv = LEVELS[idx];
+    Sound.setVolume && Sound.setVolume(lv.v);
+    Music.setVolume && Music.setVolume(lv.v);
+    if (UI.audioBtn) {
+      UI.audioBtn.innerHTML =
+        '<span class="ag">' + lv.icon + '</span>' +
+        '<span class="av">' + lv.label + '</span>';
+    }
+    try { localStorage.setItem(KEY, "" + idx); } catch (e) { /* ignore */ }
+  }
+  function cycle() {
+    idx = (idx + 1) % LEVELS.length;
+    apply();
+    // play a tick at the new level so the user hears the change immediately
+    if (LEVELS[idx].v > 0) Sound.uiClick && Sound.uiClick();
+  }
+  return { cycle, apply };
+})();
+if (UI.audioBtn) {
+  UI.audioBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    Sound.actx();        // unlock context on first user gesture
+    Audio_.cycle();
+  });
+}
+// Reflect the stored level on the button immediately on load. The gain
+// node doesn't exist yet (no user gesture), so Sound.setVolume is a no-op
+// here — the next Audio_.apply() after Sound.actx() does the real work.
+Audio_.apply();
+
+/* ─── save / load — full mid-run resume via localStorage ──────────────────────
+   We snapshot game-level + player-level state at every wave clear and every
+   stage advance — natural safe-points where no transient combat state is
+   live. On load we rebuild the player, reapply gear, abilities, ultimate,
+   permabuffs, stats, and resume on the same wave you cleared so it always
+   feels like the next wave is about to start. Temporary buffs (30s timers)
+   and currently-spawned zombies are intentionally NOT saved — they belong
+   to a moment, not a run. ──────────────────────────────────────────────── */
+const SaveLoad = (() => {
+  const KEY = "mortimer_save_v1";
+  function hasSave() {
+    try { return !!localStorage.getItem(KEY); } catch (e) { return false; }
+  }
+  function clear() {
+    try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+  }
+  // serialise an inventory/gear item — only the fields the game actually reads
+  function serItem(it) {
+    if (!it) return null;
+    const out = { slot: it.slot, rarity: it.rarity,
+      name: it.name, value: it.value };
+    if (it.model)  out.model  = it.model;
+    if (it.outfit) out.outfit = it.outfit;
+    return out;
+  }
+  function deserItem(it) { return it ? Object.assign({}, it) : null; }
+  function save() {
+    if (!player || !player.alive) return;
+    try {
+      const snap = {
+        v: 1,
+        cls: player.cls,
+        stage: level, wave: wave,
+        kills, score, totalDmg,
+        waveCountPrev,
+        player: {
+          hp: player.hp,
+          level: player.level, xp: player.xp, xpNext: player.xpNext,
+          statPoints: player.statPoints,
+          stat: Object.assign({}, player.stat),
+          gear: { weapon: serItem(player.gear.weapon),
+                  armor:  serItem(player.gear.armor) },
+          inventory: player.inventory.map(serItem),
+          abil: Array.from(player.abil),
+          ammo: player.ammo, deadEyeStacks: player.deadEyeStacks,
+          shieldReady: player.shieldReady,
+          ultId: player.ultId, ultChosen: player.ultChosen,
+          ultSpent: !!player.ultSpent,
+          rage: player.rage,
+          // permaBuffs are stored with their buff-def id so we can re-link
+          // on load (def itself isn't safely JSON-serialisable).
+          permaBuffs: player.permaBuffs.map(p =>
+            ({ id: p.def.id, count: p.count })),
+          perma: Object.assign({}, player.perma),
+        },
+      };
+      localStorage.setItem(KEY, JSON.stringify(snap));
+    } catch (e) { /* quota / private mode — silent */ }
+  }
+  function read() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return null;
+      const snap = JSON.parse(raw);
+      if (!snap || snap.v !== 1) return null;
+      return snap;
+    } catch (e) { return null; }
+  }
+  // restore a snapshot AFTER resetGame() has rebuilt a fresh player for the
+  // class the snapshot says — overwrites the fresh defaults with saved values.
+  function applyTo(snap) {
+    if (!snap || !player) return;
+    const ps = snap.player || {};
+    player.level    = ps.level    || 1;
+    player.xp       = ps.xp       || 0;
+    player.xpNext   = ps.xpNext   || 125;
+    player.statPoints = ps.statPoints || 0;
+    if (ps.stat) Object.assign(player.stat, ps.stat);
+    if (ps.perma) Object.assign(player.perma, ps.perma);
+    if (ps.gear) {
+      player.gear.weapon = deserItem(ps.gear.weapon);
+      player.gear.armor  = deserItem(ps.gear.armor);
+    }
+    player.inventory = (ps.inventory || []).map(deserItem);
+    player.abil = new Set(ps.abil || []);
+    if (typeof ps.ammo === "number") player.ammo = ps.ammo;
+    if (typeof ps.deadEyeStacks === "number")
+      player.deadEyeStacks = ps.deadEyeStacks;
+    if (typeof ps.shieldReady === "boolean")
+      player.shieldReady = ps.shieldReady;
+    player.ultId = ps.ultId || null;
+    player.ultChosen = !!ps.ultChosen;
+    player.ultSpent  = !!ps.ultSpent;
+    player.rage = ps.rage || 0;
+    // re-link permabuffs to live BUFFS def objects via id lookup
+    if (Array.isArray(ps.permaBuffs) && typeof BUFFS !== "undefined") {
+      for (const pb of ps.permaBuffs) {
+        const def = BUFFS.find(b => b.id === pb.id);
+        if (def) player.permaBuffs.push({ def, count: pb.count || 1 });
+      }
+    }
+    // re-derive every dependent stat from the loaded base values
+    recalc();
+    // hp restored last so a damaged save stays damaged (clamped against new max)
+    player.hp = clamp(ps.hp != null ? ps.hp : player.maxHp, 1, player.maxHp);
+    // outfit + ultimate icon need a refresh — they read from player on build
+    if (player.ultChosen && player.ultId) {
+      const u = ultDef(player.ultId);
+      const slot = document.getElementById("ab-ult");
+      if (slot && u) { slot.style.borderColor = u.hex; slot.style.color = u.hex; }
+    }
+    updateWeaponVisual();
+    buildAbilityHUD();
+  }
+  return { hasSave, clear, save, read, applyTo };
+})();
+
+/* ─── Meta-progression — Soul Shards earned per run, spent on permanent
+   perks that apply to every NEW run. The bank persists in localStorage
+   independently of the per-run save, so dying never wipes meta progress.
+   The Forge UI on the title screen reads + writes this. ──────────────── */
+/* ─── Soul Forge data ─────────────────────────────────────────────────────────
+   The Forge is the only place gear + abilities are bought now. Everything
+   purchased here is permanent across runs. Two parallel progression paths
+   let the player pick a play-style: WEAPON / ARMOUR tiers raise raw power,
+   ABILITY unlocks add new combat tools, and STAT upgrades give finer tuning.
+   STATS keeps the original ranks; WEAPONS / ARMOUR are tier ladders where
+   each step replaces the last (you can't "skip" tiers — must buy in order). */
+const META_UPGRADES = [
+  { id: "spd",       n: "FLEET FOOT",
+    d: "+5% movement speed per rank.",  max: 3, cost: 100, per: 0.05 },
+  { id: "crit",      n: "DEADLY EYE",
+    d: "+3% critical chance per rank.", max: 3, cost: 120, per: 0.03 },
+  { id: "life",      n: "BLOODBOND",
+    d: "+5 lifesteal per rank.",        max: 3, cost: 100, per: 5 },
+  { id: "soulGain",  n: "REAPER",
+    d: "+25% Soul Shards from every wave.", max: 3, cost: 120, per: 0.25 },
+  { id: "headstart", n: "SCHOLAR",
+    d: "+50 XP at the start of every run.", max: 3, cost: 50, per: 50 },
+];
+// Weapon ladder — each tier replaces the last, granting more raw damage.
+const META_WEAPONS = [
+  { tier: 1, n: "IRON EDGE",       dmg:  8, cost:   60,
+    d: "Forged steel. +8 weapon damage." },
+  { tier: 2, n: "TEMPERED STEEL",  dmg: 18, cost:  180,
+    d: "Twice-quenched. +18 weapon damage." },
+  { tier: 3, n: "BLOODFORGED",     dmg: 32, cost:  420,
+    d: "Quenched in blood. +32 weapon damage." },
+  { tier: 4, n: "DOOMFORGED",      dmg: 50, cost:  900,
+    d: "Crowned in shadow. +50 weapon damage." },
+  { tier: 5, n: "AEONIC BLADE",    dmg: 72, cost: 1700,
+    d: "Older than the world. +72 weapon damage." },
+];
+// Armour ladder — same structure, raises max HP permanently.
+const META_ARMOR = [
+  { tier: 1, n: "HARDENED LEATHER", hp:  25, cost:   60,
+    d: "Boiled hide. +25 maximum HP." },
+  { tier: 2, n: "RINGED CHAINMAIL", hp:  60, cost:  180,
+    d: "Knit iron. +60 maximum HP." },
+  { tier: 3, n: "FORGED PLATE",     hp: 110, cost:  420,
+    d: "Tempered steel. +110 maximum HP." },
+  { tier: 4, n: "WARLORD HARNESS",  hp: 180, cost:  900,
+    d: "Won in battle. +180 maximum HP." },
+  { tier: 5, n: "AEGIS ETERNAL",    hp: 280, cost: 1700,
+    d: "Unbreakable. +280 maximum HP." },
+];
+// Abilities — each is a one-time purchase per id. Once bought, the ability
+// is auto-granted at run start (no more in-game ability-pick cards).
+// Only abilities valid for the active class are visible in the Forge.
+const META_ABILITY_PRICES = {
+  fire:      280,
+  lightning: 280,
+  frost:     280,
+  soul:      350,
+  execute:   350,
+  wind:      300,
+  hammer:    480,
+};
+const Meta = (() => {
+  const KEY = "mortimer_meta_v1";
+  // schema v2 — adds gear ladders + ability ownership. v1 saves auto-migrate.
+  let state = { v: 2, shards: 0, upgrades: {},
+                gear: { weapon: 0, armor: 0 },
+                abilOwned: [],
+                totalEarned: 0, totalSpent: 0 };
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s && (s.v === 1 || s.v === 2))
+          state = Object.assign(state, s);
+      }
+    } catch (e) { /* ignore */ }
+    // ensure every defined node has a sane default
+    for (const u of META_UPGRADES)
+      if (state.upgrades[u.id] == null) state.upgrades[u.id] = 0;
+    if (!state.gear) state.gear = { weapon: 0, armor: 0 };
+    if (typeof state.gear.weapon !== "number") state.gear.weapon = 0;
+    if (typeof state.gear.armor  !== "number") state.gear.armor  = 0;
+    if (!Array.isArray(state.abilOwned)) state.abilOwned = [];
+    // drop deprecated dmg/hp ranks from v1 — replaced by weapon/armor tiers
+    delete state.upgrades.hp;
+    delete state.upgrades.dmg;
+    state.v = 2;
+  }
+  // localStorage writes are sync — debouncing them keeps the main thread
+  // from stuttering when shards stream in on every kill.
+  let _persistPending = false;
+  function persist() {
+    if (_persistPending) return;
+    _persistPending = true;
+    setTimeout(() => {
+      _persistPending = false;
+      try { localStorage.setItem(KEY, JSON.stringify(state)); }
+      catch (e) { /* ignore */ }
+    }, 250);
+  }
+  // Forced sync write — call before navigation / page unload where the
+  // debounced version might skip the final state.
+  function persistNow() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch (e) { /* ignore */ }
+  }
+  addEventListener("beforeunload", persistNow);
+  function lvl(id) { return state.upgrades[id] || 0; }
+  function shards() { return state.shards | 0; }
+  function costOf(u) { return Math.round(u.cost * Math.pow(lvl(u.id) + 1, 1.5)); }
+  function buy(id) {
+    const u = META_UPGRADES.find(x => x.id === id);
+    if (!u) return false;
+    if (lvl(id) >= u.max) return false;
+    const c = costOf(u);
+    if (state.shards < c) return false;
+    state.shards -= c;
+    state.totalSpent += c;
+    state.upgrades[id] = lvl(id) + 1;
+    persist();
+    return true;
+  }
+  // weapon / armor tier purchase — must buy tiers in order (no skipping).
+  function weaponTier()  { return state.gear.weapon || 0; }
+  function armorTier()   { return state.gear.armor  || 0; }
+  function nextWeapon()  { return META_WEAPONS[weaponTier()]; }      // null when maxed
+  function nextArmor()   { return META_ARMOR  [armorTier()]; }
+  function buyWeapon() {
+    const nx = nextWeapon(); if (!nx) return false;
+    if (state.shards < nx.cost) return false;
+    state.shards -= nx.cost; state.totalSpent += nx.cost;
+    state.gear.weapon = nx.tier;
+    persist(); return true;
+  }
+  function buyArmor() {
+    const nx = nextArmor(); if (!nx) return false;
+    if (state.shards < nx.cost) return false;
+    state.shards -= nx.cost; state.totalSpent += nx.cost;
+    state.gear.armor = nx.tier;
+    persist(); return true;
+  }
+  function ownsAbility(id) { return state.abilOwned.indexOf(id) >= 0; }
+  function buyAbility(id) {
+    const cost = META_ABILITY_PRICES[id];
+    if (cost == null || ownsAbility(id) || state.shards < cost) return false;
+    state.shards -= cost; state.totalSpent += cost;
+    state.abilOwned.push(id);
+    persist(); return true;
+  }
+  // generic award entry-point — used by killZombie / onWaveCleared /
+  // advanceLevel / spawnLoot. REAPER multiplier applies to ALL gains.
+  function awardShards(n, source) {
+    const mult = 1 + lvl("soulGain") * 0.25;
+    const earned = Math.max(0, Math.round(n * mult));
+    if (!earned) return 0;
+    state.shards += earned;
+    state.totalEarned += earned;
+    persist();
+    return earned;
+  }
+  // run rewards — kept for the death-screen summary. Awards 0 by default
+  // since shards now stream in per-wave and per-kill during the run.
+  function awardForRun() { return 0; }
+  // called by startGame() on a non-resume run — bakes purchased gear,
+  // abilities, and stat ranks into the fresh player so the choices the
+  // player made at the Forge carry into every wave 1.
+  function applyOnNewRun() {
+    if (!player) return;
+    const pm = player.perma;
+    pm.spd  += lvl("spd")  * 0.05;
+    pm.crit += lvl("crit") * 0.03;
+    pm.life += lvl("life") * 5;
+    // weapon + armor tiers as flat perma stat boosts
+    const wT = weaponTier();
+    if (wT > 0) pm.dmg += META_WEAPONS[wT - 1].dmg;
+    const aT = armorTier();
+    if (aT > 0) pm.hp  += META_ARMOR  [aT - 1].hp;
+    // abilities purchased at the Forge are pre-granted at run start.
+    // Filter to the active class so a wizard doesn't get knight-only powers.
+    if (typeof ABILITIES_BASE !== "undefined" && player.abil) {
+      for (const id of state.abilOwned) {
+        const base = ABILITIES_BASE.find(a => a.id === id);
+        if (!base) continue;
+        if (base.classes && base.classes.indexOf(player.cls) < 0) continue;
+        player.abil.add(id);
+      }
+    }
+    player.xp += lvl("headstart") * 50;
+    recalc();
+    player.hp = player.maxHp;
+    // refresh the HUD ability row so newly-granted icons appear
+    if (typeof buildAbilityHUD === "function") buildAbilityHUD();
+    if (typeof applyGearVisual === "function" && player.obj)
+      applyGearVisual(player.obj);
+  }
+  load();
+  return { shards, lvl, costOf, buy, awardShards, awardForRun, applyOnNewRun,
+    weaponTier, armorTier, nextWeapon, nextArmor, buyWeapon, buyArmor,
+    ownsAbility, buyAbility,
+    state: () => state, upgrades: META_UPGRADES,
+    weapons: META_WEAPONS, armor: META_ARMOR,
+    abilityPrices: META_ABILITY_PRICES };
+})();
 let bannerT = 0;
 function banner(sub, big) {
   UI.banner.querySelector(".big").textContent = big;
@@ -8891,6 +10165,7 @@ function achievement(ab) {
   UI.ach.querySelector(".v").textContent = ab.n;
   UI.ach.classList.add("show");
   achT = 4.5;
+  Sound.fanfare && Sound.fanfare();
 }
 function buildAbilityHUD() {
   // keep the three base controls, append unlocked ability glyphs
@@ -9283,12 +10558,16 @@ function updateHUD() {
     const ready = !!player.ultId && player.rage >= RAGE_MIN_ACTIVATE;
     UI.abUlt.classList.toggle("dim", !ready);
   }
-  // rage bar
+  // rage bar — the wizard reads "SPIRIT" instead of "RAGE" and gets a
+  // deep arcane-blue palette via the cls-wizard body class CSS override.
   const rf = clamp(player.rage / player.maxRage, 0, 1);
+  const rageName = player.cls === "wizard" ? "SPIRIT" : "RAGE";
   UI.ragefill.style.width = (rf * 100) + "%";
-  UI.ragetext.textContent = "RAGE " + Math.floor(player.rage) + " / " +
-    player.maxRage;
-  UI.ragebar.classList.toggle("full", rf >= 0.999);
+  UI.ragetext.textContent = player.ultSpent
+    ? "ULTIMATE SPENT"
+    : rageName + " " + Math.floor(player.rage) + " / " + player.maxRage;
+  UI.ragebar.classList.toggle("full", rf >= 0.999 && !player.ultSpent);
+  UI.ragebar.classList.toggle("spent", !!player.ultSpent);
   // active temporary buffs — timer chips, top-right
   let bh = "";
   for (const b of player.buffs) {
@@ -9632,12 +10911,103 @@ function pick3Abilities() {
     out.push(c.splice((Math.random() * c.length) | 0, 1)[0]);
   return out;
 }
+/* ─── round-end popup ─── shown between waves so the player can spend
+   accumulated stat points without dipping into a full character sheet.
+   The big countdown is the focal point: 10 → 0, then the next wave begins
+   automatically. Skipping early via the START button is fine too. */
+const ROUND_SECS = 10;
+let roundTimerPaused = false;          // freezes the countdown while in forge
+function openRoundPopup() {
+  state = ST.ROUND;
+  document.body.style.cursor = "default";
+  document.exitPointerLock();
+  roundT = ROUND_SECS;
+  roundTimerPaused = false;
+  UI.rpTitle.textContent = "WAVE " + wave + " CLEARED";
+  renderRoundStats();
+  UI.roundPopup.classList.remove("hidden");
+  // pre-paint the big number so the player sees 10 the instant the popup opens
+  UI.rpCountdown.textContent = ROUND_SECS;
+  UI.rpCountdown.classList.remove("urgent");
+}
+function renderRoundStats() {
+  UI.rpPtsNum.textContent = player.statPoints;
+  UI.rpPoints.classList.toggle("has", player.statPoints > 0);
+  if (UI.rpShardNum && Meta) UI.rpShardNum.textContent = Meta.shards();
+  UI.rpStats.innerHTML = "";
+  STAT_DEFS.forEach(s => {
+    const row = document.createElement("div");
+    row.className = "rpRow";
+    row.innerHTML =
+      '<div class="sdot" style="background:' + s.col + ';color:' + s.col +
+        '"></div>' +
+      '<div class="sinfo"><div class="sn">' + s.n + '</div>' +
+        '<div class="sd">' + s.d() + '</div></div>' +
+      '<button class="sbtn minus">−</button>' +
+      '<div class="cval">' + player.stat[s.key] + '</div>' +
+      '<button class="sbtn plus">+</button>';
+    const minus = row.querySelector(".minus");
+    const plus  = row.querySelector(".plus");
+    minus.disabled = player.stat[s.key] <= 0;
+    plus.disabled  = player.statPoints <= 0;
+    minus.addEventListener("click", () => {
+      if (player.stat[s.key] > 0) {
+        player.stat[s.key]--; player.statPoints++;
+        recalc(); Sound.choose && Sound.choose(); renderRoundStats();
+      }
+    });
+    plus.addEventListener("click", () => {
+      if (player.statPoints > 0) {
+        player.stat[s.key]++; player.statPoints--;
+        recalc(); Sound.choose && Sound.choose(); renderRoundStats();
+      }
+    });
+    UI.rpStats.appendChild(row);
+  });
+}
+function updateRoundPopup(dt) {
+  if (state !== ST.ROUND) return;
+  if (roundTimerPaused) return;     // forge is open — freeze the clock
+  roundT -= dt;
+  const n = Math.max(0, Math.ceil(roundT));
+  UI.rpCountdown.textContent = n;
+  UI.rpCountdown.classList.toggle("urgent", n <= 3);
+  if (roundT <= 0) closeRoundPopup();
+}
+function closeRoundPopup() {
+  UI.roundPopup.classList.add("hidden");
+  // the original closeChar flow ran ability + portal triggers here — replicate
+  // those so the round-end popup slots in cleanly.
+  if (wave > 0 && wave % 10 === 0) activatePortal();
+  else startWave(wave + 1);
+  state = ST.PLAYING;
+  if (!isTouch) canvas.requestPointerLock();
+}
+if (UI.rpStart) {
+  UI.rpStart.addEventListener("click", () => {
+    Sound.uiClick && Sound.uiClick();
+    closeRoundPopup();
+  });
+}
+if (UI.rpForge) {
+  UI.rpForge.addEventListener("click", () => {
+    Sound.uiClick && Sound.uiClick();
+    openForge("round");
+  });
+}
+
 function onWaveCleared() {
+  Sound.waveDone && Sound.waveDone();
+  // autosave the run at this safe point — no live combat state to capture
+  SaveLoad.save();
+  // wave-clear shard bonus — grows with wave + stage so deeper runs feed
+  // the Forge faster (also matches the "deeper waves are harder" loop)
+  if (Meta && Meta.awardShards)
+    Meta.awardShards(15 + (wave | 0) * 3 + (level | 0) * 6, "WAVE");
+  // ability-pick cards are gone — abilities come from the Forge now.
+  // The ultimate is still picked the first time it unlocks (one choice / run).
   if (pendingUlt) { pendingUlt = false; openUltimateChoice(); return; }
-  if (wave % 5 === 0 && classAbilities().some(a => !hasA(a.id)))
-    openAbilityChoice();
-  else
-    openChar(true, true);
+  openRoundPopup();
 }
 /* ─── level portal — a doorway to the next stage ──────────────────────────── */
 function buildPortal() {
@@ -9703,12 +11073,23 @@ function advanceLevel() {
     scene.remove(z.obj);
   }
   zombies = []; zombiesAlive = 0; toSpawn = [];
+  // autosave at this safe point so a crash mid-stage doesn't lose progress
+  SaveLoad.save();
+  // big stage-advance bonus — encourages pushing through the portal
+  if (Meta && Meta.awardShards)
+    Meta.awardShards(80 + (level | 0) * 25, "STAGE");
+  // each stage paints the world in its own palette — fog, sky, moon retint
+  applyStageTheme(level);
   // a thunderclap of light, then back to spawn
+  Sound.warp && Sound.warp();
   screenFlash("#c870ff", 0.7); shake(1.0);
   spawnParts(0, 2, -22, 60,
     { color: 0xc870ff, speed: 22, up: 8, life: 1.0 });
   player.x = 0; player.z = 0;
-  banner("STAGE " + level + " — THE NIGHT DEEPENS", "BEGIN");
+  // banner now reads the stage's lore name so the player feels the world
+  // shifting around them — paired with the fog/light retint above
+  banner("STAGE " + level + " — " + stageTheme(level).name,
+    level >= 10 ? "THE ABYSS BECKONS" : "BEGIN");
   startWave(1);
 }
 function openAbilityChoice() {
@@ -9733,12 +11114,17 @@ function openAbilityChoice() {
       '<div class="cn">' + ab.n + '</div>' +
       '<div class="cd2">' + ab.d + '</div>' +
       '<div class="take">CLICK TO CLAIM</div>';
+    card.addEventListener("mouseenter", () => {
+      if (!card.classList.contains("locked"))
+        Sound.uiTick && Sound.uiTick();
+    });
     card.addEventListener("click", () => {
       if (card.classList.contains("locked")) return;
+      Sound.uiClick && Sound.uiClick();
       Sound.choose();
       UI.choice.classList.add("hidden");
       grantAbility(ab.id);
-      openChar(true, true);
+      openRoundPopup();
     });
     cards.appendChild(card);
   });
@@ -9772,12 +11158,17 @@ function openUltimateChoice() {
       '<div class="cn">' + u.n + '</div>' +
       '<div class="cd2">' + u.d + '</div>' +
       '<div class="take">CLAIM YOUR ULTIMATE</div>';
+    card.addEventListener("mouseenter", () => {
+      if (!card.classList.contains("locked"))
+        Sound.uiTick && Sound.uiTick();
+    });
     card.addEventListener("click", () => {
       if (card.classList.contains("locked")) return;
+      Sound.uiClick && Sound.uiClick();
       Sound.choose();
       UI.choice.classList.add("hidden");
       grantUltimate(u.id);
-      openChar(true, true);
+      openRoundPopup();
     });
     cards.appendChild(card);
   });
@@ -9793,8 +11184,9 @@ function openUltimateChoice() {
 
 /* ─── state machine ───────────────────────────────────────────────────────── */
 const ST = { TITLE: 0, PLAYING: 1, CHOICE: 2, CHAR: 3, INVENTORY: 4,
-  GAMEOVER: 5 };
+  GAMEOVER: 5, ROUND: 6 };
 let state = ST.TITLE;
+let roundT = 0;        // countdown seconds remaining in the round-end popup
 let hitStop = 0, gameOverT = 0, heartT = 0;
 
 function resetGame() {
@@ -9837,45 +11229,275 @@ function resetGame() {
   clearObjectives(); clearAnnihilator();
   seedObjectives();
   spawnAnnihilator();
+  // a fresh run starts at stage 1 — paint the world in BONEYARD colours
+  applyStageTheme(level);
 }
-function startGame() {
+function startGame(opts) {
+  const snap = opts && opts.resume ? SaveLoad.read() : null;
+  if (snap && snap.cls) chosenClass = snap.cls;     // class must match the save
   resetGame();
+  // resume path: paste the snapshot over the freshly-rebuilt player. The
+  // class match above keeps the visual + ability pool consistent.
+  if (snap) {
+    SaveLoad.applyTo(snap);
+    level = snap.stage || 1;
+    kills = snap.kills || 0; score = snap.score || 0;
+    totalDmg = snap.totalDmg || 0;
+    waveCountPrev = snap.waveCountPrev || 0;
+    // restoring the run also restores the world palette for that stage
+    applyStageTheme(level);
+    // the autosave fires AFTER a wave is cleared, so the next wave starts here
+    startWave((snap.wave || 0) + 1);
+    banner("Stage " + level + " — wave " + ((snap.wave || 0) + 1) + " resumes",
+      "WELCOME BACK");
+  } else {
+    Meta.applyOnNewRun();
+    startWave(1);
+  }
   UI.title.classList.add("hidden");
   UI.over.classList.add("hidden");
   crosshairEl.style.display = "block";
   document.body.style.cursor = "none";
-  startWave(1);
   state = ST.PLAYING;
-  Sound.actx(); Ambience.start(); Music.start();
+  Sound.actx(); Audio_.apply(); Ambience.start(); Music.start();
   if (!isTouch) canvas.requestPointerLock();   // grab the mouse for mouse-look
 }
 function gameOver() {
   if (player) { player.drawing = false; player.drawT = 0; }
   state = ST.GAMEOVER; gameOverT = 0; shake(1.2);
+  Sound.death && Sound.death();
+  // the run is over — wipe the autosave so the title screen offers a fresh start
+  SaveLoad.clear();
+  const earnedShards = Meta.awardForRun();
   Ambience.stop(); Music.stop();
   UI.overStats.innerHTML = "WAVE " + wave + "  &middot;  LEVEL " +
     player.level + "  &middot;  SCORE " + score + "<br>" +
     kills + " ENEMIES SLAIN  &middot;  " +
-    Math.round(totalDmg).toLocaleString() + " TOTAL DAMAGE DEALT";
+    Math.round(totalDmg).toLocaleString() + " TOTAL DAMAGE DEALT" +
+    '<br><span style="color:#e7b8ff;font-weight:800">+' + earnedShards +
+    ' SOUL SHARDS</span> &mdash; spend them at the Forge';
   UI.overAgain.style.visibility = "hidden";
   UI.over.classList.remove("hidden");
   crosshairEl.style.display = "none";
   document.body.style.cursor = "default";
   document.exitPointerLock();
 }
-UI.title.addEventListener("click", () => {
-  if (state === ST.TITLE) {
+/* ─── title menu ─── refresh the Continue button + shard counter every time
+   the title comes back to the foreground (after a death or a Forge close) */
+function refreshTitleMenu() {
+  if (UI.titleShards) UI.titleShards.textContent = Meta.shards();
+  const has = SaveLoad.hasSave();
+  if (UI.btnContinue) {
+    UI.btnContinue.classList.toggle("disabled", !has);
+    UI.btnContinue.textContent = has ? "CONTINUE RUN" : "NO SAVED RUN";
+  }
+}
+refreshTitleMenu();
+function primeAudio() { Sound.actx(); Audio_.apply(); Music.start(); }
+if (UI.btnContinue) {
+  UI.btnContinue.addEventListener("mouseenter", () => Sound.uiTick && Sound.uiTick());
+  UI.btnContinue.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    if (UI.btnContinue.classList.contains("disabled")) return;
+    primeAudio(); Sound.uiClick && Sound.uiClick();
+    startGame({ resume: true });
+  });
+}
+if (UI.btnNew) {
+  UI.btnNew.addEventListener("mouseenter", () => Sound.uiTick && Sound.uiTick());
+  UI.btnNew.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    primeAudio(); Sound.uiClick && Sound.uiClick();
+    SaveLoad.clear();                  // a "new game" wipes any old in-progress save
     UI.title.classList.add("hidden");
     UI.classSelect.classList.remove("hidden");
-    // a user gesture unlocks autoplay — prime the music here so it's
-    // already playing softly behind the class-select screen.
-    Sound.actx(); Music.start();
+  });
+}
+if (UI.btnForge) {
+  UI.btnForge.addEventListener("mouseenter", () => Sound.uiTick && Sound.uiTick());
+  UI.btnForge.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    primeAudio(); Sound.uiClick && Sound.uiClick();
+    openForge("title");
+  });
+}
+// where the forge was opened FROM — affects the close action: title means
+// we go back to the title menu; round means we return to the wave popup.
+let forgeOpenedFrom = "title";
+function openForge(from) {
+  forgeOpenedFrom = from || "title";
+  renderForge();
+  if (forgeOpenedFrom === "round" && UI.roundPopup) {
+    UI.roundPopup.classList.add("hidden");
+    roundTimerPaused = true;       // pause the countdown while shopping
+  } else {
+    UI.title.classList.add("hidden");
   }
-});
+  UI.forgeScreen.classList.remove("hidden");
+  // close-button label changes to match the context
+  const closeEl = document.getElementById("forgeClose");
+  if (closeEl) closeEl.textContent = forgeOpenedFrom === "round"
+    ? "ESC — RETURN TO BATTLE" : "ESC — CLOSE";
+}
+function closeForge() {
+  UI.forgeScreen.classList.add("hidden");
+  if (forgeOpenedFrom === "round" && UI.roundPopup) {
+    UI.roundPopup.classList.remove("hidden");
+    roundTimerPaused = false;      // resume the countdown
+    if (typeof renderRoundStats === "function") renderRoundStats();
+  } else {
+    UI.title.classList.remove("hidden");
+    if (typeof refreshTitleMenu === "function") refreshTitleMenu();
+  }
+}
+
+// build one section (subtitle + array of row objects) and append to list
+function forgeSection(parent, title, blurb, rows) {
+  const h = document.createElement("div");
+  h.className = "forgeSection";
+  h.innerHTML = '<div class="frSecTitle">' + title + '</div>' +
+    (blurb ? '<div class="frSecBlurb">' + blurb + '</div>' : '');
+  parent.appendChild(h);
+  for (const r of rows) parent.appendChild(r);
+}
+function makeForgeRow(opts) {
+  // opts: { name, desc, rank, maxRank, cost, maxed, owned, onBuy }
+  const row = document.createElement("div");
+  row.className = "forgeRow" +
+    (opts.maxed || opts.owned ? " max" : "");
+  let rankStr = "";
+  if (opts.rank != null && opts.maxRank != null)
+    rankStr = '<div class="frRank">RANK ' + opts.rank +
+      ' / ' + opts.maxRank + '</div>';
+  else if (opts.owned)
+    rankStr = '<div class="frRank">OWNED</div>';
+  else if (opts.tier != null && opts.maxTier != null)
+    rankStr = '<div class="frRank">TIER ' + opts.tier +
+      ' / ' + opts.maxTier + '</div>';
+  row.innerHTML =
+    '<div class="frHead"><div class="frName">' + opts.name + '</div>' +
+      rankStr + '</div>' +
+    '<div class="frDesc">' + opts.desc + '</div>' +
+    '<button class="frBuy"' +
+      ((opts.maxed || opts.owned ||
+        Meta.shards() < (opts.cost || 0)) ? ' disabled' : '') + '>' +
+      (opts.maxed ? "MAXED" :
+       opts.owned ? "OWNED" :
+       ("FORGE — " + opts.cost + " SHARDS")) + '</button>';
+  const btn = row.querySelector(".frBuy");
+  if (btn && opts.onBuy && !opts.maxed && !opts.owned) {
+    btn.addEventListener("click", () => {
+      if (opts.onBuy()) {
+        Sound.fanfare && Sound.fanfare();
+        renderForge();
+      }
+    });
+  }
+  return row;
+}
+function renderForge() {
+  if (!UI.forgeList) return;
+  UI.forgeShardCount.textContent = Meta.shards();
+  UI.forgeList.innerHTML = "";
+
+  // ── WEAPONS ── tier ladder, one purchase at a time
+  const wRows = [];
+  const wT = Meta.weaponTier();
+  const wNext = Meta.nextWeapon();
+  if (wNext) {
+    wRows.push(makeForgeRow({
+      name: wNext.n, desc: wNext.d,
+      tier: wT, maxTier: Meta.weapons.length, cost: wNext.cost,
+      onBuy: () => Meta.buyWeapon()
+    }));
+  } else {
+    wRows.push(makeForgeRow({
+      name: Meta.weapons[Meta.weapons.length - 1].n,
+      desc: "You wield the finest blade ever forged.",
+      tier: wT, maxTier: Meta.weapons.length, maxed: true
+    }));
+  }
+  forgeSection(UI.forgeList, "WEAPON",
+    "Buy the next blade in the ladder. Permanent.", wRows);
+
+  // ── ARMOUR ── tier ladder
+  const aRows = [];
+  const aT = Meta.armorTier();
+  const aNext = Meta.nextArmor();
+  if (aNext) {
+    aRows.push(makeForgeRow({
+      name: aNext.n, desc: aNext.d,
+      tier: aT, maxTier: Meta.armor.length, cost: aNext.cost,
+      onBuy: () => Meta.buyArmor()
+    }));
+  } else {
+    aRows.push(makeForgeRow({
+      name: Meta.armor[Meta.armor.length - 1].n,
+      desc: "You wear armour beyond mortal craft.",
+      tier: aT, maxTier: Meta.armor.length, maxed: true
+    }));
+  }
+  forgeSection(UI.forgeList, "ARMOUR",
+    "Buy the next plating in the ladder. Permanent.", aRows);
+
+  // ── ABILITIES ── only class-appropriate ones for the current hero.
+  // If the player hasn't picked a class yet, default to knight's pool.
+  const cls = (player && player.cls) || chosenClass || "knight";
+  const abilRows = [];
+  if (typeof ABILITIES_BASE !== "undefined") {
+    for (const ab of ABILITIES_BASE) {
+      if (ab.classes && ab.classes.indexOf(cls) < 0) continue;
+      const cost = Meta.abilityPrices[ab.id];
+      if (cost == null) continue;
+      // resolve class-appropriate display name
+      let name = ab.id.toUpperCase(), desc = "Ability — see in-game card.";
+      if (typeof abilityById === "function" && player) {
+        const live = abilityById(ab.id);
+        if (live) { name = live.n || name;
+                    desc = live.d || desc; }
+      } else if (typeof ABILITY_NAMES !== "undefined" &&
+                 ABILITY_NAMES[ab.id] && ABILITY_NAMES[ab.id][cls]) {
+        name = ABILITY_NAMES[ab.id][cls].n;
+        desc = ABILITY_NAMES[ab.id][cls].d;
+      }
+      abilRows.push(makeForgeRow({
+        name: ab.glyph + "  " + name,
+        desc: desc,
+        owned: Meta.ownsAbility(ab.id),
+        cost: cost,
+        onBuy: () => Meta.buyAbility(ab.id)
+      }));
+    }
+  }
+  forgeSection(UI.forgeList,
+    "ABILITIES — " + cls.toUpperCase(),
+    "Unlocked abilities are granted at the start of every run.",
+    abilRows);
+
+  // ── STATS ── the original ranked upgrades
+  const sRows = [];
+  for (const u of Meta.upgrades) {
+    const rank = Meta.lvl(u.id);
+    const maxed = rank >= u.max;
+    sRows.push(makeForgeRow({
+      name: u.n, desc: u.d,
+      rank: rank, maxRank: u.max,
+      cost: maxed ? 0 : Meta.costOf(u),
+      maxed: maxed,
+      onBuy: () => Meta.buy(u.id)
+    }));
+  }
+  forgeSection(UI.forgeList, "STATS",
+    "Fine-tune your hero — every rank stacks across runs.", sRows);
+}
 // each class card on the select screen — pick this hero and begin the run
 for (const cardEl of UI.classSelect.querySelectorAll(".classCard")) {
+  cardEl.addEventListener("mouseenter", () => {
+    Sound.actx(); Sound.uiTick && Sound.uiTick();
+  });
   cardEl.addEventListener("click", (ev) => {
     ev.stopPropagation();
+    Sound.uiClick && Sound.uiClick();
     chosenClass = cardEl.getAttribute("data-cls") || "knight";
     UI.classSelect.classList.add("hidden");
     startGame();
@@ -9884,7 +11506,11 @@ for (const cardEl of UI.classSelect.querySelectorAll(".classCard")) {
 UI.over.addEventListener("click", () => {
   if (state === ST.GAMEOVER && gameOverT > 1.1) {
     UI.over.classList.add("hidden");
-    UI.classSelect.classList.remove("hidden");   // pick again on death
+    // back to the title so the player sees the shards just earned and can
+    // visit the Forge before launching the next run
+    state = ST.TITLE;
+    UI.title.classList.remove("hidden");
+    refreshTitleMenu();
   }
 });
 
@@ -9930,9 +11556,7 @@ function updatePlayer(dt) {
   // TUMBLE buff — small speed boost for 2s after a hunter tumble
   if (e._tumbleBuffT && e._tumbleBuffT > 0) e._tumbleBuffT -= dt;
 
-  const wantSprint = (keys["ShiftLeft"] || keys["ShiftRight"]) &&
-    e.stamina > 1;
-
+  // sprint is now always on while moving — Shift is no longer needed.
   if (e.leapSlowT > 0) e.leapSlowT -= dt;
 
   if (e.leaping) {
@@ -9953,7 +11577,9 @@ function updatePlayer(dt) {
   } else {
     const mv = moveVec();
     e.moving = !!mv;
-    e.sprinting = e.moving && wantSprint && e.leapSlowT <= 0;
+    // sprint is now the default — moving always sprints, no Shift required,
+    // no stamina cost. The walking gait is gone entirely.
+    e.sprinting = e.moving && e.leapSlowT <= 0;
     if (mv) {
       const slow = 1 - ATK_SLOW_AMT * clamp(e.atkSlowT / ATK_SLOW_DUR, 0, 1);
       const recover = e.leapSlowT > 0 ? 0.3 : 1;  // staggered after a leap
@@ -9971,13 +11597,18 @@ function updatePlayer(dt) {
           spawnParts(e.x, e.y + 0.1, e.z, 3,
             { color: 0x2c2418, speed: 4, up: 2, life: 0.4 });
       }
+      // ─── touch camera-follow ─── on a phone the user only has one thumb
+      // for movement, so the camera gently rotates toward whichever way
+      // they're moving. Lerp via shortest-angle so it feels smooth.
+      if (isTouch) {
+        const da = angDiff(camYaw, e.moveAng);
+        camYaw += da * clamp(dt * 3.5, 0, 1);
+      }
     } else e.walkP += dt * 4;
   }
-  // stamina
-  if (e.sprinting)
-    e.stamina = Math.max(0, e.stamina - P.staminaDrain * dt);
-  else
-    e.stamina = Math.min(P.staminaMax, e.stamina + P.staminaRegen * dt);
+  // stamina is fully decoupled from movement now — keep the bar topped up
+  // so legacy buffs/abilities that read it still work, but it never drains.
+  e.stamina = P.staminaMax;
 
   // map limits — the world's edge + solid structures (airborne clears them)
   if (!e.leaping) resolveColliders(e, P.r);
@@ -10011,6 +11642,15 @@ function updatePlayer(dt) {
 
   if ((mouseDown || touchAttackHeld) && !e.atk && !e.smash && !e.leaping)
     tryAttack();
+  // wizard — frostfire channel ticks every frame while LMB is held
+  if (e.channeling) {
+    if (e.smash || e.leaping || !e.alive ||
+        !(mouseDown || touchAttackHeld)) {
+      e.channeling = false;
+    } else {
+      wizardChannelTick(dt);
+    }
+  }
   // hunter — tick the bow draw while the button is held
   if (e.drawing) {
     e.drawT = Math.min(e.drawMax, e.drawT + dt);
@@ -10323,9 +11963,17 @@ function updateZombies(dt) {
     if (z.burn > 0) {
       z.burn -= dt;
       z.hp -= z.burnDps * dt;
-      if (z.t % 0.16 < dt)
-        spawnParts(z.x, z.y + d.h * 0.5 + rand(0, 1), z.z, 2,
-          { color: 0xff6a2a, speed: 3, up: 4, life: 0.4, grav: -0.2 });
+      // burn-flames visual — cheaper rate on touch (mobile GPU friendly).
+      // Only fires for zombies within a sensible camera range to avoid
+      // the particle pool drowning when 100 zombies burn at once.
+      const burnTickI = lowQ ? 0.32 : 0.18;
+      if (z.t % burnTickI < dt) {
+        const dx = z.x - player.x, dz = z.z - player.z;
+        if (dx * dx + dz * dz < 70 * 70) {       // ≈80 yard cull
+          spawnParts(z.x, z.y + d.h * 0.5 + rand(0, 1), z.z, lowQ ? 1 : 2,
+            { color: 0xff6a2a, speed: 3, up: 4, life: 0.4, grav: -0.2 });
+        }
+      }
       if (z.hp <= 0) { killZombie(z); continue; }
     }
     let chillMul = 1;
@@ -10456,6 +12104,26 @@ function updateZombies(dt) {
         } else {
           z.state = "attack"; z.atkCd -= dt;
           if (z.atkCd <= 0) { z.atkCd = 2.2; bossSlam(z, dmgScale); }
+        }
+        // NECROMANCER LORD variant — between slams, periodically raise three
+        // shamblers around itself to drown the player in numbers. The summon
+        // doesn't interrupt or replace the slam — both clocks run in parallel.
+        if (z.bossVariant === "lord") {
+          z.summonCd -= dt;
+          if (z.summonCd <= 0 && zombiesAlive < 100) {
+            z.summonCd = 7.0;
+            spawnParts(z.x, z.y + 0.6, z.z, 50,
+              { color: 0xb45aff, speed: 18, up: 9, life: 0.95 });
+            flashLight(z.x, z.y + 2.0, z.z, 0.5, 0xb45aff);
+            boomRing.setColor(0xb45aff);
+            boomRing.show(z.x, z.y + 0.2, z.z, z.r + 8, 0.5);
+            Sound.zap && Sound.zap();
+            for (let i = 0; i < 3; i++) {
+              const a = (i / 3) * TAU + rand(-0.3, 0.3), d = rand(5, 8);
+              spawnZombieAt("shambler", z.x + Math.cos(a) * d,
+                                        z.z + Math.sin(a) * d);
+            }
+          }
         }
       } else {
         // ---- the common dead: dodge AI + chase + strike ----
@@ -10902,6 +12570,7 @@ let clock = 0;
 function update(dt) {
   clock += dt;
   updatePlayer(dt);
+  spreadFrostfire(dt);
   updateZombies(dt);
   updateWaves(dt);
   updateCombo(dt);
@@ -10922,7 +12591,8 @@ function update(dt) {
   updateGhosts(dt);
   updateBolts(dt);
   updateFlares(dt); updateGibs(dt); updateScorch(dt); updateCracks(dt);
-  updateScreenFlash(dt); updateFireflies(dt, clock);
+  updateSplats(dt);
+  updateScreenFlash(dt); updateFireflies(dt, clock); updateHaze(dt, clock);
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
   updateCamera(dt); updateOcclusion();
   updateGrass(dt, clock);
@@ -10941,7 +12611,8 @@ function idleTick(dt) {
   updateGhosts(dt);
   updateBolts(dt);
   updateFlares(dt); updateGibs(dt); updateScorch(dt); updateCracks(dt);
-  updateScreenFlash(dt); updateFireflies(dt, clock);
+  updateSplats(dt);
+  updateScreenFlash(dt); updateFireflies(dt, clock); updateHaze(dt, clock);
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
   updateGrass(dt, clock);
   updateAmbient(dt, clock);
@@ -10970,6 +12641,10 @@ function loop(ts) {
   } else if (state === ST.CHOICE || state === ST.INVENTORY) {
     idleTick(dt);
     updateHUD();
+  } else if (state === ST.ROUND) {
+    idleTick(dt);
+    updateHUD();
+    updateRoundPopup(dt);
   } else if (state === ST.GAMEOVER) {
     gameOverT += dt;
     idleTick(dt);
