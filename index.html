@@ -1315,6 +1315,13 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.22;
+// PERF: Three.js calls gl.getProgramInfoLog() for every shader program by
+// default to surface compile errors. Profiling capture showed this single
+// call eating 28.7% of all CPU time (8.8s of a 30s recording). Disabling
+// the per-program error check skips the sync gl-call. Safe for production
+// — only matters when debugging shader code, and we don't author custom
+// shaders here.
+renderer.debug.checkShaderErrors = false;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x2b3040);
@@ -10425,14 +10432,22 @@ document.addEventListener("pointerlockchange", () => {
 
 /* ─── mobile: virtual joystick, touch-look & on-screen action buttons ─────── */
 let touchAttackHeld = false;
+/* PERF: setText only writes textContent when the value actually changed.
+   Every per-frame textContent write triggers DOM layout work; cooldown
+   numbers and the rage label re-set the same string for most frames. */
+function setText(el, txt) {
+  if (!el) return;
+  if (el._lastTxt === txt) return;
+  el.textContent = txt; el._lastTxt = txt;
+}
 function tcdBtn(id, cd) {
   const el = document.getElementById(id);
   if (!el) return;
   const c = el.querySelector(".tcd");
   if (cd > 0.05) {
     el.classList.add("cooling");
-    if (c) c.textContent = Math.ceil(cd);
-  } else el.classList.remove("cooling");
+    setText(c, "" + Math.ceil(cd));
+  } else { el.classList.remove("cooling"); setText(c, ""); }
 }
 function syncTouchUI() {
   if (!isTouch) return;
@@ -11518,7 +11533,7 @@ function updateHUD() {
   UI.xpfill.style.width = clamp(player.xp / player.xpNext, 0, 1) * 100 + "%";
   function cdb(bar, num, cd, max) {
     bar.style.top = (cd > 0 ? (1 - cd / max) * 100 : 100) + "%";
-    num.textContent = cd > 0.05 ? Math.ceil(cd) : "";
+    setText(num, cd > 0.05 ? "" + Math.ceil(cd) : "");
   }
   cdb(UI.cdSmash, UI.cdnSmash, player.smashCd, P.smashCd);
   cdb(UI.cdDash, UI.cdnDash, player.dashCd, P.dashCd);
@@ -11536,9 +11551,9 @@ function updateHUD() {
   const rf = clamp(player.rage / player.maxRage, 0, 1);
   const rageName = player.cls === "wizard" ? "SPIRIT" : "RAGE";
   UI.ragefill.style.width = (rf * 100) + "%";
-  UI.ragetext.textContent = player.ultSpent
+  setText(UI.ragetext, player.ultSpent
     ? "ULTIMATE SPENT"
-    : rageName + " " + Math.floor(player.rage) + " / " + player.maxRage;
+    : rageName + " " + Math.floor(player.rage) + " / " + player.maxRage);
   UI.ragebar.classList.toggle("full", rf >= 0.999 && !player.ultSpent);
   UI.ragebar.classList.toggle("spent", !!player.ultSpent);
   // active temporary buffs — timer chips, top-right
