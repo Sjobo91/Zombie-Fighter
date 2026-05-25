@@ -1073,13 +1073,13 @@ const ETYPES = {
   runner:   { hp: 26,   speed: 17.5, dmg: 9,  r: 1.05, h: 3.1,  xp: 15 },
   charger:  { hp: 82,   speed: 8.4,  dmg: 26, r: 1.45, h: 4.0,  xp: 32 },
   lunger:   { hp: 48,   speed: 14.0, dmg: 20, r: 1.15, h: 3.3,  xp: 27 },
-  brute:    { hp: 160,  speed: 7.0,  dmg: 30, r: 2.1,  h: 5.0,  xp: 48 },
-  giant:    { hp: 560,  speed: 5.4,  dmg: 54, r: 3.5,  h: 7.6,  xp: 200 },
-  revenant: { hp: 380,  speed: 11.4, dmg: 34, r: 1.85, h: 4.7,  xp: 160 },
+  brute:    { hp: 110,  speed: 7.0,  dmg: 30, r: 2.1,  h: 5.0,  xp: 48 },
+  giant:    { hp: 420,  speed: 5.4,  dmg: 54, r: 3.5,  h: 7.6,  xp: 200 },
+  revenant: { hp: 280,  speed: 11.4, dmg: 34, r: 1.85, h: 4.7,  xp: 160 },
   // NECROMANCER — fragile mid-wave caster. On death, raises 3 fresh shamblers
   // out of the earth nearby; the death summons honour the wave HP scaling so
   // they aren't free trash kills late-game.
-  necro:    { hp: 220,  speed: 6.5,  dmg: 22, r: 1.55, h: 4.3,  xp: 95 },
+  necro:    { hp: 140,  speed: 6.5,  dmg: 22, r: 1.55, h: 4.3,  xp: 95 },
   boss:     { hp: 1700, speed: 5.0,  dmg: 46, r: 5.4,  h: 12.5, xp: 950 },
 };
 // per-wave compounding — late waves become a true test
@@ -4718,6 +4718,17 @@ function damageNum(x, y, z, n, crit, col) {
     return;
   }
 }
+// PERF: cap damage-number DOM writes to ~12/sec — knight cleave + chain
+// lightning otherwise hammers the browser layout pipeline per zombie.
+let _dmgNumLastT = 0;
+function damageNumThrottled(x, y, z, n, crit) {
+  const now = performance.now();
+  if (!crit && now - _dmgNumLastT < 80) return;     // throttle non-crits
+  _dmgNumLastT = now;
+  damageNum(x, y, z, n, crit);
+}
+// PERF: one hit-sound per frame max. Reset by update() each tick.
+let _hitSoundThisFrame = false;
 const _proj = new THREE.Vector3();
 function updateDmgNums(dt) {
   for (const d of dmgPool) {
@@ -7329,6 +7340,73 @@ function releaseBowShot() {
    Burning zombies spread fire to their neighbours so the horde lights up. */
 const CHANNEL_RANGE = 22;
 const CHANNEL_HALF_ARC = 0.42;          // ≈48° total cone — wide enough
+
+/* ── DRAGON-BREATH FLAME CONE ── two layered, additive-blended cone meshes
+   that visualise the channel. The geometry is built once and the meshes
+   are positioned + rotated to the wizard every frame while channeling.
+   Outer cone = orange flame envelope, inner cone = pale-blue frostfire
+   core. A small per-frame scale wobble sells the "breathing" feel. */
+const flameConeOuter = (() => {
+  const g = new THREE.ConeGeometry(4.0, CHANNEL_RANGE, 14, 1, true);
+  g.translate(0, -CHANNEL_RANGE * 0.5, 0);  // apex at origin, base ↘ -Y
+  g.rotateX(-Math.PI / 2);                  // axis now along +Z (forward)
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+    color: 0xff7a2a, transparent: true, opacity: 0.55,
+    side: THREE.DoubleSide, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  m.visible = false; scene.add(m);
+  return m;
+})();
+const flameConeInner = (() => {
+  const g = new THREE.ConeGeometry(1.9, CHANNEL_RANGE * 0.94, 12, 1, true);
+  g.translate(0, -CHANNEL_RANGE * 0.47, 0);
+  g.rotateX(-Math.PI / 2);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+    color: 0x9adfff, transparent: true, opacity: 0.62,
+    side: THREE.DoubleSide, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  m.visible = false; scene.add(m);
+  return m;
+})();
+// a real PointLight at the wizard's chest while channeling so the
+// flame actually illuminates the world. Limited to high-quality mode.
+const flameConeLight = (() => {
+  const l = new THREE.PointLight(0xff8a3a, 0, 18, 2);
+  scene.add(l);
+  return l;
+})();
+function updateFlameCone() {
+  // off when not channeling
+  if (!player || !player.channeling) {
+    if (flameConeOuter.visible) {
+      flameConeOuter.visible = false;
+      flameConeInner.visible = false;
+      flameConeLight.intensity = 0;
+    }
+    return;
+  }
+  const e = player;
+  const y = (e.y || 0) + 2.0;
+  const t = e.channelT || 0;
+  // both cones share the wizard's stance + aim
+  flameConeOuter.position.set(e.x, y, e.z);
+  flameConeOuter.rotation.y = e.aim;
+  flameConeInner.position.set(e.x, y, e.z);
+  flameConeInner.rotation.y = e.aim;
+  // breathing wobble — sells "continuous flame"
+  const wob = 1 + Math.sin(t * 22) * 0.06;
+  flameConeOuter.scale.set(wob, wob, 1 + Math.sin(t * 13) * 0.04);
+  flameConeInner.scale.set(wob * 0.95, wob * 0.95, 1 + Math.cos(t * 17) * 0.05);
+  // flicker opacity slightly so it reads as living fire, not a static cone
+  flameConeOuter.material.opacity = 0.45 + Math.abs(Math.sin(t * 19)) * 0.18;
+  flameConeInner.material.opacity = 0.55 + Math.abs(Math.cos(t * 23)) * 0.14;
+  flameConeOuter.visible = true;
+  flameConeInner.visible = true;
+  flameConeLight.position.set(e.x + Math.sin(e.aim) * 2.5, y,
+                              e.z + Math.cos(e.aim) * 2.5);
+  flameConeLight.intensity = lowQ ? 0 : 3.2 + Math.sin(t * 15) * 0.7;
+}
+
 function wizardChannelTick(dt) {
   const e = player;
   e.channelT += dt;
@@ -7342,16 +7420,19 @@ function wizardChannelTick(dt) {
   const targetDps = warriorBase * 2;
   const impactPerTick = (targetDps * 0.25) * e.channelTickT;
   const burnDpsTarget = targetDps * 0.75;
-  // visual: a thin spurt of flame — only 2 particles per tick now
+  // visual: embers riding alongside the cone — kept modest because the
+  // cone mesh itself does the heavy lifting visually
   const sx = e.x + dirX * 1.6, sz = e.z + dirZ * 1.6;
-  for (let i = 0; i < 2; i++) {
-    const spread = rand(-CHANNEL_HALF_ARC * 0.7, CHANNEL_HALF_ARC * 0.7);
+  const emberN = lowQ ? 2 : 4;
+  for (let i = 0; i < emberN; i++) {
+    const spread = rand(-CHANNEL_HALF_ARC * 0.85, CHANNEL_HALF_ARC * 0.85);
     const a = e.aim + spread;
-    const r = rand(0.5, 6);
-    spawnParts(sx + Math.sin(a) * r, (e.y || 0) + 2.0 + rand(-0.2, 0.4),
+    const r = rand(0.8, CHANNEL_RANGE * 0.85);
+    spawnParts(sx + Math.sin(a) * r,
+      (e.y || 0) + 2.0 + rand(-0.6, 0.8),
       sz + Math.cos(a) * r, 1,
-      { color: pick([0x6fa8ff, 0x9adfff, 0xff8a3a]),
-        speed: 22, up: 1, life: 0.5 });
+      { color: pick([0xff7a2a, 0xffd06a, 0x9adfff, 0xfff2dc]),
+        speed: 18, up: 2, life: 0.55 });
   }
   // audio every ~0.5s instead of every other tick — the channel doesn't
   // need a roar at 10Hz to feel alive
@@ -7661,85 +7742,88 @@ function knightGroundSmash(baseDmg) {
    trail of frostfire that does the same down a corridor. Damage rides on
    the burn DoT, not the impact, so the spell scales with how long enemies
    stay locked in the freeze. */
+/* ─── WIZARD BLAZE ─── right-mouse for the wizard. Two diverging fire beams
+   form a V opening straight ahead of the caster. Enemies caught in either
+   beam are scorched + frozen with a hefty burn DoT — the V means the
+   wizard can sweep through a wide spread of foes without needing to aim
+   tight, while still rewarding facing the densest cluster. */
 function wizardBlaze(baseDmg) {
   const e = player;
-  const ringR = 14;                              // 360° freeze-burn radius
-  const trailLen = 28;                           // forward corridor reach
-  const trailHalfW = 3.6;                        // corridor half-width
-  // damage: instant impact is small; the DoT is where the real numbers live
+  const beamLen = 30;                          // each V-arm reaches this far
+  const beamHalfW = 3.0;                       // half-width of each arm
+  const halfOpen = 0.40;                       // ≈23° each side → 46° total V
+  // damage budget: heavy burn DoT for the bulk, modest direct impact
   const norm = e.dmg * e.dmgMul + e.level * 4;
-  const impact = norm * 0.6;
-  const burnDps = norm * 1.4;                    // hefty DoT
+  const impact = norm * 0.7;
+  const burnDps = norm * 1.5;
   Sound.freeze && Sound.freeze();
   Sound.boom();
   Sound.tone && Sound.tone("sawtooth", 60, 110, 0.5, 0.18);
-  shake(1.5); screenFlash("#9adfff", 0.42);
-  // 360° corona around the wizard
-  smashRing.setColor(0x9adfff);
-  smashRing.show(e.x, e.y + 0.2, e.z, ringR, 0.55);
-  boomRing.setColor(0x6aaaff);
-  boomRing.show(e.x, e.y + 0.2, e.z, ringR * 1.25, 0.75);
-  windRing.setColor(0xff8a3a);
-  windRing.show(e.x, e.y + 0.3, e.z, ringR * 0.7, 0.4);
-  // a pool of frost + scorch under the cast
-  scorch(e.x, e.z, ringR * 0.7);
-  // particles: blue ice + orange embers, layered
-  spawnParts(e.x, e.y + 0.6, e.z, 60,
-    { color: 0x9adfff, speed: 24, up: 8, life: 0.9 });
-  spawnParts(e.x, e.y + 0.6, e.z, 40,
-    { color: 0xff8a3a, speed: 22, up: 7, life: 0.7 });
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * TAU;
-    flare(e.x + Math.cos(a) * ringR * 0.6,
-      e.y + rand(0.6, 3.0),
-      e.z + Math.sin(a) * ringR * 0.6,
-      rand(5, 8), pick([0x9adfff, 0x6fa8ff, 0xff8a3a]), 0.55);
-  }
-  flashLight(e.x, e.y + 2.4, e.z, 0.55, 0x9adfff);
-  // forward trail — a corridor of frostfire stretching out ahead of the aim
+  shake(1.6); screenFlash("#ff8a3a", 0.36);
+  // ── set up the two beams ──
   const ang = e.aim;
   const dirX = Math.sin(ang), dirZ = Math.cos(ang);
-  const trailEndX = e.x + dirX * trailLen;
-  const trailEndZ = e.z + dirZ * trailLen;
-  smashRing.setColor(0x6fa8ff);
-  smashRing.show(trailEndX, e.y + 0.2, trailEndZ, 5, 0.45);
-  for (let i = 1; i <= 7; i++) {
-    const k = i / 7;
-    const sx = e.x + dirX * trailLen * k;
-    const sz = e.z + dirZ * trailLen * k;
-    scorch(sx, sz, 4.5);
-    spawnParts(sx, e.y + 1.2, sz, 14,
-      { color: pick([0x9adfff, 0x6fa8ff, 0xff8a3a, 0xe0f0ff]),
-        speed: 18, up: 5, life: 0.7 });
-    flare(sx + rand(-1, 1), e.y + rand(0.8, 2.4),
-      sz + rand(-1, 1), rand(4, 7),
-      pick([0x9adfff, 0xff8a3a]), 0.55);
-  }
-  flashLight(trailEndX, e.y + 2, trailEndZ, 0.4, 0xff8a3a);
-  // damage + freeze + burn — anything inside the corona OR the trail
+  const angL = ang - halfOpen, angR = ang + halfOpen;
+  const dirLX = Math.sin(angL), dirLZ = Math.cos(angL);
+  const dirRX = Math.sin(angR), dirRZ = Math.cos(angR);
+  const endLX = e.x + dirLX * beamLen, endLZ = e.z + dirLZ * beamLen;
+  const endRX = e.x + dirRX * beamLen, endRZ = e.z + dirRZ * beamLen;
+  // a small launch-pad of fire under the caster's feet so the V grows
+  // out of an actual eruption rather than appearing from nothing
+  scorch(e.x, e.z, 5);
+  smashRing.setColor(0xff8a3a);
+  smashRing.show(e.x, e.y + 0.2, e.z, 4.5, 0.45);
+  boomRing.setColor(0xffd06a);
+  boomRing.show(e.x, e.y + 0.3, e.z, 7, 0.55);
+  spawnParts(e.x, e.y + 1.0, e.z, 40,
+    { color: 0xff8a3a, speed: 24, up: 9, life: 0.85 });
+  spawnParts(e.x, e.y + 1.0, e.z, 24,
+    { color: 0x9adfff, speed: 18, up: 6, life: 0.7 });
+  flashLight(e.x, e.y + 2.4, e.z, 0.55, 0xff8a3a);
+  // ── walk both arms and paint the fire trail ──
+  const beam = (eX, eZ, side) => {
+    smashRing.setColor(0xffd06a);
+    smashRing.show(eX, e.y + 0.2, eZ, 4.5, 0.45);
+    boomRing.setColor(0xff8a3a);
+    boomRing.show(eX, e.y + 0.25, eZ, 6.5, 0.55);
+    flashLight(eX, e.y + 2, eZ, 0.5, 0xff8a3a);
+    for (let i = 1; i <= 8; i++) {
+      const k = i / 8;
+      const sx = lerp(e.x, eX, k);
+      const sz = lerp(e.z, eZ, k);
+      scorch(sx, sz, 4 + k * 1.6);
+      spawnParts(sx, e.y + 1.4, sz, lowQ ? 8 : 14,
+        { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0x9adfff]),
+          speed: 22, up: 7, life: 0.8 });
+      if (i % 2 === 0)
+        flare(sx + rand(-1, 1), e.y + rand(0.9, 2.6), sz + rand(-1, 1),
+          rand(5, 8), pick([0xff8a3a, 0xffd06a]), 0.6);
+    }
+  };
+  beam(endLX, endLZ, -1);
+  beam(endRX, endRZ, +1);
+  // ── damage pass: enemies in EITHER beam get hit, burnt, frozen ──
   for (const z of zombies) {
     if (z.state === "die" || z.state === "rising") continue;
-    const dx = z.x - e.x, dz = z.z - e.z;
-    const dRing = Math.hypot(dx, dz);
-    const inRing = dRing < ringR + z.r;
-    const dPath = segDist(e.x, e.z, trailEndX, trailEndZ, z.x, z.z);
-    const inTrail = !inRing && dPath < trailHalfW + z.r &&
-      (z.x - e.x) * dirX + (z.z - e.z) * dirZ > -1; // forward of caster
-    if (!inRing && !inTrail) continue;
-    if (lineBlocked(e.x, e.z, z.x, z.z) && !inTrail) continue;
-    hitZombie(z, impact, false, Math.atan2(dx, dz), 2.5);
+    const fwd = (z.x - e.x) * dirX + (z.z - e.z) * dirZ;
+    if (fwd < -1) continue;                    // strictly forward of caster
+    const dL = segDist(e.x, e.z, endLX, endLZ, z.x, z.z);
+    const dR = segDist(e.x, e.z, endRX, endRZ, z.x, z.z);
+    const inL = dL < beamHalfW + z.r;
+    const inR = dR < beamHalfW + z.r;
+    if (!inL && !inR) continue;
+    hitZombie(z, impact, false, Math.atan2(z.x - e.x, z.z - e.z), 2.5);
     if (z.state !== "die") {
-      // freeze in place: stun 3s, chill 4s, sets a frozen flag for visual
+      // freeze in place + long burn — frostfire signature
       z.stun = Math.max(z.stun, 3.0);
       z.chill = Math.max(z.chill, 4.0);
       z.frozen = true;
-      // long DoT — they melt while frozen
       z.burn = Math.max(z.burn, 6.0);
       z.burnDps = Math.max(z.burnDps, burnDps);
       z.frostfire = true;
     }
   }
-  damageInteractables(e.x, e.z, ringR, impact);
+  damageInteractables(e.x, e.z, beamLen * 0.5, impact);
   gainRage(RAGE_SMASH);
 }
 
@@ -9003,34 +9087,40 @@ function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
   z.kx += Math.sin(ang) * kb; z.kz += Math.cos(ang) * kb;
   z.stagger = Math.max(z.stagger, 0.15);
   const d = ETYPES[z.type], hy = z.y + d.h * 0.5;
-  // base hit reaction — heavier than before. A normal hit now throws
-  // a real blood mist, and crits explode with a chunky gore burst.
-  spawnParts(z.x, hy, z.z, crit ? 56 : 28,
-    { color: 0x7c1109, speed: crit ? 22 : 14, up: 2 });
-  spawnParts(z.x, hy, z.z, crit ? 18 : 8,
-    { color: 0x3a0606, speed: crit ? 9 : 5, life: 0.55 });
-  flare(z.x, hy, z.z, crit ? 6.5 : 3.5,
-    crit ? 0xffd23a : 0xff5a3a, crit ? 0.42 : 0.26,
-    crit ? 1.0 : 0.6);
-  if (crit) {
-    spawnGibs(z.x, hy, z.z, 7);
-    flashLight(z.x, hy, z.z, 0.22, 0xffd23a);
-    // a tiny shock ring telegraphing the crit
-    smashRing.setColor(0xffd23a);
-    smashRing.show(z.x, z.y + 0.2, z.z, 2.4, 0.25);
-  } else {
-    // even a normal hit lays a thin spark trail
-    for (let i = 0; i < 2; i++)
-      flare(z.x + rand(-0.6, 0.6), hy + rand(-0.4, 0.4),
-        z.z + rand(-0.6, 0.6), rand(1.6, 2.4), 0xff5a3a, 0.18);
+  // PERF: blood/spark VFX scale down hard. A typical wave has many hits/sec;
+  // each used to spawn 30-70 particles + 3 flares + a DOM damage-number +
+  // an oscillator. Multiplied by a knight cleave or a wizard channel that
+  // ground the main thread to a halt. The visuals below are deliberately
+  // small. Crits keep extra flair so a big hit still reads as big.
+  if (!isChain) {
+    spawnParts(z.x, hy, z.z, crit ? 12 : 4,
+      { color: 0x7c1109, speed: crit ? 18 : 12, up: 2 });
+    flare(z.x, hy, z.z, crit ? 5 : 2.4,
+      crit ? 0xffd23a : 0xff5a3a, crit ? 0.32 : 0.18,
+      crit ? 0.8 : 0.4);
+    if (crit && !lowQ) {
+      spawnGibs(z.x, hy, z.z, 3);
+      flashLight(z.x, hy, z.z, 0.18, 0xffd23a);
+    }
   }
-  damageNum(z.x, z.y + d.h, z.z, dmg, crit);
-  crit ? Sound.crit() : Sound.hit();
+  // damage-number is a DOM write — heavy when called per-zombie at speed.
+  // Throttle to ~12 per second globally so spamming hits doesn't thrash
+  // the browser's layout/paint pipeline.
+  damageNumThrottled(z.x, z.y + d.h, z.z, dmg, crit);
+  // sound at a hard per-frame cap so a knight cleave doesn't spawn 6
+  // oscillators in one frame. One hit-sound per frame is plenty.
+  if (!_hitSoundThisFrame) {
+    _hitSoundThisFrame = true;
+    crit ? Sound.crit() : Sound.hit();
+  }
   // LIGHTNING — primary hits fork chain-lightning to nearby foes
+  // (capped at 2 jumps on lowQ, 3 on HD — used to be 4 which compounded
+  // per-hit cost in a horde)
   if (hasA("lightning") && !isChain) {
     let links = 0, sx = z.x, sz = z.z, sy = hy;
     const used = new Set([z]);
-    while (links < 4) {
+    const maxLinks = lowQ ? 2 : 3;
+    while (links < maxLinks) {
       let best = null, bd = 14;
       for (const o of zombies) {
         if (o.state === "die" || o.state === "rising" || used.has(o)) continue;
@@ -9090,26 +9180,31 @@ function killZombie(z) {
   score += Math.round(xp * comboMul);          // combo multiplies the haul
   gainXp(xp);
   const d = ETYPES[z.type], hy = z.y + d.h * 0.5;
-  spawnParts(z.x, hy, z.z, 40, { color: 0x7c1109, speed: 14, up: 3 });
-  spawnGibs(z.x, hy, z.z, z.type === "giant" ? 18 :
-    (z.type === "brute" || z.rare) ? 12 : 7);
-  // a lingering blood splatter where the corpse fell — boss/giant kills get
-  // a much larger smear, regular zombies a small one. sizeMul keeps the
-  // late-game's enlarged corpses splashing proportionally.
-  splat(z.x, z.z,
-    (z.boss ? 5.5 : z.type === "giant" ? 4.0 :
-      (z.type === "brute" || z.rare) ? 2.6 : 1.6) * (z.sizeMul || 1));
-  flare(z.x, hy, z.z, 4, 0xff4a2a, 0.3, 0.7);
+  // PERF: kill VFX is the second-largest particle sink after hitZombie.
+  // Trimmed counts + lowQ branches keep the pool from churning when a
+  // wave dies in quick succession.
+  spawnParts(z.x, hy, z.z, lowQ ? 4 : 10,
+    { color: 0x7c1109, speed: 14, up: 3 });
+  if (!lowQ) {
+    spawnGibs(z.x, hy, z.z, z.type === "giant" ? 8 :
+      (z.type === "brute" || z.rare) ? 5 : 3);
+  }
+  // splatter decal only for elite kills — regulars use the burn-out decal
+  if (z.boss || z.type === "giant" || z.type === "brute" || z.rare) {
+    splat(z.x, z.z,
+      (z.boss ? 5.5 : z.type === "giant" ? 4.0 : 2.6) * (z.sizeMul || 1));
+  }
+  flare(z.x, hy, z.z, 3, 0xff4a2a, 0.25, 0.5);
   Sound.die();
   if (z.mound) { scene.remove(z.mound); z.mound = null; }
   // SOUL REAPER — slain foes erupt, harrowing the dead around them
   if (hasA("soul")) {
-    spawnParts(z.x, hy, z.z, 46,
+    spawnParts(z.x, hy, z.z, lowQ ? 12 : 22,
       { color: 0xc06bff, speed: 19, up: 6, life: 0.85 });
-    for (let i = 0; i < 5; i++)
+    for (let i = 0; i < (lowQ ? 2 : 3); i++)
       flare(z.x + rand(-2, 2), z.y + rand(0.5, d.h), z.z + rand(-2, 2),
         rand(3.5, 6), 0xc06bff, 0.42);
-    flashLight(z.x, z.y + 1.5, z.z, 0.36, 0xc06bff);
+    if (!lowQ) flashLight(z.x, z.y + 1.5, z.z, 0.36, 0xc06bff);
     boomRing.setColor(0xc06bff);
     boomRing.show(z.x, z.y + 0.2, z.z, 15, 0.42);
     const sd = (30 + player.level * 3.2) * player.dmgMul;
@@ -12569,7 +12664,9 @@ function updateToasts(dt) {
 let clock = 0;
 function update(dt) {
   clock += dt;
+  _hitSoundThisFrame = false;        // reset per-frame hit-sound throttle
   updatePlayer(dt);
+  updateFlameCone();
   spreadFrostfire(dt);
   updateZombies(dt);
   updateWaves(dt);
@@ -12612,6 +12709,9 @@ function idleTick(dt) {
   updateBolts(dt);
   updateFlares(dt); updateGibs(dt); updateScorch(dt); updateCracks(dt);
   updateSplats(dt);
+  // keep the flame-cone hidden whenever we're not actively playing
+  if (player && player.channeling) player.channeling = false;
+  updateFlameCone();
   updateScreenFlash(dt); updateFireflies(dt, clock); updateHaze(dt, clock);
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
   updateGrass(dt, clock);
