@@ -257,6 +257,40 @@
   #flash { position: fixed; inset: 0; z-index: 6; pointer-events: none;
     background: #ffffff; opacity: 0; mix-blend-mode: screen; }
 
+  /* low-HP danger pulse — red radial gradient that fades in as HP drops
+     and pulses faster the closer to death you are. */
+  #lowhp { position: fixed; inset: 0; z-index: 7; pointer-events: none;
+    opacity: 0; transition: opacity .25s ease-out;
+    background: radial-gradient(ellipse at center,
+      rgba(160,0,0,0) 40%, rgba(120,0,0,.45) 78%, rgba(80,0,0,.85) 100%);
+    mix-blend-mode: multiply; }
+  #lowhp.pulse { animation: lowhpPulse .65s ease-in-out infinite; }
+  @keyframes lowhpPulse { 50% { filter: brightness(1.35); } }
+
+  /* hit-direction indicator — a red arc near the screen edge that fades
+     out, pointing toward where you got hit from. Several can stack. */
+  #hitDir { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+  .hitArc { position: absolute; left: 50%; top: 50%; width: 0; height: 0;
+    transform-origin: 0 0; opacity: 0; transition: opacity .5s ease-out; }
+  .hitArc::before { content: ''; position: absolute;
+    left: -150px; top: -22vh;
+    width: 300px; height: 22vh;
+    background: linear-gradient(to top, rgba(220,40,30,.85), rgba(220,40,30,0));
+    -webkit-mask: radial-gradient(ellipse at 50% 100%,
+      rgba(0,0,0,1) 30%, rgba(0,0,0,0) 70%);
+    mask: radial-gradient(ellipse at 50% 100%,
+      rgba(0,0,0,1) 30%, rgba(0,0,0,0) 70%);
+    transform: translateY(-12vh) rotate(0deg); }
+
+  /* perf overlay — toggle with P, shows fps / ms / counts */
+  #perfHUD { position: fixed; left: 6px; bottom: 14px; z-index: 24;
+    background: rgba(0,0,0,.6); color: #6fd0ff; font-family: monospace;
+    font-size: 11px; padding: 4px 8px; border-radius: 4px;
+    border: 1px solid #2a4a5a; pointer-events: none; line-height: 1.4;
+    display: none; }
+  #perfHUD.on { display: block; }
+  #perfHUD .bad { color: #ff6a4a; }
+
   /* ---- full-screen overlays ---- */
   .overlay { position: absolute; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; pointer-events: auto;
@@ -736,6 +770,9 @@
 <canvas id="game"></canvas>
 <div id="flash"></div>
 <div id="vignette"></div>
+<div id="lowhp"></div>
+<div id="hitDir"></div>
+<div id="perfHUD"></div>
 
 <div id="ui">
   <div class="topbar">
@@ -9523,7 +9560,7 @@ function spawnDiver(type) {
 }
 
 /* ─── damage to the player ────────────────────────────────────────────────── */
-function hurtPlayer(amt) {
+function hurtPlayer(amt, source) {
   if (!player.alive || player.iframes > 0 || player.ultImmune) return;
   // ── WIZARD: arcane shield absorbs an entire hit, then disarms.
   if (player.shieldReady) {
@@ -9546,12 +9583,55 @@ function hurtPlayer(amt) {
     amt *= (1 - cls.passive.dmgReduction);
   amt = Math.round(amt * player.dmgTakenMul);
   player.hp -= amt; player.hurt = 0.4;
-  Sound.hurt(); shake(0.5);
+  Sound.hurt();
+  // stronger feedback — bigger shake on bigger hits, brief red flash so the
+  // player FEELS the blow instead of only seeing a tiny HP-tick
+  const big = amt > player.maxHp * 0.12;
+  shake(big ? 0.95 : 0.55);
+  screenFlash(big ? "#a40000" : "#5a0808", big ? 0.42 : 0.22);
+  // hit-direction arc — tells the player WHERE the hit came from so they
+  // can spin to face it. Source can be a zombie {x,z} or any world point.
+  if (source && (source.x != null && source.z != null))
+    pushHitArc(Math.atan2(source.x - player.x, source.z - player.z));
   // ── GUNSLINGER: taking damage breaks the dead-eye streak
   if (cls.passive && cls.passive.deadEye && player.deadEyeStacks) {
     player.deadEyeStacks = 0; recalc();
   }
   if (player.hp <= 0) { player.hp = 0; player.alive = false; gameOver(); }
+}
+/* ─── hit-direction arc pool ──────────────────────────────────────────────────
+   Each new hit pushes an arc div to the screen edge pointing at the source.
+   Six pooled divs cycle so even rapid hits don't churn DOM nodes. */
+const _hitArcs = [];
+let _hitArcCur = 0;
+function _initHitArcs() {
+  if (!UI || !UI.hitDir || _hitArcs.length) return;
+  for (let i = 0; i < 6; i++) {
+    const d = document.createElement("div");
+    d.className = "hitArc";
+    UI.hitDir.appendChild(d);
+    _hitArcs.push({ el: d, t: 0 });
+  }
+}
+function pushHitArc(angleWorld) {
+  _initHitArcs();
+  if (!_hitArcs.length) return;
+  const a = _hitArcs[_hitArcCur];
+  _hitArcCur = (_hitArcCur + 1) % _hitArcs.length;
+  a.t = 1.0;
+  // angle on screen: difference between camera-yaw and world angle. 0 means
+  // attacker is straight ahead; ±π means directly behind.
+  const rel = angDiff(camYaw, angleWorld);
+  a.el.style.transform = "rotate(" + (rel) + "rad)";
+  a.el.style.opacity = "0.9";
+}
+function updateHitArcs(dt) {
+  for (const a of _hitArcs) {
+    if (a.t <= 0) continue;
+    a.t -= dt;
+    if (a.t <= 0) { a.el.style.opacity = "0"; continue; }
+    a.el.style.opacity = (a.t * 0.9).toFixed(2);
+  }
 }
 /* the boss rears up and slams the earth — a wide, brutal shockwave */
 function bossSlam(z, dmgScale) {
@@ -9567,7 +9647,7 @@ function bossSlam(z, dmgScale) {
   flashLight(z.x, z.y + 2.5, z.z, 0.45, 0xc0303a);
   const pd = Math.hypot(player.x - z.x, player.z - z.z);
   if (pd < slamR && !lineBlocked(z.x, z.z, player.x, player.z))
-    hurtPlayer(ETYPES.boss.dmg * dmgScale);
+    hurtPlayer(ETYPES.boss.dmg * dmgScale, z);
 }
 
 /* ─── input ───────────────────────────────────────────────────────────────── */
@@ -9606,6 +9686,12 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyM" && !/^(INPUT|TEXTAREA)$/.test(
         (e.target && e.target.tagName) || "")) {
     Sound.actx(); Audio_.cycle();
+    return;
+  }
+  // P — toggle the perf overlay (fps / ms / counts)
+  if (e.code === "KeyP") {
+    _perf.on = !_perf.on;
+    if (UI && UI.perfHUD) UI.perfHUD.classList.toggle("on", _perf.on);
     return;
   }
   // Escape from the Forge — fires whenever the forge overlay is open,
@@ -9869,6 +9955,9 @@ const UI = {
   rpStart: document.getElementById("rpStart"),
   rpForge: document.getElementById("rpForge"),
   rpShardNum: document.getElementById("rpShardNum"),
+  lowhp: document.getElementById("lowhp"),
+  hitDir: document.getElementById("hitDir"),
+  perfHUD: document.getElementById("perfHUD"),
 };
 const miniCtx = UI.minimap.getContext("2d");
 
@@ -10643,6 +10732,18 @@ function updateHUD() {
   const hpf = clamp(player.hp / player.maxHp, 0, 1);
   UI.hpfill.style.width = (hpf * 100) + "%";
   UI.hptext.textContent = Math.ceil(player.hp) + " / " + player.maxHp;
+  // ── LOW-HP red pulse — opacity ramps as HP drops, animation kicks in
+  // when really close to death so the danger reads at a glance.
+  if (UI.lowhp) {
+    if (hpf < 0.35) {
+      const t = 1 - hpf / 0.35;             // 0 at 35% HP → 1 at 0 HP
+      UI.lowhp.style.opacity = clamp(0.25 + t * 0.55, 0, 0.85);
+      UI.lowhp.classList.toggle("pulse", hpf < 0.18);
+    } else {
+      UI.lowhp.style.opacity = 0;
+      UI.lowhp.classList.remove("pulse");
+    }
+  }
   UI.stamfill.style.width =
     clamp(player.stamina / P.staminaMax, 0, 1) * 100 + "%";
   UI.stats.innerHTML = "PWR " + player.stat.power + "  ·  DEF " +
@@ -12040,7 +12141,7 @@ function updateZombies(dt) {
       if (z.spH <= 0.2) {                             // hit the ground
         const dp = Math.hypot(z.x - player.x, z.z - player.z);
         // landed close → a hard slam-hit (1.5x the type's bite damage)
-        if (dp < 4.2 && player.alive) hurtPlayer(d.dmg * 1.5 + wave * 2);
+        if (dp < 4.2 && player.alive) hurtPlayer(d.dmg * 1.5 + wave * 2, z);
         spawnParts(z.x, gy + 0.2, z.z, lowQ ? 12 : 24,
           { color: 0x5a0c08, speed: 14, up: 4, life: 0.8, grav: 1.4 });
         scorch(z.x, z.z, 3.5);
@@ -12156,7 +12257,7 @@ function updateZombies(dt) {
           z.walkP += dt * 24; z.state = "chase";
           if (dist < reach + 1.6) {
             if (!lineBlocked(z.x, z.z, player.x, player.z))
-              hurtPlayer(d.dmg * 1.7 * dmgScale);
+              hurtPlayer(d.dmg * 1.7 * dmgScale, z);
             shake(0.5); z.spState = 3; z.spT = 0.85;
           }
           if (z.spT <= 0) { z.spState = 3; z.spT = 0.7; }
@@ -12175,7 +12276,7 @@ function updateZombies(dt) {
           } else { z.state = "attack"; z.atkCd -= dt;
             if (z.atkCd <= 0) { z.atkCd = 1.2;
               if (!lineBlocked(z.x, z.z, player.x, player.z)) {
-                hurtPlayer(d.dmg * dmgScale);
+                hurtPlayer(d.dmg * dmgScale, z);
                 if (Math.hypot(player.x - z.x, player.z - z.z) < 10)
                   Sound.bite();
               } } }
@@ -12191,7 +12292,7 @@ function updateZombies(dt) {
             z.spH = 0; z.spState = 3; z.spT = 0.45;
             if (Math.hypot(player.x - z.x, player.z - z.z) < reach + 2.4 &&
                 !lineBlocked(z.x, z.z, player.x, player.z))
-              hurtPlayer(d.dmg * 1.5 * dmgScale);
+              hurtPlayer(d.dmg * 1.5 * dmgScale, z);
           }
         } else if (z.spState === 3) {
           z.spT -= dt;
@@ -12211,7 +12312,7 @@ function updateZombies(dt) {
           } else { z.state = "attack"; z.atkCd -= dt;
             if (z.atkCd <= 0) { z.atkCd = 0.9;
               if (!lineBlocked(z.x, z.z, player.x, player.z)) {
-                hurtPlayer(d.dmg * dmgScale);
+                hurtPlayer(d.dmg * dmgScale, z);
                 if (Math.hypot(player.x - z.x, player.z - z.z) < 10)
                   Sound.bite();
               } } }
@@ -12277,7 +12378,7 @@ function updateZombies(dt) {
           if (z.atkCd <= 0) {
             z.atkCd = z.type === "runner" ? 0.85 : 1.2;
             if (!lineBlocked(z.x, z.z, player.x, player.z))
-              hurtPlayer(d.dmg * dmgScale);
+              hurtPlayer(d.dmg * dmgScale, z);
           }
         }
       }
@@ -12560,7 +12661,8 @@ function explodeBarrel(b) {
   }
   if (player && player.alive) {
     const pd = Math.hypot(player.x - x, player.z - z);
-    if (pd < R) hurtPlayer(Math.round(20 * clamp(1 - pd / R, 0.25, 1)));
+    if (pd < R) hurtPlayer(Math.round(20 * clamp(1 - pd / R, 0.25, 1)),
+      { x, z });
   }
   for (const it of interactables) {       // chain reaction
     if (it.dead || it === b) continue;
@@ -12714,6 +12816,7 @@ function update(dt) {
   _hitSoundThisFrame = false;        // reset per-frame hit-sound throttle
   updatePlayer(dt);
   updateFlameCone();
+  updateHitArcs(dt);
   spreadFrostfire(dt);
   updateZombies(dt);
   updateWaves(dt);
@@ -12759,6 +12862,7 @@ function idleTick(dt) {
   // keep the flame-cone hidden whenever we're not actively playing
   if (player && player.channeling) player.channeling = false;
   updateFlameCone();
+  updateHitArcs(dt);
   updateScreenFlash(dt); updateFireflies(dt, clock); updateHaze(dt, clock);
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
   updateGrass(dt, clock);
@@ -12772,10 +12876,44 @@ function idleTick(dt) {
 
 /* ─── loop ────────────────────────────────────────────────────────────────── */
 let last = 0;
+// rolling perf-monitor — fed by every frame, sampled by the overlay
+const _perf = { sumDt: 0, frames: 0, fps: 0, ms: 0, worstMs: 0,
+  sampleT: 0, slowFrames: 0, on: false };
+function updatePerfHUD(rawDt) {
+  _perf.sumDt += rawDt;
+  _perf.frames++;
+  if (rawDt * 1000 > _perf.worstMs) _perf.worstMs = rawDt * 1000;
+  if (rawDt > 0.06) _perf.slowFrames++;       // any frame >60ms = stutter
+  _perf.sampleT += rawDt;
+  if (_perf.sampleT >= 0.5) {                 // refresh ~twice / sec
+    _perf.fps = Math.round(_perf.frames / _perf.sumDt);
+    _perf.ms = Math.round(_perf.sumDt / _perf.frames * 1000);
+    if (_perf.on && UI && UI.perfHUD) {
+      const partsActive = (typeof pState !== "undefined")
+        ? pState.filter(s => s.age < s.life).length : 0;
+      const zCount = (typeof zombies !== "undefined") ? zombies.length : 0;
+      const slow = _perf.slowFrames > 0;
+      UI.perfHUD.innerHTML =
+        '<span class="' + (_perf.fps < 30 ? 'bad' : '') + '">' +
+          _perf.fps + ' fps</span> &nbsp; ' +
+        '<span class="' + (_perf.ms > 32 ? 'bad' : '') + '">' +
+          _perf.ms + ' ms</span> &nbsp; ' +
+        'worst ' + Math.round(_perf.worstMs) + ' ms &nbsp; ' +
+        'z:' + zCount + ' &nbsp; pt:' + partsActive +
+        (slow ? ' &nbsp; <span class="bad">' +
+          _perf.slowFrames + ' jank</span>' : '');
+    }
+    _perf.sumDt = 0; _perf.frames = 0; _perf.sampleT = 0;
+    _perf.worstMs = 0; _perf.slowFrames = 0;
+  }
+}
 function loop(ts) {
   requestAnimationFrame(loop);
-  let dt = (ts - last) / 1000; last = ts;
+  const rawDt = (ts - last) / 1000;
+  let dt = rawDt;
+  last = ts;
   if (!dt || dt > 0.05) dt = Math.min(dt || 0.016, 0.05);
+  updatePerfHUD(rawDt || 0.016);
 
   if (state === ST.PLAYING) {
     if (hitStop > 0) hitStop -= dt; else update(dt);
