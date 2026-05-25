@@ -1190,13 +1190,13 @@ const ETYPES = {
   runner:   { hp: 26,   speed: 17.5, dmg: 16, r: 1.05, h: 3.1,  xp: 15 },
   charger:  { hp: 82,   speed: 8.4,  dmg: 42, r: 1.45, h: 4.0,  xp: 32 },
   lunger:   { hp: 48,   speed: 14.0, dmg: 34, r: 1.15, h: 3.3,  xp: 27 },
-  brute:    { hp: 110,  speed: 7.0,  dmg: 52, r: 2.1,  h: 5.0,  xp: 48 },
-  giant:    { hp: 420,  speed: 5.4,  dmg: 88, r: 3.5,  h: 7.6,  xp: 200 },
-  revenant: { hp: 280,  speed: 11.4, dmg: 56, r: 1.85, h: 4.7,  xp: 160 },
+  brute:    { hp: 75,   speed: 7.0,  dmg: 42, r: 2.1,  h: 5.0,  xp: 48 },
+  giant:    { hp: 380,  speed: 5.4,  dmg: 80, r: 3.5,  h: 7.6,  xp: 200 },
+  revenant: { hp: 220,  speed: 11.4, dmg: 50, r: 1.85, h: 4.7,  xp: 160 },
   // NECROMANCER — fragile mid-wave caster. On death, raises 3 fresh shamblers
   // out of the earth nearby; the death summons honour the wave HP scaling so
   // they aren't free trash kills late-game.
-  necro:    { hp: 140,  speed: 6.5,  dmg: 38, r: 1.55, h: 4.3,  xp: 95 },
+  necro:    { hp: 95,   speed: 6.5,  dmg: 32, r: 1.55, h: 4.3,  xp: 95 },
   boss:     { hp: 1700, speed: 5.0,  dmg: 72, r: 5.4,  h: 12.5, xp: 950 },
 };
 // per-wave compounding — late waves become a true test
@@ -9450,6 +9450,9 @@ let wave = 0, kills = 0, score = 0, zombiesAlive = 0, totalDmg = 0, level = 1;
 let waveState = "fight", toSpawn = [], spawnT = 0, waveCountPrev = 0;
 // which boss flavour this wave spawns — set in startWave, read in spawnZombieAt
 let currentBossVariant = "slam";
+// counts every boss-wave so the variant rotation cycles per encounter
+// rather than per stage (player meets all 4 within the first 2 stages)
+let bossEncounterCount = 0;
 let portal = null, portalActive = false, portalT = 0;
 let levelFx = 0;
 // ─── combat combo — sustained fighting compounds your score multiplier ───
@@ -9511,11 +9514,12 @@ function startWave(n) {
     if (n >= 3 && r < 0.30) t = "runner";
     if (n >= 4 && r >= 0.72 && r < 0.84) t = "charger";
     if (n >= 5 && r >= 0.84 && r < 0.92) t = "lunger";
-    if (n >= 6 && r >= 0.92) t = "brute";
-    // NECROMANCER — rare mid-wave caster (wave 7+). Always less than 4% of
-    // a wave; sits between brute and giant in the type roll.
-    if (n >= 7 && r >= 0.965 && r < 0.985) t = "necro";
-    if (n >= 9 && r >= 0.985) t = "giant";
+    // brutes used to be ~8% of every wave from 6 on — felt like a wall.
+    // Now ~3% (0.96..0.99) so they're a punchy elite, not crowd-control work
+    if (n >= 6 && r >= 0.96 && r < 0.99) t = "brute";
+    // NECROMANCER — rare mid-wave caster (wave 7+). Always less than 2%.
+    if (n >= 7 && r >= 0.99 && r < 0.998) t = "necro";
+    if (n >= 9 && r >= 0.998) t = "giant";
     // Abyss override — gives shamblers a much smaller share, every other
     // archetype lands at floor-7-equivalent thresholds. Means a fresh Abyss
     // wave already feels like wave 9+ even when "n" is small.
@@ -9527,15 +9531,17 @@ function startWave(n) {
   }
   // ABYSS waves get a boss every 3rd, the rest every 5th
   const bossWave = abyss ? (n % 3 === 0) : (n % 5 === 0);
-  if (bossWave) toSpawn.push("boss");
-  // four boss flavours cycle by stage:
-  //   stage 1 SLAM       — heavy melee colossus with ground slams
-  //   stage 2 LORD       — summons shamblers between attacks
-  //   stage 3 WARLOCK    — kites at range, lobs purple curse-orbs
-  //   stage 4 JUGGERNAUT — bull-rush charges + knockback
-  //   stage 5+ wraps to slam, etc.
+  if (bossWave) {
+    toSpawn.push("boss");
+    bossEncounterCount++;
+  }
+  // four boss flavours cycle on EACH boss encounter (not per stage). So
+  // the player sees SLAM → LORD → WARLOCK → JUGGERNAUT on consecutive
+  // boss waves, instead of waiting 30+ waves to reach the new variants.
   const _bossRotation = ["slam", "lord", "warlock", "juggernaut"];
-  currentBossVariant = _bossRotation[(level - 1) % _bossRotation.length];
+  currentBossVariant =
+    _bossRotation[(bossEncounterCount - 1 + _bossRotation.length) %
+      _bossRotation.length];
   spawnT = 0.35;
   waveState = "fight";
   if (bossWave) {
@@ -11733,6 +11739,7 @@ function resetGame() {
   // clear HUD-cache so the first frame of a new run actually paints
   for (const k in _huiCache) _huiCache[k] = "";
   _classHudCache = "";
+  bossEncounterCount = 0;
   for (const z of zombies) {
     scene.remove(z.obj); if (z.mound) scene.remove(z.mound);
   }
