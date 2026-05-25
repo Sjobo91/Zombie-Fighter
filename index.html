@@ -767,6 +767,43 @@
                 0 4px 18px rgba(0,0,0,.55); }
   body.touch .rpCard { width: 380px; padding: 18px 22px 20px; }
   body.touch #rpCountdown { font-size: 84px; }
+  /* ─── WAVE OBJECTIVE PICKER (inside roundPopup) ─── */
+  #rpObjLabel { font-size: 11px; letter-spacing: 3px; color: #f0cf72;
+    margin: 14px 0 8px; font-weight: 800; text-align: center; }
+  #rpObjPick { display: flex; gap: 8px; justify-content: center;
+    flex-wrap: wrap; margin-bottom: 12px; }
+  .objCard { flex: 1; min-width: 130px; max-width: 200px;
+    padding: 10px 12px; border: 2px solid #4a3a2a; border-radius: 8px;
+    background: linear-gradient(180deg, #1c1828, #11101a); cursor: pointer;
+    transition: border-color .12s, transform .08s; }
+  .objCard:hover { border-color: #c97a30; transform: translateY(-1px); }
+  .objCard.picked { border-color: #f0cf72;
+    background: linear-gradient(180deg, #3a2c18, #1f1810);
+    box-shadow: 0 0 18px rgba(240,207,114,.45); }
+  .objCard .objN { font-size: 12px; font-weight: 800; letter-spacing: 2px;
+    color: #f0cf72; margin-bottom: 4px; }
+  .objCard .objD { font-size: 11px; color: #b0a890; line-height: 1.3;
+    margin-bottom: 6px; }
+  .objCard .objR { font-size: 10px; letter-spacing: 1px; color: #c870ff;
+    font-weight: 700; }
+  body.touch .objCard { min-width: 110px; padding: 8px 10px; }
+  body.touch .objCard .objN { font-size: 11px; }
+  body.touch .objCard .objD { font-size: 10px; }
+  /* ─── live objective HUD chip while a wave is running ─── */
+  #objHud { position: fixed; left: 50%; top: 78px; transform: translateX(-50%);
+    background: linear-gradient(180deg, rgba(28,22,14,.86), rgba(14,11,6,.86));
+    border: 1px solid #c97a30; border-radius: 8px;
+    padding: 8px 18px; min-width: 220px; text-align: center;
+    color: #f4ecdc; font-size: 12px; letter-spacing: 2px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.55); z-index: 5;
+    pointer-events: none; opacity: 0; transition: opacity .25s; }
+  #objHud.show { opacity: 1; }
+  #objHud .objHudName { color: #f0cf72; font-weight: 800;
+    font-size: 11px; letter-spacing: 3px; }
+  #objHud .objHudProg { color: #fff8dc; font-size: 16px;
+    font-weight: 800; margin-top: 3px; letter-spacing: 1px; }
+  body.touch #objHud { top: 56px; padding: 6px 12px; min-width: 160px; }
+  body.touch #objHud .objHudProg { font-size: 13px; }
   body.touch #rpTitle { font-size: 18px; }
   body.touch .rpRow { padding: 7px 10px; }
   body.touch .rpRow .sbtn { width: 36px; height: 36px; font-size: 21px; }
@@ -1116,12 +1153,16 @@
       <div id="rpShards">SOUL SHARDS: <b id="rpShardNum">0</b></div>
       <div id="rpPoints">UNSPENT STAT POINTS: <b id="rpPtsNum">0</b></div>
       <div id="rpStats"></div>
+      <div id="rpObjLabel">CHOOSE YOUR WAVE OBJECTIVE</div>
+      <div id="rpObjPick"></div>
       <div class="rpBtns">
         <button id="rpForge" class="rpBtnAlt">SOUL FORGE</button>
         <button id="rpStart">START NEXT WAVE</button>
       </div>
     </div>
   </div>
+
+  <div id="objHud"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
@@ -1233,17 +1274,22 @@ const ULT_LEVEL = 9;            // the ultimate is unlocked at level 9
 // real threat is letting them touch you. A swarm at melee range should
 // punish hard so cornering yourself feels deadly.
 const ETYPES = {
-  shambler: { hp: 38,   speed: 7.2,  dmg: 20, r: 1.25, h: 3.6,  xp: 11 },
-  runner:   { hp: 26,   speed: 17.5, dmg: 16, r: 1.05, h: 3.1,  xp: 15 },
-  charger:  { hp: 82,   speed: 8.4,  dmg: 42, r: 1.45, h: 4.0,  xp: 32 },
-  lunger:   { hp: 48,   speed: 14.0, dmg: 34, r: 1.15, h: 3.3,  xp: 27 },
-  brute:    { hp: 75,   speed: 7.0,  dmg: 42, r: 2.1,  h: 5.0,  xp: 48 },
-  giant:    { hp: 380,  speed: 5.4,  dmg: 80, r: 3.5,  h: 7.6,  xp: 200 },
-  revenant: { hp: 220,  speed: 11.4, dmg: 50, r: 1.85, h: 4.7,  xp: 160 },
+  // Mid-tier HP nerfed for early waves — chargers (wave 4+), lungers
+  // (wave 5+), brutes (wave 6+), necros (wave 7+) used to land at full
+  // mid-game HP the FIRST time the player saw them, which felt like a
+  // brick wall. Lowered base HP across the board; the per-wave + per-stage
+  // multipliers below still ramp them up for the late game.
+  shambler: { hp: 38,   speed: 8.4,  dmg: 20, r: 1.25, h: 3.6,  xp: 11 },
+  runner:   { hp: 26,   speed: 18.5, dmg: 16, r: 1.05, h: 3.1,  xp: 15 },
+  charger:  { hp: 52,   speed: 10.0, dmg: 42, r: 1.45, h: 4.0,  xp: 32 },
+  lunger:   { hp: 36,   speed: 15.5, dmg: 34, r: 1.15, h: 3.3,  xp: 27 },
+  brute:    { hp: 48,   speed: 8.4,  dmg: 42, r: 2.1,  h: 5.0,  xp: 48 },
+  giant:    { hp: 280,  speed: 6.6,  dmg: 80, r: 3.5,  h: 7.6,  xp: 200 },
+  revenant: { hp: 160,  speed: 12.4, dmg: 50, r: 1.85, h: 4.7,  xp: 160 },
   // NECROMANCER — fragile mid-wave caster. On death, raises 3 fresh shamblers
   // out of the earth nearby; the death summons honour the wave HP scaling so
   // they aren't free trash kills late-game.
-  necro:    { hp: 95,   speed: 6.5,  dmg: 32, r: 1.55, h: 4.3,  xp: 95 },
+  necro:    { hp: 62,   speed: 7.8,  dmg: 32, r: 1.55, h: 4.3,  xp: 95 },
   boss:     { hp: 1700, speed: 5.0,  dmg: 72, r: 5.4,  h: 12.5, xp: 950 },
 };
 // per-wave compounding — late waves become a true test
@@ -10091,6 +10137,7 @@ function killZombie(z) {
   }
   // notify the objective system that a zombie has fallen
   if (typeof objectiveOnKill === "function") objectiveOnKill(z);
+  if (typeof onWaveObjectiveKill === "function") onWaveObjectiveKill(z);
 }
 
 /* ─── progression & waves ─────────────────────────────────────────────────── */
@@ -10140,6 +10187,13 @@ function gainXp(n) {
 function startWave(n) {
   wave = n;
   toSpawn = [];
+  // Wave-1 fallback: the round popup hasn't fired yet, so no objective
+  // has been chosen. Auto-assign the simplest objective (REAPER) so the
+  // HUD chip + win-condition still work from the very first wave.
+  if (player && (!player.waveObjective || player.waveObjective.wave !== n)) {
+    const fallback = WAVE_OBJECTIVES[0];
+    setWaveObjective(fallback, n);
+  }
   let count;
   // wave 1 is a softer opener now (was 78 → too many at once). It still
   // grows fast, so by wave 3-4 you're swarmed.
@@ -10284,11 +10338,13 @@ function spawnZombieAt(type, x, z, rare) {
     scene.add(mound);
   }
   // wave HP curve — bosses ramp slower because they already start huge.
-  // level multiplier softened from 0.55 → 0.35 per stage so deep runs
-  // stay possible with a fresh-loadout post-death player.
+  // Waves 1-2 have ZERO scaling so early mid-tier elites feel right;
+  // from wave 3 onward HP scales 20% per wave so late game still bites.
+  // Level (stage) multiplier softened so deep runs stay possible with
+  // a fresh-loadout post-death player.
   const hpScale = type === "boss"
     ? 1 + Math.max(0, wave - 5) * 0.25
-    : 1 + (wave - 1) * 0.18;
+    : 1 + Math.max(0, wave - 2) * 0.20;
   const levelMul = 1 + (level - 1) * 0.35;
   const hp = d.hp * hpScale * levelMul;
   const crawler = !!obj.userData.crawler;
@@ -12112,6 +12168,122 @@ function pick3Abilities() {
     out.push(c.splice((Math.random() * c.length) | 0, 1)[0]);
   return out;
 }
+/* ─── WAVE OBJECTIVE SYSTEM ──────────────────────────────────────────────────
+   Before each wave, the player picks 1 of 3 objectives in the round popup.
+   Completing it wins the wave EARLY — remaining zombies despawn, the round
+   popup opens with the reward. Falling back to "kill them all" still works
+   as a backup win condition. */
+const WAVE_OBJECTIVES = [
+  { id: "reaper", name: "REAPER",
+    desc: (w) => "Slay " + (8 + Math.min(w, 12) * 2) + " of the dead",
+    init: (w) => ({ target: 8 + Math.min(w, 12) * 2, progress: 0 }),
+    onKill: (s) => { s.progress++; },
+    progressText: (s) => s.progress + " / " + s.target,
+    complete: (s) => s.progress >= s.target,
+    reward: 45 },
+  { id: "survive", name: "SURVIVOR",
+    desc: (w) => "Stay alive for " + (30 + Math.min(w, 10) * 4) + "s",
+    init: (w) => ({ target: 30 + Math.min(w, 10) * 4, elapsed: 0 }),
+    tick: (s, dt) => { s.elapsed += dt; },
+    progressText: (s) => Math.ceil(s.elapsed) + "s / " + s.target + "s",
+    complete: (s) => s.elapsed >= s.target,
+    reward: 55 },
+  { id: "elites", name: "ELITE HUNT",
+    desc: () => "Drop 3 elite undead (brute / charger / lunger / necro)",
+    init: () => ({ target: 3, progress: 0 }),
+    onKill: (s, z) => {
+      if (z.type === "brute" || z.type === "charger" ||
+          z.type === "lunger" || z.type === "necro" ||
+          z.type === "giant") s.progress++;
+    },
+    progressText: (s) => s.progress + " / " + s.target,
+    complete: (s) => s.progress >= s.target,
+    reward: 75 },
+  { id: "boss", name: "BOSS SLAYER", bossOnly: true,
+    desc: () => "Strike down the wave's boss",
+    init: () => ({ bossDown: false }),
+    onKill: (s, z) => { if (z.boss) s.bossDown = true; },
+    progressText: (s) => s.bossDown ? "DOWN" : "HUNTING",
+    complete: (s) => s.bossDown,
+    reward: 140 },
+  { id: "untouched", name: "UNTOUCHABLE",
+    desc: () => "Clear the wave without dropping below 60% HP",
+    init: () => ({ failed: false, cleared: false }),
+    tick: (s) => {
+      if (player && player.hp < player.maxHp * 0.6) s.failed = true;
+      if (zombiesAlive <= 0 && toSpawn.length === 0) s.cleared = true;
+    },
+    progressText: (s) => s.failed ? "FAILED" :
+      (s.cleared ? "DONE" : "intact"),
+    complete: (s) => s.cleared && !s.failed,
+    reward: 110 },
+];
+function pickWaveObjectives(forWave) {
+  const isBossWave = forWave > 0 && forWave % 5 === 0;
+  const pool = WAVE_OBJECTIVES.filter(t => !t.bossOnly || isBossWave);
+  // Fisher-Yates shuffle
+  const out = pool.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  // ensure the boss objective is always offered on boss waves
+  if (isBossWave) {
+    const idx = out.findIndex(t => t.id === "boss");
+    if (idx > 2) { const b = out.splice(idx, 1)[0]; out.unshift(b); }
+  }
+  return out.slice(0, 3);
+}
+function setWaveObjective(template, forWave) {
+  if (!player || !template) return;
+  player.waveObjective = {
+    template, state: template.init(forWave), wave: forWave, won: false };
+}
+function waveObjectiveTick(dt) {
+  if (!player || !player.waveObjective || waveState !== "fight") return;
+  const wo = player.waveObjective;
+  if (wo.won) return;
+  if (wo.template.tick) wo.template.tick(wo.state, dt);
+  if (wo.template.complete(wo.state)) {
+    wo.won = true;
+    onWaveObjectiveComplete();
+  }
+}
+function onWaveObjectiveKill(z) {
+  if (!player || !player.waveObjective) return;
+  const wo = player.waveObjective;
+  if (wo.won || !wo.template.onKill) return;
+  wo.template.onKill(wo.state, z);
+}
+function onWaveObjectiveComplete() {
+  const wo = player.waveObjective;
+  banner(wo.template.name, "OBJECTIVE COMPLETE");
+  Sound.levelup && Sound.levelup();
+  screenFlash("#fff8dc", 0.42);
+  shake(0.7);
+  if (Meta && Meta.awardShards)
+    Meta.awardShards(wo.template.reward, "OBJECTIVE");
+  // wipe remaining spawn queue + kill living zombies so onWaveCleared fires
+  toSpawn = [];
+  for (const z of zombies) {
+    if (z.state !== "die" && z.state !== "rising") {
+      z.hp = 0; z.state = "die"; z.dieT = 0; zombiesAlive--;
+    }
+  }
+}
+function updateObjHud() {
+  const el = document.getElementById("objHud");
+  if (!el) return;
+  if (!player || !player.waveObjective || state !== ST.PLAYING) {
+    el.classList.remove("show"); return;
+  }
+  const wo = player.waveObjective;
+  el.classList.add("show");
+  const html = '<div class="objHudName">' + wo.template.name + '</div>' +
+    '<div class="objHudProg">' + wo.template.progressText(wo.state) + '</div>';
+  if (el._lastHtml !== html) { el.innerHTML = html; el._lastHtml = html; }
+}
+
 /* ─── round-end popup ─── shown between waves so the player can spend
    accumulated stat points without dipping into a full character sheet.
    The big countdown is the focal point: 10 → 0, then the next wave begins
@@ -12126,10 +12298,36 @@ function openRoundPopup() {
   roundTimerPaused = false;
   UI.rpTitle.textContent = "WAVE " + wave + " CLEARED";
   renderRoundStats();
+  renderObjectivePicker(wave + 1);
   UI.roundPopup.classList.remove("hidden");
   // pre-paint the big number so the player sees 10 the instant the popup opens
   UI.rpCountdown.textContent = ROUND_SECS;
   UI.rpCountdown.classList.remove("urgent");
+}
+/* paint the 3 objective cards for the NEXT wave inside the round popup.
+   First card is auto-picked so a player who just hits START doesn't get
+   blocked. Clicking another card swaps the selection. */
+function renderObjectivePicker(forWave) {
+  const wrap = document.getElementById("rpObjPick");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const choices = pickWaveObjectives(forWave);
+  player._pendingObjective = choices[0];
+  for (let i = 0; i < choices.length; i++) {
+    const t = choices[i];
+    const card = document.createElement("div");
+    card.className = "objCard" + (i === 0 ? " picked" : "");
+    card.innerHTML = '<div class="objN">' + t.name + '</div>' +
+      '<div class="objD">' + t.desc(forWave) + '</div>' +
+      '<div class="objR">+' + t.reward + ' SHARDS</div>';
+    card.addEventListener("click", () => {
+      Sound.choose && Sound.choose();
+      for (const c of wrap.children) c.classList.remove("picked");
+      card.classList.add("picked");
+      player._pendingObjective = t;
+    });
+    wrap.appendChild(card);
+  }
 }
 function renderRoundStats() {
   UI.rpPtsNum.textContent = player.statPoints;
@@ -12177,10 +12375,16 @@ function updateRoundPopup(dt) {
 }
 function closeRoundPopup() {
   UI.roundPopup.classList.add("hidden");
+  // commit the chosen objective for the wave we're about to start
+  const nextWave = wave + 1;
+  if (player._pendingObjective) {
+    setWaveObjective(player._pendingObjective, nextWave);
+    player._pendingObjective = null;
+  }
   // the original closeChar flow ran ability + portal triggers here — replicate
   // those so the round-end popup slots in cleanly.
   if (wave > 0 && wave % 10 === 0) activatePortal();
-  else startWave(wave + 1);
+  else startWave(nextWave);
   state = ST.PLAYING;
   if (!isTouch) canvas.requestPointerLock();
 }
@@ -13333,9 +13537,10 @@ function updateZombies(dt) {
     const dist = Math.hypot(dx, dz) || 1;
     const reach = z.r + P.r + 0.6;
     const dmgScale = Math.pow(DMG_SCALE, wave - 1) * (1 + (level - 1) * 0.3);
-    // magnet — far corpses now sprint MUCH harder. They're hunting you,
-    // not strolling. Caps at 6× their normal speed.
-    const magnetMul = clamp(1 + Math.max(0, rawDist - 14) * 0.085, 1, 6.0);
+    // magnet — zombies sprint at you. Now starts at 8 units (was 14) so
+    // medium-close foes also accelerate, and the ramp is sharper. They
+    // come charging like there's no tomorrow even at point-blank range.
+    const magnetMul = clamp(1 + Math.max(0, rawDist - 8) * 0.10, 1, 5.5);
     if (z.stagger > 0) z.stagger -= dt;
     else if (!stunned) {
       if (z.type === "charger") {
@@ -13548,7 +13753,10 @@ function updateZombies(dt) {
           const sp = z.speed * chillMul * magnetMul;
           z.x += Math.sin(ang) * sp * dt;
           z.z += Math.cos(ang) * sp * dt;
-          z.walkP += dt * (4 + z.speed * 0.4) * (chillMul > 0 ? 1 : 0.001);
+          // walk-cycle pace scales with sprint speed (magnetMul) so the
+          // animation actually catches up when the zombie is charging.
+          z.walkP += dt * (6 + z.speed * 0.5) * magnetMul *
+            (chillMul > 0 ? 1 : 0.001);
         } else {
           z.state = "attack";
           z.atkCd -= dt;
@@ -13635,10 +13843,11 @@ function poseZombie(z, d, chillMul) {
     u.legs[0].rotation.x = Math.sin(z.walkP) * amp;
     u.legs[1].rotation.x = Math.sin(z.walkP + Math.PI) * amp;
   }
-  // chase lean — body tilts FORWARD into the run, like a real sprinter
-  const targetLean = z.state === "attack" ? 0.42
-                   : moving ? 0.28 : 0;
-  o.rotation.x = lerp(o.rotation.x || 0, targetLean, 0.18);
+  // chase lean — body tilts FORWARD harder than before, like a sprinter
+  // mid-stride. Attack lean is also bumped so the snap reads.
+  const targetLean = z.state === "attack" ? 0.56
+                   : moving ? 0.42 : 0;
+  o.rotation.x = lerp(o.rotation.x || 0, targetLean, 0.22);
   const dragY = z.crawler ? -d.h * z.sizeMul * 0.35 : 0;
   o.position.set(z.x,
     gy + FOOT_LIFT + dragY + (moving ? Math.abs(Math.sin(z.walkP)) *
@@ -13659,12 +13868,13 @@ function poseZombie(z, d, chillMul) {
       // head ducks forward as the jaw snaps shut on the player
       if (u.head) u.head.rotation.x = bite * 0.55;
     } else if (moving) {
-      // RUNNING — arms swing in opposite phase to legs, like a real sprinter.
-      // Amplitude bigger than before so the silhouette reads as a chase.
-      const armSw = 0.95;
-      u.arms[0].rotation.x = -0.20 - Math.sin(z.walkP) * armSw;
-      u.arms[1].rotation.x = -0.20 + Math.sin(z.walkP) * armSw;
-      if (u.head) u.head.rotation.x = lerp(u.head.rotation.x || 0, 0.10, 0.2);
+      // RUNNING — arms PUMP in opposite phase to legs. Amplitude bumped
+      // so the silhouette reads as an all-out sprint, not a stroll.
+      const armSw = 1.25;
+      u.arms[0].rotation.x = -0.10 - Math.sin(z.walkP) * armSw;
+      u.arms[1].rotation.x = -0.10 + Math.sin(z.walkP) * armSw;
+      if (u.head) u.head.rotation.x =
+        lerp(u.head.rotation.x || 0, 0.18, 0.22);
     } else {
       // IDLE — arms hang slightly forward, head level
       u.arms[0].rotation.x = -0.35 + Math.sin(z.t * 1.5) * 0.05;
@@ -14255,6 +14465,8 @@ function update(dt) {
   Ambience.update(dt);
   Music.update(dt);
   updateToasts(dt);
+  waveObjectiveTick(dt);
+  updateObjHud();
   flushVfxQueue();
 }
 
