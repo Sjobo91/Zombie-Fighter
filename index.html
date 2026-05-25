@@ -5614,6 +5614,30 @@ function flashLight(x, y, z, life, color) {
     return;
   }
 }
+/* ─── deferred VFX queue ──────────────────────────────────────────────────────
+   Heavy spells (Blaze, ultimates) used to dispatch hundreds of particles +
+   flares + scorches in a SINGLE frame, blowing through the 1100-slot pool
+   and producing a 60-80ms stutter Task. scheduleFx pushes a callback with
+   a delay; flushVfxQueue runs the ready ones each tick. Visually the wave
+   now cascades outward instead of teleporting, and the CPU work amortises
+   over ~10 frames. Capped at 256 pending entries so a runaway loop can't
+   accumulate forever. */
+const _vfxQueue = [];
+const _vfxMax = 256;
+function scheduleFx(delaySec, fn) {
+  if (_vfxQueue.length >= _vfxMax) return;
+  _vfxQueue.push({ at: clock + Math.max(0, delaySec), fn });
+}
+function flushVfxQueue() {
+  // process in-place; swap-pop on completion to avoid splice cost
+  for (let i = _vfxQueue.length - 1; i >= 0; i--) {
+    const e = _vfxQueue[i];
+    if (e.at > clock) continue;
+    try { e.fn(); } catch (err) {}
+    const last = _vfxQueue.pop();
+    if (i < _vfxQueue.length) _vfxQueue[i] = last;
+  }
+}
 function updateFlashes(dt) {
   for (const f of flashPool) {
     if (!f.on) continue;
@@ -8201,41 +8225,55 @@ function wizardBlaze(baseDmg) {
     { color: 0xffffff, speed: 36, up: 4, life: 0.4 });
   flashLight(e.x, e.y + 2.4, e.z, 0.7, 0xff8a3a);
   // ── walk both arms and paint the fire trail. Denser now — 14 steps
-  // per arm, fatter particles, flares every step on PC. ──
+  // per arm, fatter particles, flares every step on PC. Each step is
+  // scheduled with a tiny per-step delay so the V cascades outward
+  // visually (looks better) AND amortises the CPU work over ~6 frames
+  // instead of dumping 600+ particles in one tick. ──
   const STEPS = lowQ ? 8 : 14;
-  const beam = (eX, eZ, side) => {
-    smashRing.setColor(0xffd06a);
-    smashRing.show(eX, e.y + 0.2, eZ, 5, 0.5);
-    boomRing.setColor(0xff5a18);
-    boomRing.show(eX, e.y + 0.25, eZ, 7.5, 0.6);
-    flashLight(eX, e.y + 2, eZ, 0.6, 0xff8a3a);
+  const STEP_DELAY = 0.022;                   // ~22ms between arm steps
+  const beam = (eX, eZ) => {
+    // ring + flash at the tip arrive when the wave reaches it
+    scheduleFx(STEPS * STEP_DELAY, () => {
+      smashRing.setColor(0xffd06a);
+      smashRing.show(eX, e.y + 0.2, eZ, 5, 0.5);
+      boomRing.setColor(0xff5a18);
+      boomRing.show(eX, e.y + 0.25, eZ, 7.5, 0.6);
+      flashLight(eX, e.y + 2, eZ, 0.6, 0xff8a3a);
+    });
     for (let i = 1; i <= STEPS; i++) {
       const k = i / STEPS;
       const sx = lerp(e.x, eX, k);
       const sz = lerp(e.z, eZ, k);
-      scorch(sx, sz, 4.5 + k * 1.8);
-      spawnParts(sx, e.y + 1.4, sz, lowQ ? 10 : 22,
-        { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0x9adfff, 0xffae50]),
-          speed: 26, up: 10, life: 0.85 });
-      // upward fire-line so the V reads as walls of flame rising, not
-      // just particles on the ground
-      if (!lowQ) for (let j = 0; j < 4; j++)
-        spawnParts(sx + rand(-0.6, 0.6),
-          e.y + 0.6 + j * 1.1,
-          sz + rand(-0.6, 0.6), 1,
-          { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e]),
-            speed: 4, up: 9, grav: 0.2, life: rand(0.5, 0.8) });
-      // a flare every step keeps the arm bright along its whole length
-      flare(sx + rand(-1, 1), e.y + rand(0.9, 2.6), sz + rand(-1, 1),
-        rand(5, 9), pick([0xff8a3a, 0xffd06a, 0xff5a18]), 0.65);
+      const yBase = e.y;
+      scheduleFx(i * STEP_DELAY, () => {
+        scorch(sx, sz, 4.5 + k * 1.8);
+        spawnParts(sx, yBase + 1.4, sz, lowQ ? 8 : 16,
+          { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0x9adfff, 0xffae50]),
+            speed: 26, up: 10, life: 0.85 });
+        // upward fire-line so the V reads as walls of flame rising
+        if (!lowQ) for (let j = 0; j < 3; j++)
+          spawnParts(sx + rand(-0.6, 0.6),
+            yBase + 0.6 + j * 1.1,
+            sz + rand(-0.6, 0.6), 1,
+            { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e]),
+              speed: 4, up: 9, grav: 0.2, life: rand(0.5, 0.8) });
+        // a flare every other step keeps the arm bright (avoids burning
+        // through the 16-flare pool with a single Blaze)
+        if ((i & 1) === 0)
+          flare(sx + rand(-1, 1), yBase + rand(0.9, 2.6), sz + rand(-1, 1),
+            rand(5, 9), pick([0xff8a3a, 0xffd06a, 0xff5a18]), 0.65);
+      });
     }
   };
-  beam(endLX, endLZ, -1);
-  beam(endRX, endRZ, +1);
+  beam(endLX, endLZ);
+  beam(endRX, endRZ);
   // ── damage pass: enemies in EITHER beam get hit, burnt, frozen.
-  // Each zombie that's caught spawns its own PILLAR OF FIRE so the
-  // ability reads as "banishing" them, not "spraying" them. ──
-  let pillarBudget = lowQ ? 4 : 10;
+  // Each zombie that's caught spawns its own PILLAR OF FIRE — but the
+  // pillar visual is delayed (and staggered between enemies) so the
+  // pillars erupt as the V-wave reaches them, not all at the cast frame.
+  // Damage application stays instant so the ability feels responsive. ──
+  let pillarIdx = 0;
+  const PILLAR_MAX = lowQ ? 4 : 8;
   for (const z of zombies) {
     if (z.state === "die" || z.state === "rising") continue;
     const fwd = (z.x - e.x) * dirX + (z.z - e.z) * dirZ;
@@ -8255,16 +8293,25 @@ function wizardBlaze(baseDmg) {
       z.burnDps = Math.max(z.burnDps, burnDps);
       z.frostfire = true;
     }
-    // PILLAR — visible, BIG, "banished" effect on each enemy in the V
-    if (pillarBudget > 0) {
-      pillarBudget--;
-      const hy = z.y + ETYPES[z.type].h * 0.5;
-      spawnParts(z.x, hy, z.z, lowQ ? 14 : 28,
-        { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0xffae50]),
-          speed: 8, up: 22, grav: 0.35, life: rand(0.7, 1.1) });
-      flare(z.x, hy + 0.4, z.z, 6.5, 0xffd06a, 0.55, 0.95);
-      flashLight(z.x, hy + 1.2, z.z, 0.35, 0xff8a3a);
-      scorch(z.x, z.z, z.r * 2.2);
+    // PILLAR — visible, BIG, "banished" effect, scheduled by distance so
+    // the closer ones light up first and the wave rolls out from caster.
+    if (pillarIdx < PILLAR_MAX) {
+      const distToCaster = Math.hypot(z.x - e.x, z.z - e.z);
+      const delay = clamp(distToCaster / beamLen, 0, 1) *
+        (STEPS * STEP_DELAY) + pillarIdx * 0.015;
+      // snapshot the spawn position — z.x/z.z may have moved by the time
+      // the pillar fires, but the pillar should land where the V hit
+      const px = z.x, pz = z.z, py = z.y + ETYPES[z.type].h * 0.5;
+      const radius = z.r;
+      pillarIdx++;
+      scheduleFx(delay, () => {
+        spawnParts(px, py, pz, lowQ ? 12 : 22,
+          { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0xffae50]),
+            speed: 8, up: 22, grav: 0.35, life: rand(0.7, 1.1) });
+        flare(px, py + 0.4, pz, 6.5, 0xffd06a, 0.55, 0.95);
+        flashLight(px, py + 1.2, pz, 0.35, 0xff8a3a);
+        scorch(px, pz, radius * 2.2);
+      });
     }
   }
   damageInteractables(e.x, e.z, beamLen * 0.5, impact);
@@ -13846,6 +13893,7 @@ function update(dt) {
   Ambience.update(dt);
   Music.update(dt);
   updateToasts(dt);
+  flushVfxQueue();
 }
 
 /* visuals-only tick while paused on an overlay */
@@ -13870,6 +13918,7 @@ function idleTick(dt) {
   Ambience.update(dt);
   Music.update(dt);
   updateToasts(dt);
+  flushVfxQueue();
 }
 
 /* ─── loop ────────────────────────────────────────────────────────────────── */
