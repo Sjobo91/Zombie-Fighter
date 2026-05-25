@@ -2524,25 +2524,61 @@ function addTarPit(x, z) {
   const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z);
   const r = rand(3.6, 5.2);
-  // dark pool plane on the ground (rotated to lie flat)
-  const poolGeo = new THREE.CircleGeometry(r, 18);
+  // ── REBUILT: a real SUNKEN pool with a stone rim and bubbling
+  // surface, not a flat black circle. ────────────────────────────────
+  // Rim — uneven dirt/stone berm around the pit
+  const rimMat = mat(0x3a2a1a, 1);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * TAU + rand(-0.12, 0.12);
+    const rock = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(rand(0.5, 0.85), 0), rimMat);
+    rock.position.set(Math.cos(a) * (r + 0.2), rand(0.1, 0.35),
+      Math.sin(a) * (r + 0.2));
+    rock.rotation.set(rand(0, TAU), rand(0, TAU), rand(0, TAU));
+    rock.castShadow = true;
+    g.add(rock);
+  }
+  // pool plane — sunken slightly below ground level
+  const poolGeo = new THREE.CircleGeometry(r, 22);
   poolGeo.rotateX(-Math.PI / 2);
-  const pool = new THREE.Mesh(poolGeo, new THREE.MeshBasicMaterial({
-    color: 0x0a0608, transparent: true, opacity: 0.92,
-    depthWrite: false }));
-  pool.position.y = 0.05; g.add(pool);
-  // a brighter inner stain — the heart of the pit
-  const innerGeo = new THREE.CircleGeometry(r * 0.55, 14);
+  const pool = new THREE.Mesh(poolGeo, new THREE.MeshStandardMaterial({
+    color: 0x080406, roughness: 0.1, metalness: 0.85 }));
+  pool.position.y = -0.04; g.add(pool);
+  // bubbling inner ring — slightly raised, redder, will animate
+  const innerGeo = new THREE.CircleGeometry(r * 0.55, 16);
   innerGeo.rotateX(-Math.PI / 2);
-  const inner = new THREE.Mesh(innerGeo, new THREE.MeshBasicMaterial({
-    color: 0x4a0a0a, transparent: true, opacity: 0.85,
-    depthWrite: false }));
-  inner.position.y = 0.07; g.add(inner);
-  // a low oily reflection sprite — adds depth without a light
+  const inner = new THREE.Mesh(innerGeo, new THREE.MeshStandardMaterial({
+    color: 0x2a0606, roughness: 0.3, metalness: 0.4,
+    emissive: 0x4a0808, emissiveIntensity: 0.5 }));
+  inner.position.y = 0.02; g.add(inner);
+  // a few static bubble blobs frozen on the surface — look like tar
+  // is mid-boil
+  for (let i = 0; i < 6; i++) {
+    const a = rand(0, TAU), d = rand(0.2, r * 0.7);
+    const bub = new THREE.Mesh(
+      new THREE.SphereGeometry(rand(0.18, 0.36), 6, 5),
+      new THREE.MeshStandardMaterial({ color: 0x0a0608,
+        roughness: 0.15, metalness: 0.9 }));
+    bub.position.set(Math.cos(a) * d, 0.16, Math.sin(a) * d);
+    bub.scale.y = 0.55;
+    g.add(bub);
+  }
+  // a glowing red shard sticking out — a bone fragment or claw
+  // suggesting earlier victims
+  const shard = new THREE.Mesh(
+    new THREE.ConeGeometry(0.18, 0.7, 4),
+    new THREE.MeshStandardMaterial({ color: 0x8a4040,
+      emissive: 0x4a0a0a, emissiveIntensity: 0.6, roughness: 0.6 }));
+  shard.position.set(rand(-r * 0.5, r * 0.5), 0.32,
+    rand(-r * 0.5, r * 0.5));
+  shard.rotation.z = rand(-0.6, 0.6);
+  g.add(shard);
+  // oily reflection halo
   const sheen = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
-    color: 0x6a1010, transparent: true, opacity: 0.4,
+    color: 0x6a1010, transparent: true, opacity: 0.55,
     depthWrite: false, blending: THREE.AdditiveBlending }));
-  sheen.scale.set(r * 1.4, r * 1.4, 1); sheen.position.y = 0.5;
+  sheen.scale.set(r * 1.6, r * 1.6, 1); sheen.position.y = 0.4;
+  sheen.userData.dynamic = true;     // pulses via updateInteractables
   g.add(sheen);
   scene.add(g);
   interactables.push({ type: "tarpit", x, z, r,
@@ -2557,26 +2593,68 @@ function addSpikeTrap(x, z) {
   const y = walkHeight(x, z), g = new THREE.Group();
   g.position.set(x, y, z);
   const r = 2.4;
-  // floor plate — a dark metal disc flush with the ground
-  const plateGeo = new THREE.CircleGeometry(r, 14);
-  plateGeo.rotateX(-Math.PI / 2);
-  const plate = new THREE.Mesh(plateGeo, new THREE.MeshStandardMaterial({
-    color: 0x1c1614, roughness: 0.85, metalness: 0.3 }));
-  plate.position.y = 0.06; g.add(plate);
-  // a subtle warning rune in the centre — tiny red glyph
+  // ── REBUILT as a SUNKEN PIT, not a flat plate ────────────────────────
+  // Layer 1: a wide JAGGED STONE RING around the rim — 12 broken stones
+  // tilted outward so the pit reads as a hole in the ground that
+  // something tore open. Bone-grey weathered material.
+  const stoneMat = mat(0x4a4640, 1);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * TAU + rand(-0.1, 0.1);
+    const stone = new THREE.Mesh(
+      new THREE.BoxGeometry(rand(0.5, 0.8), rand(0.35, 0.7),
+        rand(0.4, 0.7)), stoneMat);
+    stone.position.set(Math.cos(a) * (r + 0.1), rand(0.18, 0.42),
+      Math.sin(a) * (r + 0.1));
+    stone.rotation.set(rand(-0.3, 0.3), a + Math.PI / 2,
+      rand(-0.3, 0.3));
+    stone.castShadow = true;
+    g.add(stone);
+  }
+  // Layer 2: the DARK PIT interior — a black disc set BELOW ground so
+  // it reads as depth. Slight purple-red rim glow hints "you do not
+  // want to step into this".
+  const pitGeo = new THREE.CircleGeometry(r * 0.95, 18);
+  pitGeo.rotateX(-Math.PI / 2);
+  const pit = new THREE.Mesh(pitGeo,
+    new THREE.MeshBasicMaterial({ color: 0x050203 }));
+  pit.position.y = -0.08; g.add(pit);
+  // Layer 3: BONE FRAGMENTS at the bottom — small bone-coloured chips
+  // suggesting previous victims. Sells the "killing pit" vibe.
+  const boneMat = mat(0xc4b89a, 0.7);
+  for (let i = 0; i < 6; i++) {
+    const a = rand(0, TAU), d = rand(0.3, r * 0.65);
+    const chip = new THREE.Mesh(
+      new THREE.BoxGeometry(rand(0.2, 0.4), 0.08, rand(0.1, 0.3)),
+      boneMat);
+    chip.position.set(Math.cos(a) * d, -0.04, Math.sin(a) * d);
+    chip.rotation.set(rand(-0.4, 0.4), rand(0, TAU), rand(-0.4, 0.4));
+    g.add(chip);
+  }
+  // Layer 4: faint red ember sprite hovering above the pit — warning
+  // glow + sells "something evil down there"
   const rune = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
-    color: 0x6a1010, transparent: true, opacity: 0.32,
+    color: 0xff3018, transparent: true, opacity: 0.42,
     depthWrite: false, blending: THREE.AdditiveBlending }));
-  rune.scale.set(1.3, 1.3, 1); rune.position.y = 0.15;
+  rune.scale.set(2.4, 2.4, 1); rune.position.y = 0.4;
   g.add(rune);
-  // the spikes themselves — grouped, scale-y animated when triggered
+  // ── SPIKES — start retracted (scale.y 0.01). Now 14 spikes (was 9),
+  // sharper, with iron-grey + blood-tipped variants. They erupt out of
+  // the pit when triggered. ──
   const spikes = new THREE.Group(); spikes.scale.y = 0.01;
-  const spMat = metalMat(0x9a9a9a, 0.5);
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * TAU + rand(-0.1, 0.1);
-    const dr = rand(0.2, r * 0.85);
-    const sp = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.4, 6), spMat);
-    sp.position.set(Math.cos(a) * dr, 0.7, Math.sin(a) * dr);
+  const spMat = metalMat(0x6a6a72, 0.5);
+  const spMatBloody = new THREE.MeshStandardMaterial({
+    color: 0x8a8a92, roughness: 0.5, metalness: 0.5,
+    emissive: 0x300404, emissiveIntensity: 0.4 });
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * TAU + rand(-0.08, 0.08);
+    const dr = rand(0.15, r * 0.82);
+    // 6-sided sharper cone, taller, occasional bloody one
+    const sp = new THREE.Mesh(
+      new THREE.ConeGeometry(0.22, 1.8, 6),
+      Math.random() < 0.4 ? spMatBloody : spMat);
+    sp.position.set(Math.cos(a) * dr, 0.9,
+      Math.sin(a) * dr);
+    sp.rotation.set(rand(-0.12, 0.12), 0, rand(-0.12, 0.12));
     sp.castShadow = true;
     spikes.add(sp);
   }
@@ -4102,7 +4180,14 @@ function buildWeapon(kind, rarity) {
     }
 
   } else if (kind === "dagger") {
-    // single dagger — short reverse-grip blade for one hand of the rogue
+    // single dagger — short reverse-grip blade for one hand of the rogue.
+    // BLADE now visibly GLOWS magenta — the rogue's signature "shadowstrike"
+    // weapon. Combined with the gem pommel + halo this reads from across
+    // the arena as "twin enchanted blades".
+    const rogueBladeMat = new THREE.MeshStandardMaterial({
+      color: 0xffb8ff, emissive: 0xc850a8, emissiveIntensity: 1.6,
+      roughness: 0.25, metalness: 0.7 });
+    glowMats.push(rogueBladeMat);
     const gripD = new THREE.Mesh(
       new THREE.BoxGeometry(0.14, 0.7, 0.14),
       mat(0x1a0e0c, 0.95));
@@ -4111,13 +4196,25 @@ function buildWeapon(kind, rarity) {
       new THREE.BoxGeometry(0.46, 0.1, 0.18), gold);
     guard.position.set(0, 0.7, 0); g.add(guard);
     const blade = new THREE.Mesh(
-      new THREE.BoxGeometry(0.16, 1.4, 0.06), bladeMat);
+      new THREE.BoxGeometry(0.16, 1.4, 0.06), rogueBladeMat);
     blade.position.set(0, 1.4, 0); g.add(blade);
     const tip = new THREE.Mesh(
-      new THREE.ConeGeometry(0.12, 0.4, 4), bladeMat);
+      new THREE.ConeGeometry(0.12, 0.4, 4), rogueBladeMat);
     tip.position.set(0, 2.2, 0); g.add(tip);
+    // halo around the blade so the glow bleeds onto the rogue's hand
+    const bladeHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: flareTex, color: 0xf06aff, transparent: true, opacity: 0.6,
+      depthWrite: false, blending: THREE.AdditiveBlending }));
+    bladeHalo.scale.set(0.8, 2.0, 1); bladeHalo.position.set(0, 1.6, 0);
+    g.add(bladeHalo);
+    // pommel gem
     const pom = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 5), gold);
     pom.position.set(0, 0.0, 0); g.add(pom);
+    const pomGem = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.07, 0),
+      new THREE.MeshStandardMaterial({ color: 0xf06aff,
+        emissive: 0xc850a8, emissiveIntensity: 2.0, roughness: 0.3 }));
+    pomGem.position.set(0, -0.06, 0); g.add(pomGem);
   }
   // tier ornamentation — each weapon kind gets its own anchor points
   const ORN = {
@@ -4278,11 +4375,18 @@ function buildKnight() {
     plate.rotation.y = a; plate.rotation.x = -0.1;
     upper.add(plate);
   }
-  // ══ cloak ══
+  // ══ cloak — now with a HOLY CROSS emblazoned on the back ══
   const cloak = new THREE.Mesh(
-    new THREE.ConeGeometry(0.74, 3.0, 4, 1, true), capeMat);
+    new THREE.ConeGeometry(0.84, 3.4, 4, 1, true), capeMat);
   cloak.position.set(0, 0.72, -0.55);
   cloak.rotation.x = 0.12; cloak.rotation.y = Math.PI / 4; upper.add(cloak);
+  // big golden cross sigil on the back of the cape — burnished glow
+  const capeCrossV = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 1.4, 0.06), holyMat);
+  capeCrossV.position.set(0, 0.5, -1.05); upper.add(capeCrossV);
+  const capeCrossH = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.22, 0.06), holyMat);
+  capeCrossH.position.set(0, 0.85, -1.06); upper.add(capeCrossH);
   // ══ layered pauldrons + spikes ══
   const pauldrons = [], pSpikes = [];
   for (const sx of [-1, 1]) {
@@ -4337,10 +4441,20 @@ function buildKnight() {
     new THREE.BoxGeometry(0.82, 0.2, 0.32), aHelm);
   visorBevel.position.set(0, 2.86, 0.32); visorBevel.rotation.x = -0.24;
   upper.add(visorBevel);
-  // a dark slit cutout for the eyes
+  // GLOWING eye slit — the knight's vengeful stare burns through the
+  // visor. Replaces the dead-black slit with a hot ember glow.
+  const knightEyeMat = new THREE.MeshStandardMaterial({
+    color: 0xffae50, emissive: 0xff5a18, emissiveIntensity: 2.4,
+    roughness: 0.4 });
   const slit = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.07, 0.02),
-    new THREE.MeshBasicMaterial({ color: 0x070504 }));
+    knightEyeMat);
   slit.position.set(0, 2.66, 0.52); upper.add(slit);
+  // halo behind the slit so it bleeds light onto the visor edges
+  const slitHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: 0xff7a30, transparent: true, opacity: 0.7,
+    depthWrite: false, blending: THREE.AdditiveBlending }));
+  slitHalo.scale.set(0.95, 0.5, 1);
+  slitHalo.position.set(0, 2.66, 0.56); upper.add(slitHalo);
   // chin / lower-face plate, angled
   const chinG = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.24, 0.3),
     aHelm);
@@ -4489,11 +4603,29 @@ function buildWizard() {
     sh.position.set(sx * 0.78, 1.66, 0); sh.rotation.z = -sx * 0.3;
     upper.add(sh);
   }
-  // ══ cape ══
+  // ══ cape — bigger, fuller, with arcane star sigil ══
   const cloak = new THREE.Mesh(
-    new THREE.ConeGeometry(0.86, 3.3, 4, 1, true), sk.capeMat);
+    new THREE.ConeGeometry(1.0, 3.8, 4, 1, true), sk.capeMat);
   cloak.position.set(0, 0.8, -0.62); cloak.rotation.x = 0.16;
   cloak.rotation.y = Math.PI / 4; upper.add(cloak);
+  // arcane star on the back of the cape — 5-point glow
+  const starGeo = new THREE.OctahedronGeometry(0.32, 0);
+  const starBack = new THREE.Mesh(starGeo, arcane);
+  starBack.position.set(0, 1.0, -1.05); upper.add(starBack);
+  // FOUR ORBITAL GLYPHS at the wizard's shoulders — small floating
+  // octahedrons that hover in front + behind. They don't animate (would
+  // need per-frame rotation), but their position above the staff hand
+  // makes the wizard read as "actively channelling something" even at
+  // rest. Big visible class signature.
+  const glyphPositions = [
+    [0.95, 2.2, 0.2],   [-0.95, 2.2, 0.2],
+    [0.78, 2.4, -0.3],  [-0.78, 2.4, -0.3]
+  ];
+  for (const p of glyphPositions) {
+    const glyph = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.12, 0), arcane);
+    glyph.position.set(p[0], p[1], p[2]); upper.add(glyph);
+  }
   // ══ head / hood ══
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.74, 0.66), skin);
   head.position.y = 2.5; upper.add(head);
@@ -4635,6 +4767,27 @@ function buildGunslinger() {
     sh.position.set(sx * 0.82, 1.66, 0); sh.rotation.z = -sx * 0.16;
     upper.add(sh); pauldrons.push(sh);
   }
+  // BACKUP HOLSTER on the off-hip — second pistol grip pokes out so
+  // the silhouette reads "double-pistol gunslinger" not "guy with a
+  // single revolver". Visible whether facing toward camera or away.
+  const holster = new THREE.Mesh(
+    new THREE.BoxGeometry(0.38, 0.7, 0.28), leather);
+  holster.position.set(-0.62, 0.18, 0.05); upper.add(holster);
+  const sparePistolGrip = new THREE.Mesh(
+    new THREE.BoxGeometry(0.22, 0.6, 0.22), dark);
+  sparePistolGrip.position.set(-0.62, 0.48, 0.05); upper.add(sparePistolGrip);
+  const sparePistolHammer = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 0.18, 0.32), brass);
+  sparePistolHammer.position.set(-0.62, 0.78, 0.18); upper.add(sparePistolHammer);
+  // chest pocket detail — a sheriff letter or playing card emblem
+  const pocketMat = new THREE.MeshStandardMaterial({
+    color: 0xf0d680, emissive: 0xc97a30, emissiveIntensity: 0.6,
+    metalness: 0.6, roughness: 0.5 });
+  const pocketEmblem = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, 0.34, 0.04), pocketMat);
+  pocketEmblem.position.set(0.32, 1.16, 0.46);
+  pocketEmblem.rotation.z = 0.785;       // 45° diamond
+  upper.add(pocketEmblem);
   // ══ head + cowboy hat ══
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.74, 0.68), skin);
   head.position.y = 2.5; upper.add(head);
@@ -4799,12 +4952,31 @@ function buildHunter() {
   const hoodDrape = new THREE.Mesh(
     new THREE.CylinderGeometry(0.5, 0.6, 0.4, 6, 1, true), sk.aHelm);
   hoodDrape.position.y = 2.7; upper.add(hoodDrape);
-  // sharp piercing eyes
+  // sharp piercing eyes — emissive cyan that catches in shadow
+  const hunterEyeMat = new THREE.MeshStandardMaterial({
+    color: 0xc8f8ff, emissive: 0x6aaaff, emissiveIntensity: 2.4,
+    roughness: 0.3 });
   const eyes = [];
   for (const sx of [-0.13, 0.13]) {
     const e = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.04),
-      new THREE.MeshBasicMaterial({ color: 0x9af0ff }));
+      hunterEyeMat);
     e.position.set(sx, 2.56, 0.34); upper.add(e); eyes.push(e);
+  }
+  // green war-paint stripe across the eyes — primal, ritual hunter look
+  const warPaintMat = new THREE.MeshStandardMaterial({
+    color: 0x6aaa30, emissive: 0x3a7a18, emissiveIntensity: 0.7,
+    roughness: 0.7 });
+  const warPaint = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 0.08, 0.02), warPaintMat);
+  warPaint.position.set(0, 2.51, 0.36); upper.add(warPaint);
+  // forearm bracers with emerald studs — visible from afar
+  for (const sx of [-1, 1]) {
+    const bracer = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38, 0.5, 0.42), leather);
+    bracer.position.set(sx * 0.78, 1.06, 0); upper.add(bracer);
+    const stud = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.08, 0), arrowGlow);
+    stud.position.set(sx * 0.78, 1.18, 0.22); upper.add(stud);
   }
   // ══ arms ══
   const arm = new THREE.Group(); arm.position.set(0, 1.52, 0.16); upper.add(arm);
