@@ -1351,7 +1351,7 @@ let lowQ = isTouch;
 if (isTouch) document.body.classList.add("touch");
 const canvas = document.getElementById("game");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowQ });
-renderer.setPixelRatio(lowQ ? 1 : Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(lowQ ? 0.85 : Math.min(devicePixelRatio, 2));
 // PERF: shadows are the single most expensive frame cost — every cast
 // re-renders the scene from the moon's POV. On mobile (lowQ) we disable
 // them entirely. Visual: ground lacks a hero/zombie shadow, but combat
@@ -1723,14 +1723,17 @@ const Music = (() => {
   audio.preload = "auto";
   audio.volume = 0;
   let on = false, fadeT = 0, dir = 0;
-  audio.addEventListener("error", () => {
-    // file missing or blocked — silently stop trying
-    on = false;
-  });
+  // ── DYNAMIC MUSIC ── instead of a flat constant loop, the music
+  // intensity rides with the game state. Calm during the round popup,
+  // medium during normal combat, loud during boss waves. The DOM
+  // <audio> element doesn't expose tempo, but volume + playback-rate
+  // tweaks give a real "intensity ramp" feel.
+  let intensity = 1.0;                 // 0.4 calm → 1.0 normal → 1.6 boss
+  let intensityT = 1.0;                // smoothed
+  audio.addEventListener("error", () => { on = false; });
   function start() {
     if (on) return;
     on = true; dir = +1; fadeT = 0;
-    // browsers gate autoplay; play() returns a Promise we can swallow.
     const p = audio.play();
     if (p && p.catch) p.catch(() => { /* user must interact again */ });
   }
@@ -1738,24 +1741,33 @@ const Music = (() => {
     if (!on) return;
     on = false; dir = -1; fadeT = 0;
   }
+  // Called from update() each frame with the current game state. The
+  // intensity target is a function of (state, boss-alive, zombie-count).
+  function setIntensity(target) { intensity = target; }
   function update(dt) {
+    intensityT = lerp(intensityT, intensity, Math.min(1, dt * 1.2));
     if (dir > 0) {
       fadeT = Math.min(FADE, fadeT + dt);
-      audio.volume = (fadeT / FADE) * TARGET_VOL;
+      audio.volume = (fadeT / FADE) * TARGET_VOL * intensityT;
       if (fadeT >= FADE) dir = 0;
     } else if (dir < 0) {
       fadeT = Math.min(FADE, fadeT + dt);
-      audio.volume = (1 - fadeT / FADE) * TARGET_VOL;
+      audio.volume = (1 - fadeT / FADE) * TARGET_VOL * intensityT;
       if (fadeT >= FADE) { dir = 0; try { audio.pause(); } catch (e) {} }
+    } else if (on) {
+      audio.volume = TARGET_VOL * intensityT;
     }
+    // subtle tempo lift on boss waves — playbackRate up to 1.10 at peak
+    try {
+      audio.playbackRate = 0.92 + intensityT * 0.13;
+    } catch (e) {}
   }
-  // user-adjustable music level — 0.22 is the natural target, scales linearly
   function setVolume(v) {
     TARGET_VOL = 0.22 * v;
-    if (on && dir === 0) audio.volume = TARGET_VOL;
+    if (on && dir === 0) audio.volume = TARGET_VOL * intensityT;
   }
-  // expose audio so the title click can prime playback (autoplay rules)
-  return { start, update, stop, setVolume, _audio: audio };
+  return { start, update, stop, setVolume, setIntensity,
+    _audio: audio };
 })();
 
 /* ─── terrain — a rolling land that sinks to a southern shore ─────────────── */
@@ -3406,19 +3418,24 @@ function buildTown() {
   // turned every road into a junkyard. New totals (~55) leave breathing
   // room between abandoned cars / crates / barrels so the eye can read
   // each one rather than seeing a wall of debris.
-  scatterStreet(8,  4,   (x, z) => addProp("car", x, z));
-  scatterStreet(6,  2.5, (x, z) => addProp("debris", x, z));
-  scatterStreet(4,  3,   (x, z) => addProp("dumpster", x, z));
-  scatterStreet(4,  3,   (x, z) => addProp("sandbags", x, z));
-  scatterStreet(6,  1,   (x, z) => addProp("cone", x, z));
-  scatterStreet(4,  1,   (x, z) => addProp("corpse", x, z));
-  scatterStreet(6,  2,   (x, z) => addBarrel(x, z, Math.random() < 0.6));
-  scatterStreet(6,  2,   (x, z) => addCrate(x, z));
+  // MOBILE: prop scatter counts roughly halved on touch so the GPU has
+  // fewer meshes to push through frustum culling + shadow pass + draws.
+  const m = lowQ ? 0.55 : 1;
+  scatterStreet(Math.round(8 * m), 4,   (x, z) => addProp("car", x, z));
+  scatterStreet(Math.round(6 * m), 2.5, (x, z) => addProp("debris", x, z));
+  scatterStreet(Math.round(4 * m), 3,   (x, z) => addProp("dumpster", x, z));
+  scatterStreet(Math.round(4 * m), 3,   (x, z) => addProp("sandbags", x, z));
+  scatterStreet(Math.round(6 * m), 1,   (x, z) => addProp("cone", x, z));
+  scatterStreet(Math.round(4 * m), 1,   (x, z) => addProp("corpse", x, z));
+  scatterStreet(Math.round(6 * m), 2,
+    (x, z) => addBarrel(x, z, Math.random() < 0.6));
+  scatterStreet(Math.round(6 * m), 2,   (x, z) => addCrate(x, z));
   // World hazards — pitch-black tar pits that slow + burn, and hidden
-  // spike traps that pop up on contact. Counts also trimmed so the
-  // streets stop feeling like a deliberate gauntlet.
-  scatterStreet(3,  5,   (x, z) => addTarPit(x, z));
-  scatterStreet(4,  4,   (x, z) => addSpikeTrap(x, z));
+  // spike traps that pop up on contact. Heavier per-trap mesh count
+  // since the recent crater rebuild, so the mobile multiplier hits
+  // these especially hard.
+  scatterStreet(lowQ ? 1 : 3, 5, (x, z) => addTarPit(x, z));
+  scatterStreet(lowQ ? 2 : 4, 4, (x, z) => addSpikeTrap(x, z));
 }
 /* ─── lay out the whole world ─────────────────────────────────────────────── */
 (function buildWorld() {
@@ -5563,7 +5580,11 @@ function buildZombie(type, rare) {
 }
 
 /* ─── particles ───────────────────────────────────────────────────────────── */
-const PCOUNT = 1100;
+// MOBILE: 600-slot pool instead of 1100. The Fire Wall, kill bursts and
+// every other VFX still respect this size; older particles get overwritten
+// faster but the visual difference is negligible. Frees ~2MB of typed-
+// array memory + cuts per-frame attribute upload by ~45% on phones.
+const PCOUNT = lowQ ? 600 : 1100;
 const pState = [];
 let pCursor = 0;
 const pGeo = new THREE.BufferGeometry();
@@ -10484,7 +10505,10 @@ function updateWaves(dt) {
   if (waveState !== "fight") return;
   if (toSpawn.length) {
     spawnT -= dt;
-    if (spawnT <= 0 && zombiesAlive < 100) {       // tightened from 130
+    // MOBILE: cap simultaneous zombies at 55 (was 100). The horde still
+    // feels huge — wave totals are unchanged, they just queue up and
+    // arrive over a longer window. Massive perf win on touch devices.
+    if (spawnT <= 0 && zombiesAlive < (lowQ ? 55 : 100)) {
       const t = toSpawn.pop();
       if (wave >= 3 && Math.random() < 0.05) spawnZombie("revenant", true);
       else if ((t === "shambler" || t === "runner") && occluders.length &&
@@ -10610,8 +10634,43 @@ function spawnZombieAt(type, x, z, rare) {
   zombiesAlive++;
   spawnParts(x, gy + 0.3, z, 20,
     { color: 0x3a2c1c, speed: 8, up: 5, life: 0.8 });
-  if (type === "boss") Sound.bossRoar && Sound.bossRoar();
-  else Sound.rise();
+  if (type === "boss") {
+    Sound.bossRoar && Sound.bossRoar();
+    // ── BOSS ENTRANCE ── world reacts. Ground rumble, dust + ember
+    // burst from the spawn point, dramatic ring expansion. The aura
+    // sprite starts at scale 0 and lerps to its target so the boss
+    // visibly "rises" instead of popping in.
+    shake(1.4);
+    // dust + ember burst
+    spawnParts(x, gy + 0.5, z, lowQ ? 30 : 70,
+      { color: pick([0x4a3a28, 0x2a1f14, 0x6a4828, 0x3a2614]),
+        speed: 14, up: 9, life: 1.2 });
+    spawnParts(x, gy + 0.5, z, lowQ ? 16 : 38,
+      { color: pick([0xff6a1e, 0xffae50, 0xff3a18]),
+        speed: 18, up: 12, life: 0.95 });
+    // shockwave ring + boom ring at the spawn point
+    smashRing.setColor(0xff6a1e);
+    smashRing.show(x, gy + 0.2, z, 8, 0.55);
+    boomRing.setColor(0xff3a18);
+    boomRing.show(x, gy + 0.3, z, 14, 0.85);
+    // brief flash bleeds through the scene
+    flashLight(x, gy + 4, z, 0.7, 0xff6a1e);
+    // bass sub-rumble underneath the roar — sells "something heavy
+    // just stepped out of the ground"
+    Sound.tone && Sound.tone("sine", 38, 1400, 0.65, 0.45);
+    Sound.tone && Sound.tone("sawtooth", 52, 900, 0.5, 0.32);
+    // scale-in the aura over the first 0.6s so it grows like awakening
+    // power. Snapshot the sprite reference so we can animate it.
+    const auraSprite = obj.children[obj.children.length - 1];
+    if (auraSprite && auraSprite.isSprite) {
+      const tgt = auraSprite.scale.x;
+      auraSprite.scale.setScalar(0.2);
+      scheduleFx(0.05, () => auraSprite.scale.setScalar(tgt * 0.5));
+      scheduleFx(0.20, () => auraSprite.scale.setScalar(tgt * 0.9));
+      scheduleFx(0.40, () => auraSprite.scale.setScalar(tgt * 1.25));
+      scheduleFx(0.60, () => auraSprite.scale.setScalar(tgt));
+    }
+  } else Sound.rise();
 }
 
 /* ─── rooftop dive — a zombie launches off a building toward the hero ─────── */
@@ -11061,7 +11120,7 @@ function setupTouchControls() {
   btn("tb-ult", () => { if (state === ST.PLAYING) tryUltimate(); });
   btn("qualityBtn", () => {
     lowQ = !lowQ;
-    renderer.setPixelRatio(lowQ ? 1 : Math.min(devicePixelRatio, 2));
+    renderer.setPixelRatio(lowQ ? 0.85 : Math.min(devicePixelRatio, 2));
     document.getElementById("qualityBtn").textContent = lowQ ? "LOW" : "HD";
   });
   document.getElementById("qualityBtn").textContent = lowQ ? "LOW" : "HD";
@@ -12620,6 +12679,15 @@ if (UI.rpForge) {
 
 function onWaveCleared() {
   Sound.waveDone && Sound.waveDone();
+  // ── WAVE-CLEAR STING ── triumphant ascending stack so the moment
+  // actually lands. Three layered tones over ~0.5s read as a "victory
+  // arpeggio" that the player feels even with music ducked.
+  if (Sound.tone) {
+    Sound.tone("triangle", 220, 220, 0.35, 0.18);
+    setTimeout(() => Sound.tone("triangle", 330, 240, 0.32, 0.16), 90);
+    setTimeout(() => Sound.tone("sine",     440, 360, 0.42, 0.22), 200);
+    setTimeout(() => Sound.tone("triangle", 660, 460, 0.28, 0.16), 280);
+  }
   // autosave the run at this safe point — no live combat state to capture
   SaveLoad.save();
   // wave-clear shard bonus — grows steeply with stage so the late game
@@ -12917,6 +12985,10 @@ function startGame(opts) {
   }
   UI.title.classList.add("hidden");
   UI.over.classList.add("hidden");
+  // clear the death cinematic's desaturate/dim canvas filter so the
+  // new run starts looking normal
+  canvas.style.transition = "filter 0.4s ease-out";
+  canvas.style.filter = "";
   crosshairEl.style.display = "block";
   document.body.style.cursor = "none";
   state = ST.PLAYING;
@@ -12925,8 +12997,25 @@ function startGame(opts) {
 }
 function gameOver() {
   if (player) { player.drawing = false; player.drawT = 0; }
-  state = ST.GAMEOVER; gameOverT = 0; shake(1.2);
+  state = ST.GAMEOVER; gameOverT = 0; shake(2.0);
   Sound.death && Sound.death();
+  // ── CINEMATIC ── the most important moment in a roguelike. Push
+  // the canvas into a desaturated half-bright "last breath" look,
+  // and the loop will slow time to a crawl for ~2.5s before the
+  // YOU FELL overlay slides in. Filter applied via CSS so the GPU
+  // does the desaturation, no JS frame cost.
+  canvas.style.transition = "filter 1.4s ease-in";
+  canvas.style.filter = "saturate(0.15) brightness(0.5) contrast(1.1)";
+  // a few extra blood-splat particles + a low groan layer to sell
+  // the moment as the hero falls
+  if (player) {
+    spawnParts(player.x, player.y + 1.0, player.z, lowQ ? 20 : 40,
+      { color: pick([0x7c1109, 0x9a1810, 0x5a0a08]),
+        speed: 10, up: 6, life: 1.4 });
+    spawnGibs(player.x, player.y + 1.0, player.z, lowQ ? 3 : 6);
+  }
+  Sound.tone && Sound.tone("sine", 50, 1800, 0.6, 0.4);
+  Sound.tone && Sound.tone("sawtooth", 28, 1600, 0.45, 0.35);
   // the run is over — wipe the autosave so the title screen offers a fresh start
   SaveLoad.clear();
   // DEATH WIPES EVERYTHING — shards, gear tiers, abilities, stat ranks.
@@ -12960,7 +13049,8 @@ function gameOver() {
     Math.round(totalDmg).toLocaleString() + " TOTAL DAMAGE DEALT" +
     lostHtml;
   UI.overAgain.style.visibility = "hidden";
-  UI.over.classList.remove("hidden");
+  // overlay stays hidden until the cinematic beat lands (see loop)
+  UI.over.classList.add("hidden");
   crosshairEl.style.display = "none";
   document.body.style.cursor = "default";
   document.exitPointerLock();
@@ -13931,7 +14021,7 @@ function updateZombies(dt) {
           }
           if (z.bossVariant === "lord") {
             z.summonCd -= dt;
-            if (z.summonCd <= 0 && zombiesAlive < 100) {
+            if (z.summonCd <= 0 && zombiesAlive < (lowQ ? 55 : 100)) {
               z.summonCd = 7.0;
               spawnParts(z.x, z.y + 0.6, z.z, 50,
                 { color: 0xb45aff, speed: 18, up: 9, life: 0.95 });
@@ -14708,6 +14798,20 @@ function update(dt) {
   updateAmbient(dt, clock);
   updateDmgNums(dt);
   Ambience.update(dt);
+  // Dynamic music intensity — boss alive = ramp HIGH, lots of zombies =
+  // medium-high, otherwise normal. Player HP <30% adds a tense lift.
+  let intent = 1.0;
+  let bossAlive = false;
+  for (let i = 0; i < zombies.length; i++) {
+    if (zombies[i].boss && zombies[i].state !== "die") {
+      bossAlive = true; break;
+    }
+  }
+  if (bossAlive) intent = 1.55;
+  else if (zombiesAlive >= 22) intent = 1.18;
+  if (player && player.alive && player.hp < player.maxHp * 0.3)
+    intent += 0.18;
+  Music.setIntensity(intent);
   Music.update(dt);
   updateToasts(dt);
   waveObjectiveTick(dt);
@@ -14735,6 +14839,9 @@ function idleTick(dt) {
   updateCamera(dt); updateOcclusion();
   updateDmgNums(dt);
   Ambience.update(dt);
+  // overlay states (round popup / death) → music drops to calm
+  Music.setIntensity(state === ST.ROUND ? 0.55 :
+    state === ST.GAMEOVER ? 0.3 : 0.85);
   Music.update(dt);
   updateToasts(dt);
   flushVfxQueue();
@@ -14797,9 +14904,15 @@ function loop(ts) {
     updateHUD();
     updateRoundPopup(dt);
   } else if (state === ST.GAMEOVER) {
+    // 2.5s of cinematic slow-mo BEFORE the overlay shows. World keeps
+    // animating at ~30% speed so corpses settle, particles drift, the
+    // hero's last gibs fall. After 2.5s the "YOU FELL" overlay slides
+    // in; at 3.6s the "CLICK TO RISE AGAIN" prompt appears.
     gameOverT += dt;
-    idleTick(dt);
-    if (gameOverT > 1.1 && UI.overAgain.style.visibility === "hidden")
+    idleTick(gameOverT < 2.5 ? dt * 0.32 : dt);
+    if (gameOverT > 2.5 && UI.over.classList.contains("hidden"))
+      UI.over.classList.remove("hidden");
+    if (gameOverT > 3.6 && UI.overAgain.style.visibility === "hidden")
       UI.overAgain.style.visibility = "visible";
   } else if (state === ST.TITLE) {
     clock += dt;
