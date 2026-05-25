@@ -3003,14 +3003,22 @@ function addPark(cx, cz) {
   water.position.set(px, gy + 0.7, pz); scene.add(water);
   colliders.push({ x: px, z: pz, r: pr + 1 });
   addGazebo(cx - 18, cz + 14);
-  for (const b of [[-8, -14], [12, 17], [-22, -4], [9, -21]])
+  for (const b of [[-8, -14], [12, 17], [-22, -4]])
     addBench(cx + b[0], cz + b[1], rand(0, TAU));
-  for (let i = 0; i < 11; i++) {
-    const tx = cx + rand(-33, 33), tz = cz + rand(-30, 30);
+  // Trees along the PARK PERIMETER (not random across the centre). Six
+  // trees at the corners + halfway along each side — reads as planned
+  // landscaping, not "dead trees rolled out of a dump truck".
+  const TREE_R = 26;       // distance from park centre to tree ring
+  for (const off of [[-1,-1],[1,-1],[-1,1],[1,1],[-1,0],[1,0]]) {
+    const tx = cx + off[0] * TREE_R + rand(-1.5, 1.5);
+    const tz = cz + off[1] * TREE_R + rand(-1.5, 1.5);
     if (!blocked(tx, tz, 5)) addProp("tree", tx, tz);
   }
-  for (let i = 0; i < 16; i++) {
-    const bx = cx + rand(-35, 35), bz = cz + rand(-32, 32);
+  // Bushes lining the path edges + perimeter — fewer than before, none
+  // scattered into the central walkable area
+  for (const b of [[-12,2],[12,-2],[2,-12],[-2,12],[18,18],[-18,-18],
+                   [-22,8],[22,-8]]) {
+    const bx = cx + b[0], bz = cz + b[1];
     if (!blocked(bx, bz, 2.5)) addBush(bx, bz);
   }
   addPlayground(cx + 21, cz + 17);
@@ -3187,23 +3195,32 @@ function buildTown() {
   const swMat = new THREE.MeshStandardMaterial({ map: stoneTileTex(),
     roughness: 1, metalness: 0 });
   function townGreen(cx, cz, r) {
-    for (let i = 0; i < 7; i++) {
-      const a = rand(0, TAU), d = rand(4, r);
-      const tx = cx + Math.cos(a) * d, tz = cz + Math.sin(a) * d;
+    // Trees on the PERIMETER ring, bushes filling gaps. The old version
+    // scattered both randomly which dropped trees right where the player
+    // walks. Now the hill stays open in the middle and reads as a real
+    // little park crowning the rise.
+    const ring = r - 2;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU + rand(-0.15, 0.15);
+      const tx = cx + Math.cos(a) * ring, tz = cz + Math.sin(a) * ring;
       if (!blocked(tx, tz, 4)) addProp("tree", tx, tz);
     }
-    for (let i = 0; i < 9; i++) {
-      const a = rand(0, TAU), d = rand(3, r);
+    for (let i = 0; i < 5; i++) {
+      const a = rand(0, TAU), d = rand(r * 0.5, r - 1);
       addBush(cx + Math.cos(a) * d, cz + Math.sin(a) * d);
     }
-    addBench(cx + rand(-9, 9), cz + rand(-9, 9), rand(0, TAU));
+    addBench(cx, cz - 4, 0);
   }
   function townSquare(cx, cz) {
     addFountain(cx + 13, cz + 13);
+    // Benches face inward (toward the fountain) instead of every
+    // direction; trees only at outer corners so the square has space
     for (const c of [[-16, -16], [16, -16], [-16, 16], [16, 16]]) {
       addBench(cx + c[0] * 0.7, cz + c[1] * 0.7, Math.atan2(c[0], c[1]));
-      addProp("tree", cx + c[0], cz + c[1]);
     }
+    // 2 corner trees instead of 4 — square stays more open
+    addProp("tree", cx - 18, cz - 18);
+    addProp("tree", cx + 18, cz + 18);
     addProp("statue", cx - 13, cz - 12);
     addLamp(cx - 19, cz + 19, true); addLamp(cx + 19, cz - 19, true);
   }
@@ -3242,33 +3259,42 @@ function buildTown() {
       z + 14);
   }
   // ── abandoned & interactive props strewn along the streets ──
+  // Tighter ±3 (was ±5) keeps spawns ON the road centreline strip instead
+  // of spilling onto the grass between road and plaza. Larger no-spawn
+  // ring around origin (was 16, now 32) leaves the central market block
+  // completely uncluttered — half of the user's "wtf ligt hier" was
+  // street junk creeping onto Mortimer's Plaza.
   function onStreet() {
-    const sx = pick(lines) + rand(-5, 5), sz = rand(-SPAN, SPAN);
-    return Math.random() < 0.5 ? [sx, sz] : [sz, pick(lines) + rand(-5, 5)];
+    const sx = pick(lines) + rand(-3, 3), sz = rand(-SPAN, SPAN);
+    return Math.random() < 0.5 ? [sx, sz] : [sz, pick(lines) + rand(-3, 3)];
   }
   function scatterStreet(n, pad, fn) {
     let placed = 0, guard = 0;
     while (placed < n && guard < n * 14) {
       guard++;
       const p = onStreet();
-      if (Math.hypot(p[0], p[1]) < 16) continue;
+      if (Math.hypot(p[0], p[1]) < 32) continue;
       if (blocked(p[0], p[1], pad)) continue;
       fn(p[0], p[1]); placed++;
     }
   }
-  scatterStreet(16, 4, (x, z) => addProp("car", x, z));
-  scatterStreet(12, 2.5, (x, z) => addProp("debris", x, z));
-  scatterStreet(8, 3, (x, z) => addProp("dumpster", x, z));
-  scatterStreet(9, 3, (x, z) => addProp("sandbags", x, z));
-  scatterStreet(14, 1, (x, z) => addProp("cone", x, z));
-  scatterStreet(10, 1, (x, z) => addProp("corpse", x, z));
-  scatterStreet(14, 2, (x, z) => addBarrel(x, z, Math.random() < 0.6));
-  scatterStreet(16, 2, (x, z) => addCrate(x, z));
-  // new world hazards — pitch-black tar pits that slow + burn, and
-  // hidden spike traps that pop up on contact. Both work on zombies AND
-  // the player, so they're a kite tool and a danger at the same time.
-  scatterStreet(8, 5, (x, z) => addTarPit(x, z));
-  scatterStreet(10, 4, (x, z) => addSpikeTrap(x, z));
+  // Counts roughly halved — the old totals (117 props across 8 types)
+  // turned every road into a junkyard. New totals (~55) leave breathing
+  // room between abandoned cars / crates / barrels so the eye can read
+  // each one rather than seeing a wall of debris.
+  scatterStreet(8,  4,   (x, z) => addProp("car", x, z));
+  scatterStreet(6,  2.5, (x, z) => addProp("debris", x, z));
+  scatterStreet(4,  3,   (x, z) => addProp("dumpster", x, z));
+  scatterStreet(4,  3,   (x, z) => addProp("sandbags", x, z));
+  scatterStreet(6,  1,   (x, z) => addProp("cone", x, z));
+  scatterStreet(4,  1,   (x, z) => addProp("corpse", x, z));
+  scatterStreet(6,  2,   (x, z) => addBarrel(x, z, Math.random() < 0.6));
+  scatterStreet(6,  2,   (x, z) => addCrate(x, z));
+  // World hazards — pitch-black tar pits that slow + burn, and hidden
+  // spike traps that pop up on contact. Counts also trimmed so the
+  // streets stop feeling like a deliberate gauntlet.
+  scatterStreet(3,  5,   (x, z) => addTarPit(x, z));
+  scatterStreet(4,  4,   (x, z) => addSpikeTrap(x, z));
 }
 /* ─── lay out the whole world ─────────────────────────────────────────────── */
 (function buildWorld() {
