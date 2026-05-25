@@ -7583,8 +7583,20 @@ function tryAttack() {
   if (cls.weapon === "staff") {
     if (!player.channeling) {
       player.channeling = true; player.channelT = 0;
-      // a soft ignite cue — actual roar is the per-tick noise
-      Sound.tone && Sound.tone("sawtooth", 80, 200, 0.18, 0.08);
+      // IGNITE BURST — a real "fwoosh" the moment the stream opens. The
+      // staff erupts, the ground lights up, the player feels the cast
+      // catch. Without this the channel just fades in and reads as weak.
+      const dirX = Math.sin(player.aim), dirZ = Math.cos(player.aim);
+      const my = (player.y || 0) + 2.0;
+      const mx = player.x + dirX * 1.7, mz = player.z + dirZ * 1.7;
+      spawnParts(mx, my, mz, lowQ ? 14 : 28,
+        { color: pick([0xff8a3a, 0xffd06a, 0xffae50, 0xffffff]),
+          speed: 22, up: 8, life: 0.5 });
+      flare(mx, my, mz, 7, 0xff8a3a, 0.4, 1);
+      flashLight(mx, my + 0.5, mz, 0.45, 0xff7a2a);
+      shake(0.35);
+      Sound.tone && Sound.tone("sawtooth", 80, 200, 0.22, 0.12);
+      Sound.tone && Sound.tone("triangle", 220, 140, 0.4, 0.16);
     }
     return;
   }
@@ -7723,6 +7735,7 @@ function wizardChannelTick(dt) {
   // slower tick (0.12s = ~8/sec) — still smooth, far less GC pressure
   if (e.channelTickT > 0) return;
   e.channelTickT = 0.12;
+  e._channelFx = ((e._channelFx || 0) + 1) | 0;       // tick counter for FX
   const dirX = Math.sin(e.aim), dirZ = Math.cos(e.aim);
   const warriorBase = P.baseDmg * (CLASSES.knight.dmgMul || 1) +
     (e.level || 1) * 2;
@@ -7730,54 +7743,94 @@ function wizardChannelTick(dt) {
   const impactPerTick = (targetDps * 0.25) * e.channelTickT;
   const burnDpsTarget = targetDps * 0.75;
   // ── DRAGON-BREATH STREAM ── all particles start at the mouth and fly
-  // FORWARD along the aim with a small cone-spread + jitter. Three layers
-  // build the look of a real flame: bright white-hot core, the orange
-  // body, and a dim red/smoke trail that lags behind.
+  // FORWARD along the aim with a small cone-spread + jitter. Four layers
+  // sell the look: white-hot core, dense orange body, dim red/smoke trail,
+  // and bright EMBERS that pop and curl upward for extra texture.
   const my = (e.y || 0) + 2.0;
   const mx = e.x + dirX * 1.7, mz = e.z + dirZ * 1.7;
   // pre-compute perpendicular vector (to the aim, in the XZ plane) so we
   // can offset particles sideways for a thick stream
   const perpX = dirZ, perpZ = -dirX;
-  const NCORE = lowQ ? 4 : 7;     // very bright white-hot at the mouth
-  const NBODY = lowQ ? 8 : 14;    // orange flame body filling the cone
-  const NSMOKE = lowQ ? 2 : 4;    // dim red/smoke wisps trailing
+  // counts roughly doubled — the channel reads as a WALL of fire now,
+  // not a thin orange line. Mobile (lowQ) still gets a leaner version.
+  const NCORE  = lowQ ? 6  : 14;   // bright white-hot at the mouth
+  const NBODY  = lowQ ? 14 : 28;   // dense orange flame body
+  const NSMOKE = lowQ ? 3  : 6;    // dim red/smoke wisps trailing
+  const NEMBER = lowQ ? 2  : 5;    // sparking embers that curl up
   // CORE — short-lived, fast, narrow spread
   for (let i = 0; i < NCORE; i++) {
-    const sp = rand(20, 30);
-    const sa = rand(-0.14, 0.14);                       // narrow cone
-    const lat = rand(-0.6, 0.6);                        // sideways jitter
-    const yJit = rand(-0.25, 0.35);
+    const sp = rand(22, 32);
+    const sa = rand(-0.16, 0.16);                       // narrow cone
+    const lat = rand(-0.8, 0.8);                        // sideways jitter
+    const yJit = rand(-0.3, 0.45);
     const vx = (Math.sin(e.aim + sa)) * sp + perpX * lat * 4;
     const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 4;
-    spawnFlamePart(mx + perpX * lat * 0.3, my + yJit,
-      mz + perpZ * lat * 0.3,
-      vx, rand(0, 1.5), vz,
-      rand(0.18, 0.32), pick([0xfff2cc, 0xffe0a0, 0xffd070]));
+    spawnFlamePart(mx + perpX * lat * 0.35, my + yJit,
+      mz + perpZ * lat * 0.35,
+      vx, rand(0, 1.6), vz,
+      rand(0.20, 0.36), pick([0xffffff, 0xfff2cc, 0xffe0a0, 0xffd070]));
   }
   // BODY — the bulk of the flame; medium speed + life, wider cone
   for (let i = 0; i < NBODY; i++) {
-    const sp = rand(12, 22);
-    const sa = rand(-CHANNEL_HALF_ARC * 0.55, CHANNEL_HALF_ARC * 0.55);
-    const lat = rand(-1.6, 1.6);
-    const yJit = rand(-0.5, 0.7);
+    const sp = rand(13, 24);
+    const sa = rand(-CHANNEL_HALF_ARC * 0.6, CHANNEL_HALF_ARC * 0.6);
+    const lat = rand(-2.2, 2.2);
+    const yJit = rand(-0.7, 1.0);
     const vx = (Math.sin(e.aim + sa)) * sp + perpX * lat * 2;
     const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 2;
-    spawnFlamePart(mx + perpX * lat * 0.15, my + yJit,
-      mz + perpZ * lat * 0.15,
-      vx, rand(0.5, 2.5), vz,
-      rand(0.35, 0.65), pick([0xff8a3a, 0xff6a20, 0xff5a18, 0xffae50]));
+    spawnFlamePart(mx + perpX * lat * 0.18, my + yJit,
+      mz + perpZ * lat * 0.18,
+      vx, rand(0.7, 3.0), vz,
+      rand(0.4, 0.75), pick([0xff8a3a, 0xff6a20, 0xff5a18,
+        0xffae50, 0xffc870]));
   }
   // SMOKE — slow, long-lived, dim. Drifts at the edges, sells "burn aftermath"
   for (let i = 0; i < NSMOKE; i++) {
-    const sp = rand(5, 9);
+    const sp = rand(5, 10);
     const sa = rand(-CHANNEL_HALF_ARC, CHANNEL_HALF_ARC);
-    const lat = rand(-2.4, 2.4);
+    const lat = rand(-3.0, 3.0);
     const vx = (Math.sin(e.aim + sa)) * sp + perpX * lat * 1.5;
     const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 1.5;
-    spawnFlamePart(mx, my + rand(-0.3, 0.9),
-      mz, vx, rand(0.8, 2.0), vz,
-      rand(0.6, 0.9), pick([0x6a3a2a, 0x4a2a1c, 0x2a1a14]));
+    spawnFlamePart(mx, my + rand(-0.3, 1.0),
+      mz, vx, rand(0.8, 2.2), vz,
+      rand(0.7, 1.0), pick([0x6a3a2a, 0x4a2a1c, 0x2a1a14]));
   }
+  // EMBERS — slow, lazy, curl upward. Use the regular particle path (with
+  // gravity flipped slightly) so they read as floating sparks
+  for (let i = 0; i < NEMBER; i++) {
+    const sa = rand(-CHANNEL_HALF_ARC * 0.8, CHANNEL_HALF_ARC * 0.8);
+    const sp = rand(6, 12);
+    const lat = rand(-1.4, 1.4);
+    spawnParts(mx + perpX * lat * 0.4, my + rand(0, 0.4),
+      mz + perpZ * lat * 0.4, 1,
+      { color: pick([0xffd06a, 0xffae50, 0xff8a3a, 0xffe0a0]),
+        speed: sp, up: rand(7, 11), grav: -0.35, life: rand(0.7, 1.1) });
+  }
+  // ── lighting + ground burn ── two visible cues per second so the
+  // floor + nearby walls light up while the player roasts the horde.
+  // Flash-light pool only holds 4 — share by firing at the stream end,
+  // not the player, every 3rd tick. Scorch the ground under the stream
+  // every 4th tick so a charred trail forms wherever you sweep the beam.
+  const fx = e._channelFx;
+  if ((fx & 3) === 0) {
+    const stEnd = CHANNEL_RANGE * 0.65;
+    flashLight(mx + dirX * stEnd, my + 1.2, mz + dirZ * stEnd,
+      0.35, 0xff6a1e);
+  }
+  if ((fx & 7) === 0) {
+    const sd = CHANNEL_RANGE * (0.35 + Math.random() * 0.45);
+    scorch(mx + dirX * sd, mz + dirZ * sd, rand(3.2, 5.0));
+  }
+  if ((fx & 1) === 0) {                  // every other tick = 4 Hz
+    const sd = CHANNEL_RANGE * (0.25 + Math.random() * 0.6);
+    flare(mx + dirX * sd + rand(-0.8, 0.8),
+      my + rand(-0.4, 0.8),
+      mz + dirZ * sd + rand(-0.8, 0.8),
+      rand(3.5, 6), pick([0xffae50, 0xffd06a, 0xff8a3a]), 0.55);
+  }
+  // subtle kinetic feedback while channelling — the stream pulls the
+  // camera ever-so-slightly so the player feels recoil/force.
+  shake(0.05);
   // audio every ~0.5s instead of every other tick — the channel doesn't
   // need a roar at 10Hz to feel alive
   e._channelSndT = (e._channelSndT || 0) - dt;
@@ -7804,9 +7857,17 @@ function wizardChannelTick(dt) {
       continue;
     if (lineBlocked(e.x, e.z, z.x, z.z)) continue;
     if (z.burn < 0.1) {
-      // first touch on a fresh zombie — a single proper hit + ignite token
+      // FIRST TOUCH — feel the catch-fire. Big visible burst at the
+      // zombie + bright flash + a real impact hit. The player should
+      // see each new ignite POP, not blend into the stream noise.
       hitZombie(z, impactPerTick, false, Math.atan2(dx, dz), 0.4, true);
       z.frostfire = true;
+      const hy = z.y + ETYPES[z.type].h * 0.55;
+      spawnParts(z.x, hy, z.z, lowQ ? 8 : 16,
+        { color: pick([0xffd06a, 0xff8a3a, 0xff5a18, 0xffae50]),
+          speed: 14, up: 7, life: 0.55 });
+      flare(z.x, hy, z.z, 4.5, 0xff8a3a, 0.4, 0.9);
+      flashLight(z.x, hy + 0.5, z.z, 0.28, 0xff6a1e);
       // wizard charges Spirit on every fresh ignite — equivalent to the
       // knight's per-cleave-hit rage gain
       gainRage(RAGE_HIT);
@@ -8103,10 +8164,13 @@ function wizardBlaze(baseDmg) {
   const norm = e.dmg * e.dmgMul + e.level * 4;
   const impact = norm * 0.7;
   const burnDps = norm * 1.5;
+  // ── BANISHMENT — heavy multi-layer kick at the cast point ──
   Sound.freeze && Sound.freeze();
   Sound.boom();
-  Sound.tone && Sound.tone("sawtooth", 60, 110, 0.5, 0.18);
-  shake(1.6); screenFlash("#ff8a3a", 0.36);
+  Sound.tone && Sound.tone("sawtooth", 60, 110, 0.5, 0.22);
+  Sound.tone && Sound.tone("square",  140, 220, 0.45, 0.18);
+  Sound.tone && Sound.tone("sine",     45,  90, 0.6,  0.25);
+  shake(1.6); screenFlash("#ff8a3a", 0.6);
   // ── set up the two beams ──
   const ang = e.aim;
   const dirX = Math.sin(ang), dirZ = Math.cos(ang);
@@ -8115,41 +8179,63 @@ function wizardBlaze(baseDmg) {
   const dirRX = Math.sin(angR), dirRZ = Math.cos(angR);
   const endLX = e.x + dirLX * beamLen, endLZ = e.z + dirLZ * beamLen;
   const endRX = e.x + dirRX * beamLen, endRZ = e.z + dirRZ * beamLen;
-  // a small launch-pad of fire under the caster's feet so the V grows
-  // out of an actual eruption rather than appearing from nothing
-  scorch(e.x, e.z, 5);
-  smashRing.setColor(0xff8a3a);
-  smashRing.show(e.x, e.y + 0.2, e.z, 4.5, 0.45);
-  boomRing.setColor(0xffd06a);
-  boomRing.show(e.x, e.y + 0.3, e.z, 7, 0.55);
-  spawnParts(e.x, e.y + 1.0, e.z, 40,
-    { color: 0xff8a3a, speed: 24, up: 9, life: 0.85 });
-  spawnParts(e.x, e.y + 1.0, e.z, 24,
-    { color: 0x9adfff, speed: 18, up: 6, life: 0.7 });
-  flashLight(e.x, e.y + 2.4, e.z, 0.55, 0xff8a3a);
-  // ── walk both arms and paint the fire trail ──
+  // a launch-pad of fire under the caster's feet so the V grows out of
+  // a real eruption rather than appearing from nothing
+  scorch(e.x, e.z, 7);
+  // THREE concentric rings out of the player — inner smash, mid boom,
+  // outer wind. Reads as a god-tier shockwave.
+  smashRing.setColor(0xffd06a);
+  smashRing.show(e.x, e.y + 0.2, e.z, 5.5, 0.5);
+  boomRing.setColor(0xff8a3a);
+  boomRing.show(e.x, e.y + 0.3, e.z, 9, 0.65);
+  windRing.setColor(0xff5a18);
+  windRing.show(e.x, e.y + 0.4, e.z, 14, 0.85);
+  // fountain of fire + cyan frost from the cast point — fireworks-grade
+  spawnParts(e.x, e.y + 1.0, e.z, lowQ ? 40 : 80,
+    { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0xffae50]),
+      speed: 28, up: 14, life: 0.95 });
+  spawnParts(e.x, e.y + 1.0, e.z, lowQ ? 20 : 50,
+    { color: pick([0x9adfff, 0xc0e8ff, 0xe0ffff]),
+      speed: 22, up: 10, life: 0.78 });
+  spawnParts(e.x, e.y + 0.4, e.z, lowQ ? 14 : 30,
+    { color: 0xffffff, speed: 36, up: 4, life: 0.4 });
+  flashLight(e.x, e.y + 2.4, e.z, 0.7, 0xff8a3a);
+  // ── walk both arms and paint the fire trail. Denser now — 14 steps
+  // per arm, fatter particles, flares every step on PC. ──
+  const STEPS = lowQ ? 8 : 14;
   const beam = (eX, eZ, side) => {
     smashRing.setColor(0xffd06a);
-    smashRing.show(eX, e.y + 0.2, eZ, 4.5, 0.45);
-    boomRing.setColor(0xff8a3a);
-    boomRing.show(eX, e.y + 0.25, eZ, 6.5, 0.55);
-    flashLight(eX, e.y + 2, eZ, 0.5, 0xff8a3a);
-    for (let i = 1; i <= 8; i++) {
-      const k = i / 8;
+    smashRing.show(eX, e.y + 0.2, eZ, 5, 0.5);
+    boomRing.setColor(0xff5a18);
+    boomRing.show(eX, e.y + 0.25, eZ, 7.5, 0.6);
+    flashLight(eX, e.y + 2, eZ, 0.6, 0xff8a3a);
+    for (let i = 1; i <= STEPS; i++) {
+      const k = i / STEPS;
       const sx = lerp(e.x, eX, k);
       const sz = lerp(e.z, eZ, k);
-      scorch(sx, sz, 4 + k * 1.6);
-      spawnParts(sx, e.y + 1.4, sz, lowQ ? 8 : 14,
-        { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0x9adfff]),
-          speed: 22, up: 7, life: 0.8 });
-      if (i % 2 === 0)
-        flare(sx + rand(-1, 1), e.y + rand(0.9, 2.6), sz + rand(-1, 1),
-          rand(5, 8), pick([0xff8a3a, 0xffd06a]), 0.6);
+      scorch(sx, sz, 4.5 + k * 1.8);
+      spawnParts(sx, e.y + 1.4, sz, lowQ ? 10 : 22,
+        { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0x9adfff, 0xffae50]),
+          speed: 26, up: 10, life: 0.85 });
+      // upward fire-line so the V reads as walls of flame rising, not
+      // just particles on the ground
+      if (!lowQ) for (let j = 0; j < 4; j++)
+        spawnParts(sx + rand(-0.6, 0.6),
+          e.y + 0.6 + j * 1.1,
+          sz + rand(-0.6, 0.6), 1,
+          { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e]),
+            speed: 4, up: 9, grav: 0.2, life: rand(0.5, 0.8) });
+      // a flare every step keeps the arm bright along its whole length
+      flare(sx + rand(-1, 1), e.y + rand(0.9, 2.6), sz + rand(-1, 1),
+        rand(5, 9), pick([0xff8a3a, 0xffd06a, 0xff5a18]), 0.65);
     }
   };
   beam(endLX, endLZ, -1);
   beam(endRX, endRZ, +1);
-  // ── damage pass: enemies in EITHER beam get hit, burnt, frozen ──
+  // ── damage pass: enemies in EITHER beam get hit, burnt, frozen.
+  // Each zombie that's caught spawns its own PILLAR OF FIRE so the
+  // ability reads as "banishing" them, not "spraying" them. ──
+  let pillarBudget = lowQ ? 4 : 10;
   for (const z of zombies) {
     if (z.state === "die" || z.state === "rising") continue;
     const fwd = (z.x - e.x) * dirX + (z.z - e.z) * dirZ;
@@ -8168,6 +8254,17 @@ function wizardBlaze(baseDmg) {
       z.burn = Math.max(z.burn, 6.0);
       z.burnDps = Math.max(z.burnDps, burnDps);
       z.frostfire = true;
+    }
+    // PILLAR — visible, BIG, "banished" effect on each enemy in the V
+    if (pillarBudget > 0) {
+      pillarBudget--;
+      const hy = z.y + ETYPES[z.type].h * 0.5;
+      spawnParts(z.x, hy, z.z, lowQ ? 14 : 28,
+        { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0xffae50]),
+          speed: 8, up: 22, grav: 0.35, life: rand(0.7, 1.1) });
+      flare(z.x, hy + 0.4, z.z, 6.5, 0xffd06a, 0.55, 0.95);
+      flashLight(z.x, hy + 1.2, z.z, 0.35, 0xff8a3a);
+      scorch(z.x, z.z, z.r * 2.2);
     }
   }
   damageInteractables(e.x, e.z, beamLen * 0.5, impact);
@@ -9528,17 +9625,29 @@ function killZombie(z) {
   score += Math.round(xp * comboMul);          // combo multiplies the haul
   gainXp(xp);
   const d = ETYPES[z.type], hy = z.y + d.h * 0.5;
-  // PER USER REQUEST: NO kill particles. No blood spawn, no gibs, no
-  // splat decal, no flare. The corpse fade-out (z.dieT animation) still
-  // plays, and gameplay effects (sound, shards, XP, necro summon,
-  // boss loot) keep working — just no visual particle storm on kill.
+  // ── kill VFX ── visceral but budgeted. Pools cap at 70 gibs / 30 splats
+  // so even a screen-clearing nova won't allocate beyond the limit. Scale
+  // counts down on mobile (lowQ).
+  const big = z.boss || z.type === "giant";
+  const bloodN = lowQ ? (big ? 20 : 10) : (big ? 40 : 18);
+  const gibN   = lowQ ? (big ? 5 : 2)   : (big ? 10 : 5);
+  spawnParts(z.x, hy, z.z, bloodN,
+    { color: pick([0x7c1109, 0x9a1810, 0x5a0a08]),
+      speed: 14, up: 5, life: 0.7 });
+  spawnGibs(z.x, hy, z.z, gibN);
+  splat(z.x, z.z, z.r * 1.25 + (big ? 1.4 : 0.3));
+  flare(z.x, z.y + d.h * 0.45, z.z, big ? 9 : 5,
+    z.rare ? 0xff5a5a : 0xffae50, 0.45, 0.95);
   Sound.die();
   if (z.mound) { scene.remove(z.mound); z.mound = null; }
-  // SOUL REAPER — gameplay-effect kept (the chain damage), but the
-  // purple-burst particle spam is gone with the rest of the kill VFX
+  // SOUL REAPER — chain damage + a small violet pulse so the trigger reads
   if (hasA("soul")) {
     boomRing.setColor(0xc06bff);
     boomRing.show(z.x, z.y + 0.2, z.z, 15, 0.42);
+    spawnParts(z.x, hy, z.z, lowQ ? 10 : 22,
+      { color: pick([0xc06bff, 0x9a40ff, 0xe0a8ff]),
+        speed: 18, up: 7, life: 0.7 });
+    flashLight(z.x, z.y + 1.6, z.z, 0.32, 0xb050ff);
     const sd = (30 + player.level * 3.2) * player.dmgMul;
     for (const o of zombies) {
       if (o === z || o.state === "die" || o.state === "rising") continue;
@@ -9563,11 +9672,15 @@ function killZombie(z) {
     spawnLoot(z.x - 1.4, z.z - 1.4, makeItem(
       Math.random() < 0.5 ? "weapon" : "armor", 3, 4));
   }
-  // NECROMANCER death summon — 3 shamblers claw up around the corpse.
-  // No particle burst on the necro itself (user wants no kill VFX); the
-  // summon sound still plays so the player hears reinforcements arrive.
+  // NECROMANCER death summon — 3 shamblers claw up around the corpse, plus
+  // a violet burst marking the dark ritual.
   if (z.type === "necro") {
     Sound.zap && Sound.zap();
+    spawnParts(z.x, z.y + d.h * 0.5, z.z, lowQ ? 14 : 28,
+      { color: pick([0x9a40ff, 0xb56aff, 0x6a1ed0]),
+        speed: 16, up: 8, life: 0.85 });
+    flare(z.x, z.y + d.h * 0.7, z.z, 11, 0x9a40ff, 0.7, 1);
+    flashLight(z.x, z.y + 2.4, z.z, 0.5, 0x9a40ff);
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * TAU + rand(-0.4, 0.4), d = rand(3, 5);
       const nx = z.x + Math.cos(a) * d, nz = z.z + Math.sin(a) * d;
@@ -12415,6 +12528,23 @@ function updatePlayer(dt) {
       e.channeling = false;
     } else {
       wizardChannelTick(dt);
+    }
+  }
+  // wizard — pulse the staff-torch hot orange while the channel is open,
+  // settle it back to the cool arcane blue when it closes. Sells the
+  // "this is a spell being CAST" feeling without needing extra meshes.
+  if (e.obj && e.obj.userData && e.obj.userData.torch &&
+      e.obj.userData.cls === "wizard") {
+    const T = e.obj.userData.torch;
+    if (e.channeling) {
+      const pulse = 1 + Math.sin(clock * 28) * 0.18;
+      T.color.setHex(0xff8a3a);
+      T.intensity = lerp(T.intensity || 1.2, 4.6 * pulse, 0.4);
+      T.distance = 38;
+    } else {
+      T.color.setHex(0x6aaaff);
+      T.intensity = lerp(T.intensity || 1.2, 1.2, 0.18);
+      T.distance = 28;
     }
   }
   // hunter — tick the bow draw while the button is held
