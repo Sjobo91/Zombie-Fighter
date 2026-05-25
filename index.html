@@ -429,8 +429,36 @@
     text-shadow: 0 0 12px rgba(216,150,30,.35); }
   .frSecBlurb { font-size: 11px; letter-spacing: 1px; color: #7d7668;
     margin-bottom: 8px; }
-  body.touch #forgeList { grid-template-columns: 1fr; gap: 8px; }
-  body.touch .forgePanel { width: 92vw; padding: 16px 16px 18px; }
+  /* MOBILE: compact Forge — header / shards / rows / close all shrink so
+     a phone landscape (≈375px tall) actually shows the list, not just the
+     header. Two columns kept since landscape is plenty wide. */
+  body.touch .forgePanel { width: 96vw; padding: 10px 10px 12px;
+    max-height: 92vh; display: flex; flex-direction: column; }
+  body.touch .forgePanel h2 { font-size: 16px; letter-spacing: 3px;
+    margin: 0; }
+  body.touch .forgePanel h2::before, body.touch .forgePanel h2::after {
+    width: 20px; margin: 0 8px; }
+  body.touch .forgePanel .ph { margin: 4px 0 6px; font-size: 9px;
+    letter-spacing: 2px; }
+  body.touch #forgeShards { font-size: 9px; letter-spacing: 2px;
+    margin: 0 0 6px; }
+  body.touch #forgeShards b { font-size: 16px; margin-left: 4px; }
+  body.touch #forgeList { grid-template-columns: 1fr 1fr; gap: 4px;
+    max-height: none; flex: 1; padding-right: 4px; }
+  body.touch .forgeSection { margin-top: 4px; padding-top: 2px; }
+  body.touch .frSecTitle { font-size: 9px; letter-spacing: 2px;
+    margin: 4px 0 1px; }
+  body.touch .frSecBlurb { font-size: 8px; letter-spacing: 0.5px;
+    margin-bottom: 3px; }
+  body.touch .forgeRow { padding: 5px 7px; gap: 2px; }
+  body.touch .forgeRow .frName { font-size: 10px; letter-spacing: 1px; }
+  body.touch .forgeRow .frName .frGlyph { font-size: 12px; margin-right: 3px; }
+  body.touch .forgeRow .frRank { font-size: 8px; letter-spacing: 1px; }
+  body.touch .forgeRow .frDesc { font-size: 8px; line-height: 1.2; }
+  body.touch .forgeRow .frBuy { padding: 4px 8px; font-size: 8px;
+    letter-spacing: 1px; margin-top: 2px; }
+  body.touch #forgeClose { margin-top: 6px; font-size: 8px;
+    letter-spacing: 1px; }
   .forgeRow { background: linear-gradient(135deg, #241f31, #15121d);
     border: 1px solid #3a3550; border-left: 3px solid #6a4090; border-radius: 9px;
     padding: 12px 14px; text-align: left;
@@ -1278,7 +1306,11 @@ if (isTouch) document.body.classList.add("touch");
 const canvas = document.getElementById("game");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowQ });
 renderer.setPixelRatio(lowQ ? 1 : Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
+// PERF: shadows are the single most expensive frame cost — every cast
+// re-renders the scene from the moon's POV. On mobile (lowQ) we disable
+// them entirely. Visual: ground lacks a hero/zombie shadow, but combat
+// readability stays fine. Desktop keeps PCFSoft for the gothic mood.
+renderer.shadowMap.enabled = !lowQ;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -12567,6 +12599,7 @@ function steerAround(z, ang) {
   return ang;                                   // boxed in — colliders resolve
 }
 /* ─── update: horde (tougher, with dodge AI + status effects) ─────────────── */
+let _burningCount = 0;
 function updateZombies(dt) {
   // sample the player's velocity so zombies can lead the chase
   if (player) {
@@ -12575,6 +12608,7 @@ function updateZombies(dt) {
     _plVz = (player.z - _plPrevZ) * idt;
     _plPrevX = player.x; _plPrevZ = player.z;
   }
+  _burningCount = 0;
   for (let i = zombies.length - 1; i >= 0; i--) {
     const z = zombies[i], d = ETYPES[z.type];
     z.t += dt;
@@ -12651,9 +12685,10 @@ function updateZombies(dt) {
     if (z.burn > 0) {
       z.burn -= dt;
       z.hp -= z.burnDps * dt;
-      // burn DoT charges rage / spirit so DoT-builds (wizard channel, fire
-      // ability) actually fuel the ultimate. ~1 rage/sec per burning zombie.
-      if (player && player.alive) gainRage(dt * 1.0);
+      // count burning zombies — burn-DoT rage is granted ONCE per frame
+      // outside this loop, not per-zombie (which spammed gainRage many
+      // times each tick with 30+ burning enemies)
+      _burningCount++;
       // burn-flames visual — cheaper rate on touch (mobile GPU friendly).
       // Only fires for zombies within a sensible camera range to avoid
       // the particle pool drowning when 100 zombies burn at once.
@@ -13592,6 +13627,11 @@ function update(dt) {
   updateHitArcs(dt);
   spreadFrostfire(dt);
   updateZombies(dt);
+  // burn-DoT rage — one call per frame totalling all burning zombies,
+  // instead of one call per zombie per frame (was thousands of calls/sec
+  // with 30+ burning enemies)
+  if (player && player.alive && _burningCount > 0)
+    gainRage(_burningCount * dt * 1.0);
   updateWaves(dt);
   updateCombo(dt);
   updateUltimate(dt);
