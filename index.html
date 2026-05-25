@@ -11015,15 +11015,30 @@ function updateClassHud() {
   }
 }
 
+// PERF: cache the last value written to each HUD slot. Writing innerHTML
+// to the same string the browser already has still costs layout work, so
+// we skip the write entirely when nothing changed. Caches reset on resetGame.
+const _huiCache = { lvl: "", dist: "", wave: "", score: "",
+  hp: "", stats: "", hint: "", buffs: "", perma: "" };
 function updateHUD() {
-  UI.lvl.textContent = "LEVEL " + player.level;
-  UI.district.textContent = currentDistrict(player.x, player.z);
-  UI.wave.textContent = "WAVE " + wave;
-  UI.score.innerHTML = score +
+  const newLvl = "LEVEL " + player.level;
+  if (newLvl !== _huiCache.lvl) {
+    UI.lvl.textContent = newLvl; _huiCache.lvl = newLvl; }
+  const newDist = currentDistrict(player.x, player.z);
+  if (newDist !== _huiCache.dist) {
+    UI.district.textContent = newDist; _huiCache.dist = newDist; }
+  const newWave = "WAVE " + wave;
+  if (newWave !== _huiCache.wave) {
+    UI.wave.textContent = newWave; _huiCache.wave = newWave; }
+  const newScore = score +
     ' <span class="slab">SCORE &middot; ' + kills + ' KILLS</span>';
+  if (newScore !== _huiCache.score) {
+    UI.score.innerHTML = newScore; _huiCache.score = newScore; }
   const hpf = clamp(player.hp / player.maxHp, 0, 1);
   UI.hpfill.style.width = (hpf * 100) + "%";
-  UI.hptext.textContent = Math.ceil(player.hp) + " / " + player.maxHp;
+  const newHp = Math.ceil(player.hp) + " / " + player.maxHp;
+  if (newHp !== _huiCache.hp) {
+    UI.hptext.textContent = newHp; _huiCache.hp = newHp; }
   // ── LOW-HP red pulse — opacity ramps as HP drops, animation kicks in
   // when really close to death so the danger reads at a glance.
   if (UI.lowhp) {
@@ -11038,11 +11053,13 @@ function updateHUD() {
   }
   UI.stamfill.style.width =
     clamp(player.stamina / P.staminaMax, 0, 1) * 100 + "%";
-  UI.stats.innerHTML = "PWR " + player.stat.power + "  ·  DEF " +
+  const newStats = "PWR " + player.stat.power + "  ·  DEF " +
     player.stat.defense + "  ·  SPD " + player.stat.speed +
     (player.statPoints > 0 ?
       '  ·  <span class="pt">' + player.statPoints +
       ' PTS</span>' : "");
+  if (newStats !== _huiCache.stats) {
+    UI.stats.innerHTML = newStats; _huiCache.stats = newStats; }
   // ── per-class widget — Hunter draw bar / Gunslinger ammo / Rogue pips ──
   if (UI.classHud) updateClassHud();
   UI.xpfill.style.width = clamp(player.xp / player.xpNext, 0, 1) * 100 + "%";
@@ -11080,7 +11097,8 @@ function updateHUD() {
       '<div class="bt"><div class="btf" style="width:' + (k * 100) +
       '%"></div></div></div>';
   }
-  UI.buffs.innerHTML = bh;
+  if (bh !== _huiCache.buffs) {
+    UI.buffs.innerHTML = bh; _huiCache.buffs = bh; }
   UI.buffsCap.style.display = player.buffs.length ? "block" : "none";
   // permanent powers — gold chips, no timer, kept for the whole run
   let ph = "";
@@ -11090,7 +11108,8 @@ function updateHUD() {
       (p.count > 1 ? '<div class="pc">&times;' + p.count + '</div>' : '') +
       '</div>';
   }
-  UI.permabuffs.innerHTML = ph;
+  if (ph !== _huiCache.perma) {
+    UI.permabuffs.innerHTML = ph; _huiCache.perma = ph; }
   UI.permaCap.style.display = player.permaBuffs.length ? "block" : "none";
   if (comboMul > 1) {
     UI.combo.style.opacity = "1";
@@ -11114,7 +11133,8 @@ function updateHUD() {
   h += '<br><span class="hot">I</span> GEAR';
   if (player.inventory.length)
     h += ' <span class="hot">(' + player.inventory.length + ')</span>';
-  UI.hint.innerHTML = h;
+  if (h !== _huiCache.hint) {
+    UI.hint.innerHTML = h; _huiCache.hint = h; }
 }
 
 /* ─── character / stat screen ─────────────────────────────────────────────── */
@@ -11694,6 +11714,9 @@ let roundT = 0;        // countdown seconds remaining in the round-end popup
 let hitStop = 0, gameOverT = 0, heartT = 0;
 
 function resetGame() {
+  // clear HUD-cache so the first frame of a new run actually paints
+  for (const k in _huiCache) _huiCache[k] = "";
+  _classHudCache = "";
   for (const z of zombies) {
     scene.remove(z.obj); if (z.mound) scene.remove(z.mound);
   }
@@ -11736,9 +11759,43 @@ function resetGame() {
   // a fresh run starts at stage 1 — paint the world in BONEYARD colours
   applyStageTheme(level);
 }
+// PERF: build one of every zombie type at game start, render a single
+// shadow + lit frame, then dispose. This forces Three.js to compile every
+// shader variant the zombies use up-front so the FIRST wave spawn doesn't
+// stall the main thread for shader compilation. Idempotent — runs once.
+let _zombieWarmed = false;
+function prewarmZombieAssets() {
+  if (_zombieWarmed) return;
+  _zombieWarmed = true;
+  const types = ["shambler", "runner", "charger", "lunger", "brute",
+                 "necro", "boss"];
+  const temps = [];
+  for (const t of types) {
+    try {
+      const g = buildZombie(t, false);
+      // park them out of the playable area, far below ground
+      g.position.set(2000 + temps.length * 8, -50, 2000);
+      scene.add(g);
+      temps.push(g);
+    } catch (e) { /* one bad type shouldn't break the rest */ }
+  }
+  // also pre-warm the rare variant since it has its own materials
+  try {
+    const g = buildZombie("shambler", true);
+    g.position.set(2000, -50, 2050);
+    scene.add(g); temps.push(g);
+  } catch (e) {}
+  // force one render so the GPU compiles all the shaders right now
+  renderer.render(scene, camera);
+  // remove them — geometries + materials stay cached via _zGeoCache and
+  // Three.js internal program cache
+  for (const t of temps) scene.remove(t);
+}
+
 function startGame(opts) {
   const snap = opts && opts.resume ? SaveLoad.read() : null;
   if (snap && snap.cls) chosenClass = snap.cls;     // class must match the save
+  prewarmZombieAssets();                            // shader-compile up-front
   resetGame();
   // resume path: paste the snapshot over the freshly-rebuilt player. The
   // class match above keeps the visual + ability pool consistent.
