@@ -4877,8 +4877,41 @@ function zGeo(key, factory) {
   if (!g) { g = factory(); _zGeoCache.set(key, g); }
   return g;
 }
+// Per-type silhouette profile — varies torso/arm dimensions + base pose
+// so shamblers don't look identical to chargers at a distance.
+// torTop / torBot / torH = cylinder dimensions (scaled by r)
+// armLen / armW = arm length / thickness (scaled by r, scaled by h for length)
+// armBase = neutral arm rotation (negative = arms forward like a real undead)
+// auraColor = the faint aura tint that hints "reanimated by dark magic"
+const Z_PROFILE = {
+  // hunched and arm-droopy
+  shambler: { torTop:0.50, torBot:0.66, torH:0.42, armLen:0.52, armW:0.22,
+    armBase:-0.65, auraColor:0x6a3030 },
+  // forward-leaning, longer reach, athletic
+  runner:   { torTop:0.42, torBot:0.56, torH:0.46, armLen:0.60, armW:0.18,
+    armBase:-1.20, auraColor:0x7a2a3a },
+  // thick brutalist build, ramming stance
+  charger:  { torTop:0.64, torBot:0.78, torH:0.42, armLen:0.50, armW:0.30,
+    armBase:-0.55, auraColor:0xa03826 },
+  // skeletal + long-reach claws
+  lunger:   { torTop:0.38, torBot:0.50, torH:0.52, armLen:0.72, armW:0.16,
+    armBase:-1.55, auraColor:0x8a3a6a },
+  // bulky shoulders, no neck, MUSCLE
+  brute:    { torTop:0.74, torBot:0.92, torH:0.40, armLen:0.50, armW:0.34,
+    armBase:-0.55, auraColor:0xa03020 },
+  // medium frame, tall
+  giant:    { torTop:0.62, torBot:0.80, torH:0.44, armLen:0.55, armW:0.30,
+    armBase:-0.85, auraColor:0xc0461c },
+  // tall slim cultist with the halo
+  necro:    { torTop:0.42, torBot:0.58, torH:0.48, armLen:0.50, armW:0.20,
+    armBase:-0.95, auraColor:0x9a40ff },
+  // the boss — large and heavy
+  boss:     { torTop:0.66, torBot:0.86, torH:0.50, armLen:0.58, armW:0.32,
+    armBase:-0.78, auraColor:0xff5a1e },
+};
 function buildZombie(type, rare) {
   const d = ETYPES[type], g = new THREE.Group();
+  const P = Z_PROFILE[type] || Z_PROFILE.shambler;
   const skinHex = type === "boss" ? 0x2c1210 : rare ? 0x243630
     : pick([0x394231, 0x3a3328, 0x2f3a30, 0x3d352a, 0x33372e]);
   // per-zombie materials are still needed (damage flash sets emissive)
@@ -4889,6 +4922,7 @@ function buildZombie(type, rare) {
   // bone / skull / splat are only used by the HD-only gore details below
   const bone = lowQ ? null : mat(0xc4b89a, 0.7);
   const skull = lowQ ? null : mat(0xd4c8a8, 0.62);
+  const socketMat = new THREE.MeshBasicMaterial({ color: 0x080404 });
   const splatMat = lowQ ? null : new THREE.MeshStandardMaterial({
     color: 0x3a0606, roughness: 0.6,
     emissive: 0x180202, emissiveIntensity: 0.6 });
@@ -4898,20 +4932,23 @@ function buildZombie(type, rare) {
   const crawler = canCrawl && !rare && Math.random() < 0.18;
   const missingArm = !rare && type !== "boss" && Math.random() < 0.22
     ? (Math.random() < 0.5 ? 0 : 1) : -1;
-  // ── torso (always) ──
+  // ── torso (always) ── per-type dimensions from Z_PROFILE
   const fleshT = new THREE.Mesh(
     zGeo("flesh:" + type, () =>
-      new THREE.CylinderGeometry(r * 0.46, r * 0.62, h * 0.46, 8)), flesh);
+      new THREE.CylinderGeometry(r * (P.torTop - 0.04),
+        r * (P.torBot - 0.04), h * (P.torH + 0.04), 8)), flesh);
   fleshT.position.set(0, h * 0.5, 0); fleshT.rotation.x = 0.52;
   g.add(fleshT);
   const torso = new THREE.Mesh(
     zGeo("torso:" + type, () =>
-      new THREE.CylinderGeometry(r * 0.5, r * 0.66, h * 0.42, 8)), cloth);
+      new THREE.CylinderGeometry(r * P.torTop, r * P.torBot,
+        h * P.torH, 8)), cloth);
   torso.position.set(0, h * 0.5, 0); torso.rotation.x = 0.52;
   torso.castShadow = true; g.add(torso);
-  // ── HD-only gore — adds 25+ meshes per zombie. Mobile / lowQ skips it
+  // ── HD-only gore — adds ~30 meshes per zombie. Mobile / lowQ skips it
   // entirely. The silhouette + colour still reads as a rotting corpse,
-  // just without the ribs/entrails/teeth detail visible at distance. ──
+  // just without the ribs / spine / entrails / teeth detail visible at
+  // distance. ──
   if (!lowQ) {
     // cloth tatters dangling off the body
     for (let i = 0; i < 3; i++) {
@@ -4933,7 +4970,7 @@ function buildZombie(type, rare) {
     sideGash.position.set(r * 0.4, h * 0.42, r * 0.18);
     sideGash.rotation.set(0.4, 0.6, 0);
     g.add(sideGash);
-    // ribcage (4 shared rib geos)
+    // ribcage (4 shared rib geos) — wraps the chest
     for (let i = 0; i < 4; i++) {
       const rib = new THREE.Mesh(zGeo("rib:" + type + ":" + i, () =>
         new THREE.TorusGeometry(r * (0.38 - i * 0.027), 0.06, 4, 9, Math.PI)),
@@ -4941,44 +4978,94 @@ function buildZombie(type, rare) {
       rib.position.set(0, h * (0.36 + i * 0.075), r * 0.3);
       rib.rotation.set(Math.PI / 2 + 0.5, 0, 0); g.add(rib);
     }
-  }
-  // ── head — always present ──
-  const head = new THREE.Mesh(zGeo("head:" + type, () =>
-    new THREE.SphereGeometry(r * 0.4, 10, 8)), flesh);
-  head.position.set(0, h * 0.79, r * 0.36); head.scale.set(1, 1.16, 1.05);
-  // PERF: head castShadow dropped — the torso shadow already reads the
-  // silhouette and head-shadow doubled the per-zombie shadow pass cost.
-  g.add(head);
-  // HD-only head bits — skull cap, jaw, teeth, drip, sinew
-  if (!lowQ) {
-    const skullCap = new THREE.Mesh(zGeo("skullCap:" + type, () =>
-      new THREE.SphereGeometry(r * 0.38, 9, 7, 0, TAU, 0, Math.PI * 0.42)),
-      skull);
-    skullCap.position.set(0, h * 0.87, r * 0.34);
-    g.add(skullCap);
-    const jaw = new THREE.Mesh(zGeo("jaw:" + type, () =>
-      new THREE.BoxGeometry(r * 0.34, r * 0.28, r * 0.32)), flesh);
-    jaw.position.set(0, h * 0.6, r * 0.6); jaw.rotation.x = 1.0; g.add(jaw);
-    for (let t = -1.5; t <= 1.5; t++) {
-      const tooth = new THREE.Mesh(zGeo("tooth:" + type, () =>
-        new THREE.ConeGeometry(r * 0.04, r * 0.18, 4)), bone);
-      tooth.position.set(t * r * 0.09, h * 0.71, r * 0.66);
-      g.add(tooth);
+    // ── SPINE on the back — protruding vertebrae torus rings down
+    // the back of the torso. Sells "skinned alive / decaying" silhouette
+    // when the zombie's back is to the camera. 5 rings, shared geo. ──
+    for (let i = 0; i < 5; i++) {
+      const vert = new THREE.Mesh(zGeo("vert:" + type, () =>
+        new THREE.TorusGeometry(r * 0.07, 0.06, 4, 8)), bone);
+      vert.position.set(0, h * (0.38 + i * 0.08), -r * 0.34);
+      vert.rotation.x = Math.PI / 2 + 0.5;
+      g.add(vert);
+    }
+    // ── SHOULDER BLADES — small bone plates on the upper back ──
+    for (const sx of [-r * 0.28, r * 0.28]) {
+      const blade = new THREE.Mesh(zGeo("blade:" + type, () =>
+        new THREE.BoxGeometry(r * 0.22, r * 0.30, 0.08)), bone);
+      blade.position.set(sx, h * 0.66, -r * 0.32);
+      blade.rotation.set(0.4, 0, sx > 0 ? -0.2 : 0.2);
+      g.add(blade);
     }
   }
-  // sunken, smouldering eyes — shared geometry, glow sprite skipped on lowQ
-  const eyeCol = rare ? 0xff2a2a : 0xff8a1e;
-  const eyeMat = new THREE.MeshBasicMaterial({ color: eyeCol });
+  // ── head — always present. Now reads as a decaying SKULL not a
+  // featureless sphere: skull-cap on top, hanging jaw, sunken eye
+  // sockets with the glow INSIDE them rather than bulging marbles. ──
+  const head = new THREE.Mesh(zGeo("head:" + type, () =>
+    new THREE.SphereGeometry(r * 0.4, 10, 8)), flesh);
+  head.position.set(0, h * 0.79, r * 0.34);
+  head.scale.set(1, 1.16, 1.05);
+  g.add(head);
+  // HD-only head detail — skull cap, jaw, teeth, eye sockets
+  if (!lowQ) {
+    const skullCap = new THREE.Mesh(zGeo("skullCap:" + type, () =>
+      new THREE.SphereGeometry(r * 0.39, 9, 7, 0, TAU, 0, Math.PI * 0.42)),
+      skull);
+    skullCap.position.set(0, h * 0.87, r * 0.32);
+    g.add(skullCap);
+    // hanging jaw — drops further now, more horror-mask, less cute
+    const jaw = new THREE.Mesh(zGeo("jaw:" + type, () =>
+      new THREE.BoxGeometry(r * 0.36, r * 0.30, r * 0.32)), flesh);
+    jaw.position.set(0, h * 0.58, r * 0.56);
+    jaw.rotation.x = 1.2;
+    g.add(jaw);
+    // exposed top + bottom rows of teeth
+    for (let t = -2; t <= 2; t++) {
+      const upper = new THREE.Mesh(zGeo("tooth:" + type, () =>
+        new THREE.ConeGeometry(r * 0.045, r * 0.18, 4)), bone);
+      upper.position.set(t * r * 0.07, h * 0.72, r * 0.64);
+      upper.rotation.x = Math.PI;
+      g.add(upper);
+      const lower = new THREE.Mesh(zGeo("tooth:" + type, () =>
+        new THREE.ConeGeometry(r * 0.045, r * 0.16, 4)), bone);
+      lower.position.set(t * r * 0.07, h * 0.64, r * 0.62);
+      g.add(lower);
+    }
+    // skeletal cheekbones — small bone bumps either side of the face
+    for (const sx of [-r * 0.22, r * 0.22]) {
+      const cheek = new THREE.Mesh(zGeo("cheek:" + type, () =>
+        new THREE.SphereGeometry(r * 0.09, 6, 5)), skull);
+      cheek.position.set(sx, h * 0.78, r * 0.52);
+      g.add(cheek);
+    }
+  }
+  // ── SUNKEN, GLOWING EYE SOCKETS ──
+  // Old version: bulging orange spheres on the face (read as "googly").
+  // New: small almost-black socket spheres recessed INTO the head,
+  // with the glow sprite sitting just behind them so the light
+  // appears to emanate from a hollow socket. Far more decay-horror.
+  const eyeCol = rare ? 0xff2a2a : type === "necro" ? 0x9a40ff
+              : type === "boss" ? 0xff2a1e : 0xff8a1e;
   const eyes = [];
   for (const sx of [-r * 0.14, r * 0.14]) {
-    const e = new THREE.Mesh(zGeo("eye:" + type, () =>
-      new THREE.SphereGeometry(r * 0.085, 6, 6)), eyeMat);
-    e.position.set(sx, h * 0.81, r * 0.66); g.add(e); eyes.push(e);
+    // dark socket — the "hole" in the skull
+    const socket = new THREE.Mesh(zGeo("socket:" + type, () =>
+      new THREE.SphereGeometry(r * 0.10, 6, 5)), socketMat);
+    socket.position.set(sx, h * 0.81, r * 0.60);
+    socket.scale.set(1, 1, 0.6);                  // squashed inward
+    g.add(socket);
+    // tiny ember pip INSIDE the socket — the "iris"
+    const pip = new THREE.Mesh(zGeo("eye:" + type, () =>
+      new THREE.SphereGeometry(r * 0.05, 5, 4)),
+      new THREE.MeshBasicMaterial({ color: eyeCol }));
+    pip.position.set(sx, h * 0.81, r * 0.62);
+    g.add(pip); eyes.push(pip);
     if (!lowQ) {
+      // soft halo bleeding out of the socket so the eye glows at
+      // distance even when the pip is too small to read
       const eg = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
-        color: eyeCol, transparent: true, opacity: 0.85, depthWrite: false,
+        color: eyeCol, transparent: true, opacity: 0.95, depthWrite: false,
         blending: THREE.AdditiveBlending }));
-      eg.position.set(sx, h * 0.81, r * 0.72); eg.scale.setScalar(r * 0.62);
+      eg.position.set(sx, h * 0.81, r * 0.66); eg.scale.setScalar(r * 0.7);
       g.add(eg);
     }
   }
@@ -4997,7 +5084,9 @@ function buildZombie(type, rare) {
     }
     g.add(leg); legs.push(leg);
   }
-  // ── arms — also shared geometry, no random bone/claw extras ──
+  // ── arms — per-type length/width via Z_PROFILE so the silhouette
+  // varies by type. Claws are bigger (was 0.46 → 0.7 long), sharper
+  // (3 segments tapered like real talons), 4 per arm instead of 3. ──
   const arms = [];
   let ai = 0;
   for (const sx of [-r * 0.56, r * 0.56]) {
@@ -5007,22 +5096,47 @@ function buildZombie(type, rare) {
         new THREE.CylinderGeometry(r * 0.1, r * 0.13, r * 0.22, 5)), gore);
       stub.position.z = r * 0.12; a.add(stub);
     } else {
-      const len = h * (ai === 0 ? 0.52 : 0.42);
+      // dominant arm slightly longer than the off-arm so they don't look
+      // identically symmetric (subtle "wrong" feeling)
+      const len = h * (P.armLen + (ai === 0 ? 0.06 : 0));
       const am = new THREE.Mesh(zGeo("arm:" + type + ":" + ai, () =>
-        new THREE.BoxGeometry(r * 0.22, r * 0.22, len)), flesh);
+        new THREE.BoxGeometry(r * P.armW, r * P.armW, len)), flesh);
       am.position.z = len * 0.5; a.add(am);
-      // claws only on HD — three small cones each arm = 6 extras per zombie
+      // bone wrist bump — small bone bead at the wrist for menace
       if (!lowQ) {
-        for (let c = -1; c <= 1; c++) {
-          const claw = new THREE.Mesh(zGeo("claw:" + type, () =>
-            new THREE.ConeGeometry(r * 0.07, r * 0.46, 4)), gore);
-          claw.position.set(c * r * 0.1, 0, len + r * 0.18);
-          claw.rotation.x = Math.PI / 2; a.add(claw);
-        }
+        const wrist = new THREE.Mesh(zGeo("wrist:" + type, () =>
+          new THREE.SphereGeometry(r * (P.armW * 0.7), 5, 4)), bone);
+        wrist.position.z = len + 0.02; a.add(wrist);
+      }
+      // claws — 4 on HD (was 3), longer and sharper. Each is a thin
+      // talon angled forward. Use 5-sided cone for a more vicious look.
+      const clawN = lowQ ? 2 : 4;
+      const clawLen = r * (lowQ ? 0.42 : 0.72);
+      const clawR = r * 0.06;
+      for (let c = 0; c < clawN; c++) {
+        const t = (c - (clawN - 1) / 2) * 0.09;
+        const claw = new THREE.Mesh(zGeo("claw:" + type + ":" + clawN, () =>
+          new THREE.ConeGeometry(clawR, clawLen, 5)), gore);
+        claw.position.set(t * r, 0, len + clawLen * 0.42);
+        claw.rotation.x = Math.PI / 2;
+        // slight outward fan + tip droop so they look like real talons
+        claw.rotation.z = t * 1.2;
+        a.add(claw);
       }
     }
-    a.rotation.x = -1.05; g.add(a); arms.push(a); ai++;
+    a.rotation.x = P.armBase; g.add(a); arms.push(a); ai++;
   }
+  // ── FAINT AURA — a small dim halo around every zombie, tinted by
+  // type. Sells "reanimated by dark magic" on the regular shambler that
+  // previously had ZERO distinguishing aura. Rare/boss/necro still get
+  // their bigger halos on top of this baseline. ──
+  const baseAura = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, color: P.auraColor, transparent: true,
+    opacity: 0.25, depthWrite: false,
+    blending: THREE.AdditiveBlending }));
+  baseAura.position.y = h * 0.55;
+  baseAura.scale.setScalar(h * 0.85);
+  g.add(baseAura);
   if (rare) {
     const cape = new THREE.Mesh(
       new THREE.ConeGeometry(r * 0.98, h * 0.74, 8, 1, true),
