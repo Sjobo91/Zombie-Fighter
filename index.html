@@ -5775,10 +5775,13 @@ function makePlayer() {
     "cls-gunslinger", "cls-hunter", "cls-rogue");
   document.body.classList.add("cls-" + chosenClass);
   // touch-button label for the right-click skill is per-class — wizard
-  // calls it BLAZE, everyone else still calls it SMASH.
+  // calls it FIRE WALL (stacked over two lines so it fits the 64px button).
   const smashBtn = document.getElementById("tb-smash");
   if (smashBtn) {
-    const label = (chosenClass === "wizard") ? "BLAZE" : "SMASH";
+    const label = (chosenClass === "wizard")
+      ? '<span style="font-size:10px;line-height:1.05;text-align:center">' +
+          'FIRE<br>WALL</span>'
+      : "SMASH";
     smashBtn.innerHTML = label + '<div class="tcd"></div>';
   }
   const cls = CLASSES[chosenClass] || CLASSES.knight;
@@ -8169,21 +8172,16 @@ function knightGroundSmash(baseDmg) {
 
 /* ─── ARCANE NOVA — the wizard's RMB. A pulse of arcane magic explodes
    outward from the caster. No earthquake — pure radiant force.  ─────────── */
-/* ─── WIZARD BLAZE ─── right-mouse for the wizard. The caster ignites in
-   a 360° corona that burns + freezes nearby foes, AND launches a forward
-   trail of frostfire that does the same down a corridor. Damage rides on
-   the burn DoT, not the impact, so the spell scales with how long enemies
-   stay locked in the freeze. */
-/* ─── WIZARD BLAZE ─── right-mouse for the wizard. Two diverging fire beams
-   form a V opening straight ahead of the caster. Enemies caught in either
-   beam are scorched + frozen with a hefty burn DoT — the V means the
-   wizard can sweep through a wide spread of foes without needing to aim
-   tight, while still rewarding facing the densest cluster. */
+/* ─── WIZARD FIRE WALL ─── right-mouse for the wizard. A wide sheet of
+   flame rushes straight forward from the caster, scorching everything in
+   its path. Damage rides on the burn DoT so enemies that survive the
+   sweep keep cooking. The wall rolls outward visually over ~250ms (slices
+   scheduled through the deferred-FX queue) so cast performance stays
+   smooth even with a packed horde. */
 function wizardBlaze(baseDmg) {
   const e = player;
-  const beamLen = 30;                          // each V-arm reaches this far
-  const beamHalfW = 3.0;                       // half-width of each arm
-  const halfOpen = 0.40;                       // ≈23° each side → 46° total V
+  const WALL_LEN = 30;                          // forward reach
+  const WALL_HALF_W = 12;                       // 24 units wide sheet
   // damage budget: heavy burn DoT for the bulk, modest direct impact
   const norm = e.dmg * e.dmgMul + e.level * 4;
   const impact = norm * 0.7;
@@ -8195,16 +8193,12 @@ function wizardBlaze(baseDmg) {
   Sound.tone && Sound.tone("square",  140, 220, 0.45, 0.18);
   Sound.tone && Sound.tone("sine",     45,  90, 0.6,  0.25);
   shake(1.6); screenFlash("#ff8a3a", 0.6);
-  // ── set up the two beams ──
   const ang = e.aim;
   const dirX = Math.sin(ang), dirZ = Math.cos(ang);
-  const angL = ang - halfOpen, angR = ang + halfOpen;
-  const dirLX = Math.sin(angL), dirLZ = Math.cos(angL);
-  const dirRX = Math.sin(angR), dirRZ = Math.cos(angR);
-  const endLX = e.x + dirLX * beamLen, endLZ = e.z + dirLZ * beamLen;
-  const endRX = e.x + dirRX * beamLen, endRZ = e.z + dirRZ * beamLen;
-  // a launch-pad of fire under the caster's feet so the V grows out of
-  // a real eruption rather than appearing from nothing
+  // perpendicular vector (in XZ plane) — used to walk the wall's width
+  const perpX = dirZ, perpZ = -dirX;
+  // a launch-pad of fire under the caster's feet so the wall grows out
+  // of a real eruption rather than appearing from nothing
   scorch(e.x, e.z, 7);
   // THREE concentric rings out of the player — inner smash, mid boom,
   // outer wind. Reads as a god-tier shockwave.
@@ -8224,66 +8218,71 @@ function wizardBlaze(baseDmg) {
   spawnParts(e.x, e.y + 0.4, e.z, lowQ ? 14 : 30,
     { color: 0xffffff, speed: 36, up: 4, life: 0.4 });
   flashLight(e.x, e.y + 2.4, e.z, 0.7, 0xff8a3a);
-  // ── walk both arms and paint the fire trail. Denser now — 14 steps
-  // per arm, fatter particles, flares every step on PC. Each step is
-  // scheduled with a tiny per-step delay so the V cascades outward
-  // visually (looks better) AND amortises the CPU work over ~6 frames
-  // instead of dumping 600+ particles in one tick. ──
-  const STEPS = lowQ ? 8 : 14;
-  const STEP_DELAY = 0.022;                   // ~22ms between arm steps
-  const beam = (eX, eZ) => {
-    // ring + flash at the tip arrive when the wave reaches it
-    scheduleFx(STEPS * STEP_DELAY, () => {
-      smashRing.setColor(0xffd06a);
-      smashRing.show(eX, e.y + 0.2, eZ, 5, 0.5);
-      boomRing.setColor(0xff5a18);
-      boomRing.show(eX, e.y + 0.25, eZ, 7.5, 0.6);
-      flashLight(eX, e.y + 2, eZ, 0.6, 0xff8a3a);
-    });
-    for (let i = 1; i <= STEPS; i++) {
-      const k = i / STEPS;
-      const sx = lerp(e.x, eX, k);
-      const sz = lerp(e.z, eZ, k);
-      const yBase = e.y;
-      scheduleFx(i * STEP_DELAY, () => {
-        scorch(sx, sz, 4.5 + k * 1.8);
-        spawnParts(sx, yBase + 1.4, sz, lowQ ? 8 : 16,
+  // ── FIRE WALL — wide rolling sheet of flame. Each "slice" is a
+  // horizontal line of fire perpendicular to the aim, spawned at
+  // increasing forward distance. Slices are scheduled at ~22ms intervals
+  // so the wall rolls outward over ~250ms (~15 frames) and the per-frame
+  // particle work stays small. ──
+  const STEPS    = lowQ ? 7 : 12;     // how many slices forward
+  const PER_W    = lowQ ? 5 : 6;      // spawn points across the width
+  const STEP_DELAY = 0.022;
+  const yBase = e.y;
+  const sx0 = e.x, sz0 = e.z;
+  // a tail flash + ring at the leading edge when the wall reaches max range
+  scheduleFx(STEPS * STEP_DELAY, () => {
+    const endX = sx0 + dirX * WALL_LEN, endZ = sz0 + dirZ * WALL_LEN;
+    smashRing.setColor(0xffd06a);
+    smashRing.show(endX, yBase + 0.2, endZ, 6, 0.55);
+    boomRing.setColor(0xff5a18);
+    boomRing.show(endX, yBase + 0.25, endZ, 10, 0.65);
+    flashLight(endX, yBase + 2, endZ, 0.6, 0xff8a3a);
+  });
+  for (let i = 1; i <= STEPS; i++) {
+    const k = i / STEPS;
+    const fwd = WALL_LEN * k;
+    const cx = sx0 + dirX * fwd;
+    const cz = sz0 + dirZ * fwd;
+    scheduleFx(i * STEP_DELAY, () => {
+      // scorch the centre of this slice (one scorch per step — the pool
+      // is only 16 deep, so don't paint 6 per slice or they'd vanish)
+      scorch(cx, cz, 5 + k * 2);
+      // walk across the width and paint a horizontal line of flame
+      for (let j = 0; j < PER_W; j++) {
+        const t = (PER_W === 1) ? 0 : (j / (PER_W - 1) - 0.5);
+        const lx = cx + perpX * t * WALL_HALF_W * 2;
+        const lz = cz + perpZ * t * WALL_HALF_W * 2;
+        spawnParts(lx, yBase + 1.4, lz, lowQ ? 3 : 4,
           { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e, 0x9adfff, 0xffae50]),
-            speed: 26, up: 10, life: 0.85 });
-        // upward fire-line so the V reads as walls of flame rising
-        if (!lowQ) for (let j = 0; j < 3; j++)
-          spawnParts(sx + rand(-0.6, 0.6),
-            yBase + 0.6 + j * 1.1,
-            sz + rand(-0.6, 0.6), 1,
+            speed: 16, up: 11, life: 0.85 });
+        // vertical fire-line — sells the wall HEIGHT (PC only)
+        if (!lowQ)
+          spawnParts(lx + rand(-0.4, 0.4),
+            yBase + 1.4 + rand(0, 1.2),
+            lz + rand(-0.4, 0.4), 1,
             { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e]),
-              speed: 4, up: 9, grav: 0.2, life: rand(0.5, 0.8) });
-        // a flare every other step keeps the arm bright (avoids burning
-        // through the 16-flare pool with a single Blaze)
-        if ((i & 1) === 0)
-          flare(sx + rand(-1, 1), yBase + rand(0.9, 2.6), sz + rand(-1, 1),
+              speed: 3, up: 11, grav: 0.2, life: rand(0.5, 0.85) });
+      }
+      // one flare per slice — random lateral offset so the wall sparkles
+      flare(cx + perpX * rand(-WALL_HALF_W, WALL_HALF_W),
+            yBase + rand(0.9, 2.6),
+            cz + perpZ * rand(-WALL_HALF_W, WALL_HALF_W),
             rand(5, 9), pick([0xff8a3a, 0xffd06a, 0xff5a18]), 0.65);
-      });
-    }
-  };
-  beam(endLX, endLZ);
-  beam(endRX, endRZ);
-  // ── damage pass: enemies in EITHER beam get hit, burnt, frozen.
-  // Each zombie that's caught spawns its own PILLAR OF FIRE — but the
-  // pillar visual is delayed (and staggered between enemies) so the
-  // pillars erupt as the V-wave reaches them, not all at the cast frame.
-  // Damage application stays instant so the ability feels responsive. ──
+    });
+  }
+  // ── damage pass: enemies inside the forward rectangle get hit,
+  // burnt, frozen. Damage applies INSTANTLY (cast feels responsive);
+  // the pillar visual on each hit is delayed so it erupts when the
+  // wave physically reaches that enemy. ──
   let pillarIdx = 0;
   const PILLAR_MAX = lowQ ? 4 : 8;
   for (const z of zombies) {
     if (z.state === "die" || z.state === "rising") continue;
-    const fwd = (z.x - e.x) * dirX + (z.z - e.z) * dirZ;
-    if (fwd < -1) continue;                    // strictly forward of caster
-    const dL = segDist(e.x, e.z, endLX, endLZ, z.x, z.z);
-    const dR = segDist(e.x, e.z, endRX, endRZ, z.x, z.z);
-    const inL = dL < beamHalfW + z.r;
-    const inR = dR < beamHalfW + z.r;
-    if (!inL && !inR) continue;
-    hitZombie(z, impact, false, Math.atan2(z.x - e.x, z.z - e.z), 2.5);
+    const dx = z.x - e.x, dz = z.z - e.z;
+    const fwd = dx * dirX + dz * dirZ;
+    if (fwd < -1 || fwd > WALL_LEN + z.r) continue;     // outside depth
+    const lat = dx * perpX + dz * perpZ;                // lateral offset
+    if (Math.abs(lat) > WALL_HALF_W + z.r) continue;    // outside width
+    hitZombie(z, impact, false, Math.atan2(dx, dz), 2.5);
     if (z.state !== "die") {
       // freeze in place + long burn — frostfire signature
       z.stun = Math.max(z.stun, 3.0);
@@ -8293,14 +8292,14 @@ function wizardBlaze(baseDmg) {
       z.burnDps = Math.max(z.burnDps, burnDps);
       z.frostfire = true;
     }
-    // PILLAR — visible, BIG, "banished" effect, scheduled by distance so
-    // the closer ones light up first and the wave rolls out from caster.
+    // PILLAR — banishment effect, scheduled so closer foes light up
+    // first and the wave rolls outward visibly.
     if (pillarIdx < PILLAR_MAX) {
-      const distToCaster = Math.hypot(z.x - e.x, z.z - e.z);
-      const delay = clamp(distToCaster / beamLen, 0, 1) *
+      const delay = clamp(Math.max(0, fwd) / WALL_LEN, 0, 1) *
         (STEPS * STEP_DELAY) + pillarIdx * 0.015;
-      // snapshot the spawn position — z.x/z.z may have moved by the time
-      // the pillar fires, but the pillar should land where the V hit
+      // snapshot the spawn position — the zombie may have moved by the
+      // time the pillar fires, but the pillar should land where the
+      // wall caught them
       const px = z.x, pz = z.z, py = z.y + ETYPES[z.type].h * 0.5;
       const radius = z.r;
       pillarIdx++;
@@ -8314,7 +8313,7 @@ function wizardBlaze(baseDmg) {
       });
     }
   }
-  damageInteractables(e.x, e.z, beamLen * 0.5, impact);
+  damageInteractables(e.x, e.z, WALL_LEN * 0.5, impact);
   gainRage(RAGE_SMASH);
 }
 
@@ -10319,8 +10318,11 @@ function setupTouchControls() {
   if (!isTouch) return;
   const ui = document.createElement("div");
   ui.id = "touchUI";
-  // smash label reads "BLAZE" for the wizard — class-specific name
-  const smashLabel = (chosenClass === "wizard") ? "BLAZE" : "SMASH";
+  // smash label reads "FIRE WALL" (stacked) for the wizard — class-specific
+  const smashLabel = (chosenClass === "wizard")
+    ? '<span style="font-size:10px;line-height:1.05;text-align:center">' +
+        'FIRE<br>WALL</span>'
+    : "SMASH";
   ui.innerHTML =
     '<div id="joyBase"><div id="joyKnob"></div></div>' +
     '<div class="tbtn" id="tb-atk">ATTACK</div>' +
