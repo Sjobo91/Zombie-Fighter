@@ -4597,175 +4597,158 @@ function buildRogue() {
 }
 
 /* ─── zombie builder — gaunt, gored, glowing-eyed horrors ─────────────────── */
+// ── PERF: shared geometry cache for zombies ──────────────────────────────────
+// Each new zombie used to allocate ~50 BufferGeometries. With a 22-zombie
+// wave that's >1000 buffer allocations within ~5 seconds — enough to spike
+// frame time visibly. Now all zombies of the same type share one geometry
+// per role (keyed by type + role + dims), so the second+ zombie of any type
+// adds zero new geometry buffers. Same for the throwaway materials.
+const _zGeoCache = new Map();
+function zGeo(key, factory) {
+  let g = _zGeoCache.get(key);
+  if (!g) { g = factory(); _zGeoCache.set(key, g); }
+  return g;
+}
 function buildZombie(type, rare) {
   const d = ETYPES[type], g = new THREE.Group();
   const skinHex = type === "boss" ? 0x2c1210 : rare ? 0x243630
     : pick([0x394231, 0x3a3328, 0x2f3a30, 0x3d352a, 0x33372e]);
+  // per-zombie materials are still needed (damage flash sets emissive)
+  // but they're cheap compared to geometry allocation.
   const flesh = mat(skinHex, 0.97);
   const cloth = mat(pick([0x141210, 0x171512, 0x121316]), 1);
-  const bone = mat(0xc4b89a, 0.7);
-  const skull = mat(0xd4c8a8, 0.62);
   const gore = mat(0x5a0c08, 0.92);
-  const splatMat = new THREE.MeshStandardMaterial({ color: 0x3a0606,
-    roughness: 0.6, emissive: 0x180202, emissiveIntensity: 0.6 });
+  // bone / skull / splat are only used by the HD-only gore details below
+  const bone = lowQ ? null : mat(0xc4b89a, 0.7);
+  const skull = lowQ ? null : mat(0xd4c8a8, 0.62);
+  const splatMat = lowQ ? null : new THREE.MeshStandardMaterial({
+    color: 0x3a0606, roughness: 0.6,
+    emissive: 0x180202, emissiveIntensity: 0.6 });
   const h = d.h, r = d.r;
   // gore variants — randomised per shambler/runner
   const canCrawl = type === "shambler" || type === "runner";
   const crawler = canCrawl && !rare && Math.random() < 0.18;
   const missingArm = !rare && type !== "boss" && Math.random() < 0.22
     ? (Math.random() < 0.5 ? 0 : 1) : -1;
-  // ── torsos: bare flesh underneath, tattered cloth on top ──
+  // ── torso (always) ──
   const fleshT = new THREE.Mesh(
-    new THREE.CylinderGeometry(r * 0.46, r * 0.62, h * 0.46, 8), flesh);
+    zGeo("flesh:" + type, () =>
+      new THREE.CylinderGeometry(r * 0.46, r * 0.62, h * 0.46, 8)), flesh);
   fleshT.position.set(0, h * 0.5, 0); fleshT.rotation.x = 0.52;
   g.add(fleshT);
   const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(r * 0.5, r * 0.66, h * 0.42, 8), cloth);
+    zGeo("torso:" + type, () =>
+      new THREE.CylinderGeometry(r * 0.5, r * 0.66, h * 0.42, 8)), cloth);
   torso.position.set(0, h * 0.5, 0); torso.rotation.x = 0.52;
   torso.castShadow = true; g.add(torso);
-  // cloth tatters dangling off the body
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * TAU + rand(-0.3, 0.3);
-    const tat = new THREE.Mesh(
-      new THREE.BoxGeometry(rand(0.1, 0.18), rand(0.45, 0.75), 0.04), cloth);
-    tat.position.set(Math.cos(a) * r * 0.5, h * 0.3, Math.sin(a) * r * 0.5);
-    tat.rotation.set(rand(-0.2, 0.2), a, rand(-0.15, 0.15));
-    g.add(tat);
+  // ── HD-only gore — adds 25+ meshes per zombie. Mobile / lowQ skips it
+  // entirely. The silhouette + colour still reads as a rotting corpse,
+  // just without the ribs/entrails/teeth detail visible at distance. ──
+  if (!lowQ) {
+    // cloth tatters dangling off the body
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU + rand(-0.3, 0.3);
+      const tat = new THREE.Mesh(
+        zGeo("tat:" + type + ":" + i, () =>
+          new THREE.BoxGeometry(0.14, 0.6, 0.04)), cloth);
+      tat.position.set(Math.cos(a) * r * 0.5, h * 0.3, Math.sin(a) * r * 0.5);
+      tat.rotation.set(0, a, 0);
+      g.add(tat);
+    }
+    // chest gash + side wound (shared geometries)
+    const gash = new THREE.Mesh(zGeo("gash:" + type, () =>
+      new THREE.BoxGeometry(r * 0.82, h * 0.22, 0.1)), gore);
+    gash.position.set(0, h * 0.52, r * 0.44); gash.rotation.x = 0.52;
+    g.add(gash);
+    const sideGash = new THREE.Mesh(zGeo("sideGash:" + type, () =>
+      new THREE.BoxGeometry(r * 0.52, h * 0.16, 0.09)), gore);
+    sideGash.position.set(r * 0.4, h * 0.42, r * 0.18);
+    sideGash.rotation.set(0.4, 0.6, 0);
+    g.add(sideGash);
+    // ribcage (4 shared rib geos)
+    for (let i = 0; i < 4; i++) {
+      const rib = new THREE.Mesh(zGeo("rib:" + type + ":" + i, () =>
+        new THREE.TorusGeometry(r * (0.38 - i * 0.027), 0.06, 4, 9, Math.PI)),
+        bone);
+      rib.position.set(0, h * (0.36 + i * 0.075), r * 0.3);
+      rib.rotation.set(Math.PI / 2 + 0.5, 0, 0); g.add(rib);
+    }
   }
-  // a gaping chest gash + a smaller side wound
-  const gash = new THREE.Mesh(
-    new THREE.BoxGeometry(r * 0.82, h * 0.22, 0.1), gore);
-  gash.position.set(0, h * 0.52, r * 0.44); gash.rotation.x = 0.52;
-  gash.rotation.z = rand(-0.3, 0.3); g.add(gash);
-  const sideGash = new THREE.Mesh(
-    new THREE.BoxGeometry(r * 0.52, h * 0.16, 0.09), gore);
-  sideGash.position.set(rand(-1, 1) > 0 ? r * 0.4 : -r * 0.4,
-    h * 0.42, r * 0.18); sideGash.rotation.set(0.4, 0.6, 0);
-  g.add(sideGash);
-  // exposed ribcage — more visible
-  for (let i = 0; i < 4; i++) {
-    const rib = new THREE.Mesh(
-      new THREE.TorusGeometry(r * (0.38 - i * 0.027), 0.06, 4, 9, Math.PI),
-      bone);
-    rib.position.set(0, h * (0.36 + i * 0.075), r * 0.3);
-    rib.rotation.set(Math.PI / 2 + 0.5, 0, 0); g.add(rib);
-  }
-  // jutting spine
-  for (let i = 0; i < 4; i++) {
-    const vert = new THREE.Mesh(
-      new THREE.SphereGeometry(r * 0.11, 6, 5), bone);
-    vert.position.set(rand(-0.04, 0.04), h * (0.34 + i * 0.082),
-      -r * 0.18 - i * r * 0.03);
-    g.add(vert);
-  }
-  // long, dripping entrails
-  for (let i = 0; i < 3; i++) {
-    const gut = new THREE.Mesh(
-      new THREE.CylinderGeometry(r * 0.08, r * 0.05, r * 0.78, 5), gore);
-    gut.position.set(rand(-r * 0.22, r * 0.22), h * 0.22, r * 0.36);
-    gut.rotation.set(rand(-0.2, 0.2), 0, rand(-0.35, 0.35));
-    g.add(gut);
-  }
-  // blood splatter — flat dark patches over the torso
-  for (let i = 0; i < 3; i++) {
-    const a = rand(-1.4, 1.4);
-    const sp = new THREE.Mesh(
-      new THREE.PlaneGeometry(rand(0.3, 0.6), rand(0.25, 0.5)), splatMat);
-    sp.position.set(Math.sin(a) * r * 0.52,
-      h * (0.42 + rand(-0.16, 0.16)), Math.cos(a) * r * 0.52);
-    sp.rotation.y = a; sp.rotation.x = rand(-0.3, 0.3);
-    g.add(sp);
-  }
-  // ── head — gaunt flesh with the scalp ripped open over the skull ──
-  const head = new THREE.Mesh(new THREE.SphereGeometry(r * 0.4, 10, 8),
-    flesh);
+  // ── head — always present ──
+  const head = new THREE.Mesh(zGeo("head:" + type, () =>
+    new THREE.SphereGeometry(r * 0.4, 10, 8)), flesh);
   head.position.set(0, h * 0.79, r * 0.36); head.scale.set(1, 1.16, 1.05);
   head.castShadow = true; g.add(head);
-  const skullCap = new THREE.Mesh(
-    new THREE.SphereGeometry(r * 0.38, 9, 7, 0, TAU, 0, Math.PI * 0.42),
-    skull);
-  skullCap.position.set(rand(-0.04, 0.04), h * 0.87, r * 0.34);
-  skullCap.rotation.x = rand(-0.3, 0.3); skullCap.rotation.z = rand(-0.2, 0.2);
-  g.add(skullCap);
-  // jaw left half-hanging, with a sinew strand keeping it attached
-  const jaw = new THREE.Mesh(
-    new THREE.BoxGeometry(r * 0.34, r * 0.28, r * 0.32), flesh);
-  jaw.position.set(0, h * 0.6, r * 0.6); jaw.rotation.x = 1.0; g.add(jaw);
-  const sinew = new THREE.Mesh(
-    new THREE.CylinderGeometry(r * 0.04, r * 0.04, r * 0.3, 4), gore);
-  sinew.position.set(0, h * 0.68, r * 0.6); sinew.rotation.x = -0.42;
-  g.add(sinew);
-  // jagged teeth in the upper jaw
-  for (let t = -1.5; t <= 1.5; t++) {
-    const tooth = new THREE.Mesh(
-      new THREE.ConeGeometry(r * 0.04, r * 0.18, 4), bone);
-    tooth.position.set(t * r * 0.09, h * 0.71, r * 0.66);
-    g.add(tooth);
+  // HD-only head bits — skull cap, jaw, teeth, drip, sinew
+  if (!lowQ) {
+    const skullCap = new THREE.Mesh(zGeo("skullCap:" + type, () =>
+      new THREE.SphereGeometry(r * 0.38, 9, 7, 0, TAU, 0, Math.PI * 0.42)),
+      skull);
+    skullCap.position.set(0, h * 0.87, r * 0.34);
+    g.add(skullCap);
+    const jaw = new THREE.Mesh(zGeo("jaw:" + type, () =>
+      new THREE.BoxGeometry(r * 0.34, r * 0.28, r * 0.32)), flesh);
+    jaw.position.set(0, h * 0.6, r * 0.6); jaw.rotation.x = 1.0; g.add(jaw);
+    for (let t = -1.5; t <= 1.5; t++) {
+      const tooth = new THREE.Mesh(zGeo("tooth:" + type, () =>
+        new THREE.ConeGeometry(r * 0.04, r * 0.18, 4)), bone);
+      tooth.position.set(t * r * 0.09, h * 0.71, r * 0.66);
+      g.add(tooth);
+    }
   }
-  // a long blood drip from the jaw down the chest
-  const drip = new THREE.Mesh(
-    new THREE.CylinderGeometry(r * 0.04, r * 0.02, r * 0.55, 4), gore);
-  drip.position.set(0, h * 0.36, r * 0.55); g.add(drip);
-  // sunken, smouldering eyes
+  // sunken, smouldering eyes — shared geometry, glow sprite skipped on lowQ
   const eyeCol = rare ? 0xff2a2a : 0xff8a1e;
   const eyeMat = new THREE.MeshBasicMaterial({ color: eyeCol });
   const eyes = [];
   for (const sx of [-r * 0.14, r * 0.14]) {
-    const e = new THREE.Mesh(new THREE.SphereGeometry(r * 0.085, 6, 6),
-      eyeMat);
+    const e = new THREE.Mesh(zGeo("eye:" + type, () =>
+      new THREE.SphereGeometry(r * 0.085, 6, 6)), eyeMat);
     e.position.set(sx, h * 0.81, r * 0.66); g.add(e); eyes.push(e);
-    const eg = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
-      color: eyeCol, transparent: true, opacity: 0.85, depthWrite: false,
-      blending: THREE.AdditiveBlending }));
-    eg.position.set(sx, h * 0.81, r * 0.72); eg.scale.setScalar(r * 0.62);
-    g.add(eg);
+    if (!lowQ) {
+      const eg = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+        color: eyeCol, transparent: true, opacity: 0.85, depthWrite: false,
+        blending: THREE.AdditiveBlending }));
+      eg.position.set(sx, h * 0.81, r * 0.72); eg.scale.setScalar(r * 0.62);
+      g.add(eg);
+    }
   }
   // ── legs (skipped for crawlers; the groups still exist for poseZombie) ──
+  // PERF: shared leg geometry, no per-leg shin-bone variation, no
+  // per-limb castShadow. The torso shadow is enough for silhouette.
   const legs = [];
   for (const sx of [-r * 0.3, r * 0.3]) {
     const leg = new THREE.Group(); leg.position.set(sx, h * 0.42, 0);
     if (!crawler) {
-      const ll = new THREE.Mesh(
-        new THREE.BoxGeometry(r * 0.32, h * 0.46, r * 0.36), cloth);
-      ll.position.y = -h * 0.23; ll.castShadow = true; leg.add(ll);
-      if (Math.random() < 0.35) {                  // a snapped shin-bone
-        const shinBone = new THREE.Mesh(
-          new THREE.CylinderGeometry(r * 0.08, r * 0.07, h * 0.22, 5), bone);
-        shinBone.position.y = -h * 0.36; leg.add(shinBone);
-      }
+      const ll = new THREE.Mesh(zGeo("leg:" + type, () =>
+        new THREE.BoxGeometry(r * 0.32, h * 0.46, r * 0.36)), cloth);
+      ll.position.y = -h * 0.23; leg.add(ll);
     } else {
-      leg.visible = false;                          // crawler: no legs
+      leg.visible = false;
     }
     g.add(leg); legs.push(leg);
   }
-  // ── arms — one may be a stump, the other may have bone showing ──
+  // ── arms — also shared geometry, no random bone/claw extras ──
   const arms = [];
   let ai = 0;
   for (const sx of [-r * 0.56, r * 0.56]) {
     const a = new THREE.Group(); a.position.set(sx, h * 0.66, 0);
     if (missingArm === ai) {
-      const stub = new THREE.Mesh(
-        new THREE.CylinderGeometry(r * 0.1, r * 0.13, r * 0.22, 5), bone);
+      const stub = new THREE.Mesh(zGeo("stub:" + type, () =>
+        new THREE.CylinderGeometry(r * 0.1, r * 0.13, r * 0.22, 5)), gore);
       stub.position.z = r * 0.12; a.add(stub);
-      const stubBlood = new THREE.Mesh(
-        new THREE.SphereGeometry(r * 0.13, 5, 4), gore);
-      stubBlood.position.z = r * 0.22; a.add(stubBlood);
     } else {
       const len = h * (ai === 0 ? 0.52 : 0.42);
-      const am = new THREE.Mesh(
-        new THREE.BoxGeometry(r * 0.22, r * 0.22, len), flesh);
-      am.position.z = len * 0.5; am.castShadow = true; a.add(am);
-      if (Math.random() < 0.35) {                  // bone protruding through
-        const armBone = new THREE.Mesh(
-          new THREE.CylinderGeometry(r * 0.08, r * 0.08, len * 0.7, 5), bone);
-        armBone.position.set(0, 0, len * 0.6);
-        armBone.rotation.x = Math.PI / 2; a.add(armBone);
-      }
-      for (let c = -1; c <= 1; c++) {
-        const claw = new THREE.Mesh(
-          new THREE.ConeGeometry(r * 0.07, r * 0.46, 4), bone);
-        claw.position.set(c * r * 0.1, 0, len + r * 0.18);
-        claw.rotation.x = Math.PI / 2; a.add(claw);
+      const am = new THREE.Mesh(zGeo("arm:" + type + ":" + ai, () =>
+        new THREE.BoxGeometry(r * 0.22, r * 0.22, len)), flesh);
+      am.position.z = len * 0.5; a.add(am);
+      // claws only on HD — three small cones each arm = 6 extras per zombie
+      if (!lowQ) {
+        for (let c = -1; c <= 1; c++) {
+          const claw = new THREE.Mesh(zGeo("claw:" + type, () =>
+            new THREE.ConeGeometry(r * 0.07, r * 0.46, 4)), gore);
+          claw.position.set(c * r * 0.1, 0, len + r * 0.18);
+          claw.rotation.x = Math.PI / 2; a.add(claw);
+        }
       }
     }
     a.rotation.x = -1.05; g.add(a); arms.push(a); ai++;
@@ -9576,6 +9559,10 @@ function updateWaves(dt) {
 }
 
 /* ─── spawning — the dead claw up out of the earth ────────────────────────── */
+// shared mound material — used by every rising zombie. Was allocated
+// per-spawn before, which added GC pressure during big waves.
+const _moundMat = new THREE.MeshStandardMaterial({
+  color: 0x2c2114, roughness: 1 });
 const moundGeo = (() => {
   const g = new THREE.ConeGeometry(1.5, 0.9, 9);
   return g;
@@ -9620,8 +9607,7 @@ function spawnZombieAt(type, x, z, rare) {
   scene.add(obj);
   let mound = null;
   if (!farSpawn) {
-    mound = new THREE.Mesh(moundGeo,
-      new THREE.MeshStandardMaterial({ color: 0x2c2114, roughness: 1 }));
+    mound = new THREE.Mesh(moundGeo, _moundMat);
     mound.position.set(x, gy + 0.1, z);
     mound.scale.set(d.r * 1.5 * sizeMul, 1, d.r * 1.5 * sizeMul);
     mound.receiveShadow = true;
