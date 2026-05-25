@@ -5029,12 +5029,15 @@ function buildZombie(type, rare) {
       new THREE.MeshStandardMaterial({ color: 0x140a0e, roughness: 1,
         side: THREE.DoubleSide }));
     cape.position.set(0, h * 0.52, -r * 0.32); g.add(cape);
-    const aura = new THREE.PointLight(0xff3a3a, 2.8, 22, 2);
-    aura.position.y = h * 0.6; g.add(aura);
+    // PERF: PointLight stripped — adding/removing per spawn changed the
+    // scene's light COUNT, which invalidates Three.js's program cache and
+    // forces all ~100 materials to recompile. getProgramParameter was
+    // eating 98% of CPU. Compensate with a bigger, brighter sprite halo
+    // so the rare still reads as "glowing menace" from a distance.
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
-      color: 0xff3a3a, transparent: true, opacity: 0.5, depthWrite: false,
+      color: 0xff3a3a, transparent: true, opacity: 0.75, depthWrite: false,
       blending: THREE.AdditiveBlending }));
-    halo.position.y = h * 0.6; halo.scale.setScalar(h * 0.9); g.add(halo);
+    halo.position.y = h * 0.6; halo.scale.setScalar(h * 1.4); g.add(halo);
   }
   if (type === "boss") {
     for (const sx of [-1, 1]) {                  // jagged horns
@@ -5044,12 +5047,16 @@ function buildZombie(type, rare) {
       horn.position.set(sx * r * 0.26, h * 0.96, r * 0.3);
       horn.rotation.z = sx * 0.5; horn.castShadow = true; g.add(horn);
     }
-    const aura = new THREE.PointLight(0xff2a1e, 4.0, 44, 2);
-    aura.position.y = h * 0.55; g.add(aura);
+    // PERF: PointLight stripped (same reason as rare aura). Brighter,
+    // bigger halo + an inner core sprite together carry the silhouette.
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
-      color: 0xff2a1e, transparent: true, opacity: 0.55, depthWrite: false,
+      color: 0xff2a1e, transparent: true, opacity: 0.8, depthWrite: false,
       blending: THREE.AdditiveBlending }));
-    halo.position.y = h * 0.5; halo.scale.setScalar(h * 1.35); g.add(halo);
+    halo.position.y = h * 0.5; halo.scale.setScalar(h * 1.9); g.add(halo);
+    const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+      color: 0xffd6a0, transparent: true, opacity: 0.7, depthWrite: false,
+      blending: THREE.AdditiveBlending }));
+    core.position.y = h * 0.55; core.scale.setScalar(h * 0.7); g.add(core);
   }
   const hpW = r * 2.6;
   const hp = new THREE.Group();
@@ -5062,27 +5069,25 @@ function buildZombie(type, rare) {
   hp.add(bg, fill);
   hp.position.y = (crawler ? h * 0.55 : h) + 0.8; hp.visible = false;
   g.add(hp);
-  // NECROMANCER visual marker — a violet aura sprite + halo are cheap.
-  // The PointLight is only added on the desktop high-quality path because
-  // many extra real lights tank fragment-shading on mobile GPUs.
+  // NECROMANCER visual marker — sprite aura + emissive halo torus.
+  // PERF: per-necro PointLight stripped (was changing scene light count
+  // on spawn/death → all-material recompile storm). The bright aura
+  // + the high-emissive halo ring already make the violet glow read at
+  // distance without a real light source.
   if (type === "necro") {
     const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
-      color: 0x9a40ff, transparent: true, opacity: 0.62, depthWrite: false,
+      color: 0x9a40ff, transparent: true, opacity: 0.78, depthWrite: false,
       blending: THREE.AdditiveBlending }));
-    aura.scale.setScalar(h * 0.95); aura.position.y = h * 0.52;
+    aura.scale.setScalar(h * 1.15); aura.position.y = h * 0.52;
     g.add(aura);
     const halo = new THREE.Mesh(
       new THREE.TorusGeometry(r * 0.55, 0.07, 6, 18),
       new THREE.MeshStandardMaterial({ color: 0xb56aff,
-        emissive: 0x9a40ff, emissiveIntensity: 1.4,
+        emissive: 0x9a40ff, emissiveIntensity: 2.0,
         roughness: 0.4, metalness: 0.2 }));
     halo.position.set(0, h * 0.96, r * 0.36);
     halo.rotation.x = Math.PI / 2;
     g.add(halo);
-    if (!lowQ) {
-      const necroLight = new THREE.PointLight(0x9a40ff, 1.4, 9, 2);
-      necroLight.position.y = h * 0.7; g.add(necroLight);
-    }
   }
   g.userData = { mats: [flesh, cloth], legs, arms, torso, head, eyes,
     hp, hpFill: fill, hpW, crawler };
@@ -6302,11 +6307,12 @@ function spawnBuffDrop(x, z, elite) {
   const beacon = new THREE.Mesh(
     new THREE.CylinderGeometry(0.4, 0.85, 44, 7, 1, true),
     new THREE.MeshBasicMaterial({ color: col, transparent: true,
-      opacity: golden ? 0.42 : 0.25, depthWrite: false,
+      opacity: golden ? 0.55 : 0.34, depthWrite: false,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
   beacon.position.y = 22; g.add(beacon);
-  const light = new THREE.PointLight(col, 2.2, 17, 2);
-  light.position.y = 2.5; g.add(light);
+  // PERF: no PointLight per drop. Beam-opacity boost + brighter glow
+  // sprite already does the visual lift without a recompile-triggering
+  // light add/remove on every pickup.
   g.position.set(x, groundHeight(x, z), z);
   scene.add(g);
   buffDrops.push({ obj: g, x, z, buff, golden, t: rand(0, TAU) });
@@ -6380,13 +6386,12 @@ function spawnObjective(kind) {
       opacity: 0.32, depthWrite: false, side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending }));
   beacon.position.y = 25; g.add(beacon);
-  // core glow sprite
+  // core glow sprite — slightly larger to compensate for the dropped
+  // PointLight (kept off to avoid the per-objective recompile storm)
   const core = new THREE.Sprite(new THREE.SpriteMaterial({
     map: flareTex, color: col, transparent: true, opacity: 0.95,
     depthWrite: false, blending: THREE.AdditiveBlending }));
-  core.scale.set(4, 4, 1); core.position.y = 3.6; g.add(core);
-  const light = new THREE.PointLight(col, 2.8, 24, 2);
-  light.position.y = 3; g.add(light);
+  core.scale.set(5.5, 5.5, 1); core.position.y = 3.6; g.add(core);
   g.position.set(spot.x, ry, spot.z);
   scene.add(g);
   const obj = { kind, x: spot.x, z: spot.z, r: 8, g, core, ring, beacon,
@@ -6574,13 +6579,11 @@ function spawnAnnihilator() {
       opacity: 0.45, depthWrite: false, side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending }));
   beacon.position.y = 40; g.add(beacon);
-  // huge halo sprite
+  // huge halo sprite — bigger to compensate for the dropped PointLight
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
     map: flareTex, color: 0xff5a4a, transparent: true, opacity: 0.95,
     depthWrite: false, blending: THREE.AdditiveBlending }));
-  halo.scale.set(10, 10, 1); g.add(halo);
-  const light = new THREE.PointLight(0xff3a4a, 5, 60, 2);
-  g.add(light);
+  halo.scale.set(14, 14, 1); g.add(halo);
   g.position.set(x, y, z);
   scene.add(g);
   annihilator = { g, core, shell, halo, light, x, z, y, t: 0,
@@ -10136,18 +10139,15 @@ function spawnZombieAt(type, x, z, rare) {
       slam:       0xff3a2a,
     };
     const tint = auraTints[currentBossVariant] || 0xff3a2a;
+    // PERF: per-boss PointLight stripped. Aura sprite scaled up to
+    // compensate so the variant's color still reads at a distance.
     const aura = new THREE.Sprite(new THREE.SpriteMaterial({
       map: flareTex, color: tint, transparent: true,
-      opacity: 0.55, depthWrite: false,
+      opacity: 0.8, depthWrite: false,
       blending: THREE.AdditiveBlending }));
-    aura.scale.setScalar(d.h * 1.35);
+    aura.scale.setScalar(d.h * 1.8);
     aura.position.y = d.h * 0.55;
     obj.add(aura);
-    // skip the extra real light on low-quality so mobile doesn't choke
-    if (!lowQ) {
-      const auraLight = new THREE.PointLight(tint, 2.4, 14, 2);
-      auraLight.position.y = d.h * 0.65; obj.add(auraLight);
-    }
   }
   zombies.push(z_rec);
   zombiesAlive++;
@@ -12043,12 +12043,12 @@ function buildPortal() {
   inner.rotation.x = Math.PI / 2;
   portal.add(inner);
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
-    color: 0xc870ff, transparent: true, opacity: 0.7, depthWrite: false,
+    color: 0xc870ff, transparent: true, opacity: 0.85, depthWrite: false,
     blending: THREE.AdditiveBlending }));
-  glow.scale.setScalar(8);
+  glow.scale.setScalar(12);
   portal.add(glow);
-  const light = new THREE.PointLight(0xb05fee, 3.5, 36, 2);
-  light.position.set(0, 0.5, 0); portal.add(light);
+  // PERF: PointLight stripped — portal spawned per stage so its add/
+  // remove was a guaranteed recompile of every material in scene.
   portal.position.set(0, 3.0, -22);
   portal.visible = false;
   scene.add(portal);
