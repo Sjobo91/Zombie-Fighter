@@ -1067,20 +1067,23 @@ const RAGE_LEAP = 20;           // rage gained for a LEAP slam
 const RAGE_DECAY = 0.10;        // out of combat, rage bleeds ~10% per second
 const ULT_LEVEL = 9;            // the ultimate is unlocked at level 9
 
-// archetypes — the horde compounds in strength every wave
+// archetypes — the horde compounds in strength every wave. Damage values
+// are deliberately higher than HP would suggest: zombies are slow, so the
+// real threat is letting them touch you. A swarm at melee range should
+// punish hard so cornering yourself feels deadly.
 const ETYPES = {
-  shambler: { hp: 38,   speed: 7.2,  dmg: 12, r: 1.25, h: 3.6,  xp: 11 },
-  runner:   { hp: 26,   speed: 17.5, dmg: 9,  r: 1.05, h: 3.1,  xp: 15 },
-  charger:  { hp: 82,   speed: 8.4,  dmg: 26, r: 1.45, h: 4.0,  xp: 32 },
-  lunger:   { hp: 48,   speed: 14.0, dmg: 20, r: 1.15, h: 3.3,  xp: 27 },
-  brute:    { hp: 110,  speed: 7.0,  dmg: 30, r: 2.1,  h: 5.0,  xp: 48 },
-  giant:    { hp: 420,  speed: 5.4,  dmg: 54, r: 3.5,  h: 7.6,  xp: 200 },
-  revenant: { hp: 280,  speed: 11.4, dmg: 34, r: 1.85, h: 4.7,  xp: 160 },
+  shambler: { hp: 38,   speed: 7.2,  dmg: 20, r: 1.25, h: 3.6,  xp: 11 },
+  runner:   { hp: 26,   speed: 17.5, dmg: 16, r: 1.05, h: 3.1,  xp: 15 },
+  charger:  { hp: 82,   speed: 8.4,  dmg: 42, r: 1.45, h: 4.0,  xp: 32 },
+  lunger:   { hp: 48,   speed: 14.0, dmg: 34, r: 1.15, h: 3.3,  xp: 27 },
+  brute:    { hp: 110,  speed: 7.0,  dmg: 52, r: 2.1,  h: 5.0,  xp: 48 },
+  giant:    { hp: 420,  speed: 5.4,  dmg: 88, r: 3.5,  h: 7.6,  xp: 200 },
+  revenant: { hp: 280,  speed: 11.4, dmg: 56, r: 1.85, h: 4.7,  xp: 160 },
   // NECROMANCER — fragile mid-wave caster. On death, raises 3 fresh shamblers
   // out of the earth nearby; the death summons honour the wave HP scaling so
   // they aren't free trash kills late-game.
-  necro:    { hp: 140,  speed: 6.5,  dmg: 22, r: 1.55, h: 4.3,  xp: 95 },
-  boss:     { hp: 1700, speed: 5.0,  dmg: 46, r: 5.4,  h: 12.5, xp: 950 },
+  necro:    { hp: 140,  speed: 6.5,  dmg: 38, r: 1.55, h: 4.3,  xp: 95 },
+  boss:     { hp: 1700, speed: 5.0,  dmg: 72, r: 5.4,  h: 12.5, xp: 950 },
 };
 // per-wave compounding — late waves become a true test
 const DMG_SCALE = 1.075;    // gentle per-wave damage ramp
@@ -9158,11 +9161,12 @@ function killZombie(z) {
   z.state = "die"; z.dieT = 0;
   zombiesAlive--;
   kills++;
-  // shard reward per kill — bosses are worth a lot more, rares a bit more
+  // shard reward per kill — bosses are worth a lot more, rares a bit more,
+  // and ALL kills scale with the current stage (higher level = bigger haul)
   if (typeof Meta !== "undefined" && Meta.awardShards) {
-    const tier = z.boss ? 50 : z.type === "giant" ? 12 :
-      (z.type === "brute" || z.rare) ? 4 : 1;
-    Meta.awardShards(tier, "KILL");
+    const tier = z.boss ? 50 : z.type === "giant" ? 14 :
+      (z.type === "brute" || z.rare) ? 5 : 1;
+    Meta.awardShards(Math.round(tier * (1 + (level - 1) * 0.4)), "KILL");
   }
   // GUNSLINGER DEAD-EYE — each kill stacks +8% crit (capped at 60%)
   if (player) {
@@ -10195,9 +10199,18 @@ const Meta = (() => {
     persist();
     return earned;
   }
-  // run rewards — kept for the death-screen summary. Awards 0 by default
-  // since shards now stream in per-wave and per-kill during the run.
+  // run rewards — kept for the death-screen summary. Returns the amount
+  // that was on the line (and now wiped) so the death screen can show it.
   function awardForRun() { return 0; }
+  // Player died — all banked shards are LOST. Gear, abilities, and stat
+  // ranks stay (those are real progression); shards are the "wager" the
+  // run was played for. Returns the amount wiped for the death screen.
+  function loseAllShardsOnDeath() {
+    const lost = state.shards | 0;
+    state.shards = 0;
+    persistNow();
+    return lost;
+  }
   // called by startGame() on a non-resume run — bakes purchased gear,
   // abilities, and stat ranks into the fresh player so the choices the
   // player made at the Forge carry into every wave 1.
@@ -10233,7 +10246,7 @@ const Meta = (() => {
   load();
   return { shards, lvl, costOf, buy, awardShards, awardForRun, applyOnNewRun,
     weaponTier, armorTier, nextWeapon, nextArmor, buyWeapon, buyArmor,
-    ownsAbility, buyAbility,
+    ownsAbility, buyAbility, loseAllShardsOnDeath,
     state: () => state, upgrades: META_UPGRADES,
     weapons: META_WEAPONS, armor: META_ARMOR,
     abilityPrices: META_ABILITY_PRICES };
@@ -11095,10 +11108,10 @@ function onWaveCleared() {
   Sound.waveDone && Sound.waveDone();
   // autosave the run at this safe point — no live combat state to capture
   SaveLoad.save();
-  // wave-clear shard bonus — grows with wave + stage so deeper runs feed
-  // the Forge faster (also matches the "deeper waves are harder" loop)
+  // wave-clear shard bonus — grows steeply with stage so the late game
+  // rewards keep pace with the punishment. (Higher stage = bigger payout.)
   if (Meta && Meta.awardShards)
-    Meta.awardShards(15 + (wave | 0) * 3 + (level | 0) * 6, "WAVE");
+    Meta.awardShards(25 + (wave | 0) * 5 + (level | 0) * 15, "WAVE");
   // ability-pick cards are gone — abilities come from the Forge now.
   // The ultimate is still picked the first time it unlocks (one choice / run).
   if (pendingUlt) { pendingUlt = false; openUltimateChoice(); return; }
@@ -11170,9 +11183,10 @@ function advanceLevel() {
   zombies = []; zombiesAlive = 0; toSpawn = [];
   // autosave at this safe point so a crash mid-stage doesn't lose progress
   SaveLoad.save();
-  // big stage-advance bonus — encourages pushing through the portal
+  // big stage-advance bonus — encourages pushing through the portal.
+  // Quadratic-ish curve so deeper stages keep feeling like jackpots.
   if (Meta && Meta.awardShards)
-    Meta.awardShards(80 + (level | 0) * 25, "STAGE");
+    Meta.awardShards(120 + (level | 0) * (level | 0) * 18, "STAGE");
   // each stage paints the world in its own palette — fog, sky, moon retint
   applyStageTheme(level);
   // a thunderclap of light, then back to spawn
@@ -11363,14 +11377,20 @@ function gameOver() {
   Sound.death && Sound.death();
   // the run is over — wipe the autosave so the title screen offers a fresh start
   SaveLoad.clear();
-  const earnedShards = Meta.awardForRun();
+  // DEATH WIPES YOUR BANK — every Soul Shard you were carrying is lost.
+  // Forge purchases (weapons, armour, abilities, stat ranks) stay forever;
+  // only the un-spent shards burn with you. The deeper you push, the
+  // bigger the wager.
+  const lost = Meta.loseAllShardsOnDeath ? Meta.loseAllShardsOnDeath() : 0;
   Ambience.stop(); Music.stop();
   UI.overStats.innerHTML = "WAVE " + wave + "  &middot;  LEVEL " +
-    player.level + "  &middot;  SCORE " + score + "<br>" +
+    player.level + "  &middot;  STAGE " + level + "<br>" +
     kills + " ENEMIES SLAIN  &middot;  " +
     Math.round(totalDmg).toLocaleString() + " TOTAL DAMAGE DEALT" +
-    '<br><span style="color:#e7b8ff;font-weight:800">+' + earnedShards +
-    ' SOUL SHARDS</span> &mdash; spend them at the Forge';
+    (lost > 0
+      ? '<br><span style="color:#ff6a4a;font-weight:800">' + lost +
+        ' SOUL SHARDS LOST</span> &mdash; only what you spent stays'
+      : '<br><span style="color:#7d7668">No shards to lose this time.</span>');
   UI.overAgain.style.visibility = "hidden";
   UI.over.classList.remove("hidden");
   crosshairEl.style.display = "none";
@@ -12019,13 +12039,20 @@ function updateZombies(dt) {
       z.obj.userData.arms[1].rotation.x = -1.9;
       if (z.spH <= 0.2) {                             // hit the ground
         const dp = Math.hypot(z.x - player.x, z.z - player.z);
-        if (dp < 3.6 && player.alive) hurtPlayer(22 + wave * 2);
-        spawnParts(z.x, gy + 0.2, z.z, 42,
-          { color: 0x5a0c08, speed: 18, up: 5, life: 1.1, grav: 1.4 });
-        spawnGibs(z.x, gy + 0.4, z.z, 14, 0x6a1410);
-        scorch(z.x, z.z, 4.5);
-        Sound.die(); shake(0.4);
-        z.hp = 0; killZombie(z);
+        // landed close → a hard slam-hit (1.5x the type's bite damage)
+        if (dp < 4.2 && player.alive) hurtPlayer(d.dmg * 1.5 + wave * 2);
+        spawnParts(z.x, gy + 0.2, z.z, lowQ ? 12 : 24,
+          { color: 0x5a0c08, speed: 14, up: 4, life: 0.8, grav: 1.4 });
+        scorch(z.x, z.z, 3.5);
+        shake(0.45);
+        // SURVIVE the landing — diver becomes a normal chaser and tries
+        // to bite the player on the ground. They keep their full HP so
+        // they're a real threat to deal with, not a one-shot stunt.
+        z.spH = 0; z.diveVy = 0; z.diveVx = 0; z.diveVz = 0;
+        z.obj.rotation.x = 0;
+        z.obj.position.set(z.x, gy, z.z);
+        z.state = "chase";
+        z.stagger = 0.3;        // brief recovery from the fall
       }
       continue;
     }
@@ -12325,26 +12352,46 @@ function poseZombie(z, d, chillMul) {
   // screen so the static silhouette is fine.
   const fullPose = dToPlayer < 50;
   const moving = (z.state === "chase" || z.dodgeT > 0) && chillMul > 0;
-  const amp = moving ? 0.82 : 0.12;
+  const amp = moving ? 1.05 : 0.12;
   if (!z.crawler && fullPose) {
     u.legs[0].rotation.x = Math.sin(z.walkP) * amp;
     u.legs[1].rotation.x = Math.sin(z.walkP + Math.PI) * amp;
   }
+  // chase lean — body tilts FORWARD into the run, like a real sprinter
+  const targetLean = z.state === "attack" ? 0.42
+                   : moving ? 0.28 : 0;
+  o.rotation.x = lerp(o.rotation.x || 0, targetLean, 0.18);
   const dragY = z.crawler ? -d.h * z.sizeMul * 0.35 : 0;
   o.position.set(z.x,
     gy + FOOT_LIFT + dragY + (moving ? Math.abs(Math.sin(z.walkP)) *
-      (z.crawler ? 0.04 : 0.18) : 0)
+      (z.crawler ? 0.04 : 0.22) : 0)
     + (z.spH || 0) + Math.sin(z.t * 2) * 0.05, z.z);
-  // PERF: only animate the arms for nearby zombies — distant ones get
-  // a static silhouette since you can't see the detail anyway.
+  // ── ARMS — running stride alongside body, NOT zombie-hands-up ──
+  // PERF: only animate the arms for nearby zombies.
   if (fullPose) {
-    const lunge = z.state === "attack" ? Math.max(0, Math.sin(z.t * 13)) : 0;
     if (z.crawler) {
       u.arms[0].rotation.x = -0.55 + Math.sin(z.walkP * 1.5) * 0.55;
       u.arms[1].rotation.x = -0.55 + Math.sin(z.walkP * 1.5 + Math.PI) * 0.55;
+    } else if (z.state === "attack") {
+      // BITE / CLAW — arms thrust forward in a fast snap, then retract.
+      // Sin*18 cycles fast so the player sees an actual snap, not a hold.
+      const bite = 0.5 + 0.5 * Math.sin(z.t * 18);
+      u.arms[0].rotation.x = -1.05 - bite * 0.95;
+      u.arms[1].rotation.x = -1.05 - bite * 0.95;
+      // head ducks forward as the jaw snaps shut on the player
+      if (u.head) u.head.rotation.x = bite * 0.55;
+    } else if (moving) {
+      // RUNNING — arms swing in opposite phase to legs, like a real sprinter.
+      // Amplitude bigger than before so the silhouette reads as a chase.
+      const armSw = 0.95;
+      u.arms[0].rotation.x = -0.20 - Math.sin(z.walkP) * armSw;
+      u.arms[1].rotation.x = -0.20 + Math.sin(z.walkP) * armSw;
+      if (u.head) u.head.rotation.x = lerp(u.head.rotation.x || 0, 0.10, 0.2);
     } else {
-      u.arms[0].rotation.x = -1.0 - lunge * 0.75 + Math.sin(z.walkP) * 0.2;
-      u.arms[1].rotation.x = -1.0 - lunge * 0.75 - Math.sin(z.walkP) * 0.2;
+      // IDLE — arms hang slightly forward, head level
+      u.arms[0].rotation.x = -0.35 + Math.sin(z.t * 1.5) * 0.05;
+      u.arms[1].rotation.x = -0.35 + Math.cos(z.t * 1.4) * 0.05;
+      if (u.head) u.head.rotation.x = lerp(u.head.rotation.x || 0, 0, 0.2);
     }
   }
   // damage flash + status tints
