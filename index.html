@@ -9529,18 +9529,25 @@ function startWave(n) {
   // ABYSS waves get a boss every 3rd, the rest every 5th
   const bossWave = abyss ? (n % 3 === 0) : (n % 5 === 0);
   if (bossWave) toSpawn.push("boss");
-  // pick the boss variant for this wave. Two flavours rotate by stage so the
-  // player learns to read which threat is incoming. Stage 1 = SLAM (current
-  // crushing colossus), stage 2 = LORD (smaller cadre that summons shamblers
-  // mid-fight). Later stages cycle: 3 = SLAM, 4 = LORD, …
-  currentBossVariant = (level % 2 === 0) ? "lord" : "slam";
+  // four boss flavours cycle by stage:
+  //   stage 1 SLAM       — heavy melee colossus with ground slams
+  //   stage 2 LORD       — summons shamblers between attacks
+  //   stage 3 WARLOCK    — kites at range, lobs purple curse-orbs
+  //   stage 4 JUGGERNAUT — bull-rush charges + knockback
+  //   stage 5+ wraps to slam, etc.
+  const _bossRotation = ["slam", "lord", "warlock", "juggernaut"];
+  currentBossVariant = _bossRotation[(level - 1) % _bossRotation.length];
   spawnT = 0.35;
   waveState = "fight";
   if (bossWave) {
-    banner(currentBossVariant === "lord"
-      ? "A NECROMANCER LORD STIRS BELOW"
-      : "A monstrous thing stirs below",
-      "WAVE " + n);
+    let sub;
+    switch (currentBossVariant) {
+      case "lord":       sub = "A NECROMANCER LORD STIRS BELOW"; break;
+      case "warlock":    sub = "A CURSE-WEAVER WHISPERS YOUR NAME"; break;
+      case "juggernaut": sub = "AN UNSTOPPABLE THING ROARS"; break;
+      default:           sub = "A monstrous thing stirs below";
+    }
+    banner(sub, "WAVE " + n);
   } else if (abyss) {
     banner("The Abyss is hungry", "WAVE " + n);
   } else {
@@ -9645,24 +9652,32 @@ function spawnZombieAt(type, x, z, rare) {
     steerBias: Math.random() < 0.5 ? 1 : -1,
   };
   // BOSS VARIANT tagging — picked at wave start, attached here so the AI
-  // and visual layers can read it. "lord" variant gets a violet aura and a
-  // periodic summon attack on top of the slam.
+  // and visual layers can read it. Each variant gets its own coloured
+  // aura so the player reads the threat at a glance from across the map.
   if (type === "boss") {
     z_rec.bossVariant = currentBossVariant;
-    z_rec.summonCd = 7.0;   // first summon ~7s after spawn, then every 7s
-    if (currentBossVariant === "lord") {
-      const aura = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: flareTex, color: 0xb45aff, transparent: true,
-        opacity: 0.55, depthWrite: false,
-        blending: THREE.AdditiveBlending }));
-      aura.scale.setScalar(d.h * 1.35);
-      aura.position.y = d.h * 0.55;
-      obj.add(aura);
-      // skip the extra real light on low-quality so mobile doesn't choke
-      if (!lowQ) {
-        const lordLight = new THREE.PointLight(0xb45aff, 2.4, 14, 2);
-        lordLight.position.y = d.h * 0.65; obj.add(lordLight);
-      }
+    z_rec.summonCd = 7.0;     // lord-only — re-armed every spawn
+    z_rec.castCd   = 2.5;     // warlock-only — orb-throw cooldown
+    z_rec.chargeCd = 4.5;     // juggernaut-only — bull-rush cooldown
+    z_rec.chargeState = 0;    // 0 idle / 1 windup / 2 rushing / 3 recover
+    const auraTints = {
+      lord:       0xb45aff,
+      warlock:    0x9a30ff,
+      juggernaut: 0xff5a1e,
+      slam:       0xff3a2a,
+    };
+    const tint = auraTints[currentBossVariant] || 0xff3a2a;
+    const aura = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: flareTex, color: tint, transparent: true,
+      opacity: 0.55, depthWrite: false,
+      blending: THREE.AdditiveBlending }));
+    aura.scale.setScalar(d.h * 1.35);
+    aura.position.y = d.h * 0.55;
+    obj.add(aura);
+    // skip the extra real light on low-quality so mobile doesn't choke
+    if (!lowQ) {
+      const auraLight = new THREE.PointLight(tint, 2.4, 14, 2);
+      auraLight.position.y = d.h * 0.65; obj.add(auraLight);
     }
   }
   zombies.push(z_rec);
@@ -9795,6 +9810,74 @@ function updateHitArcs(dt) {
     a.el.style.opacity = (a.t * 0.9).toFixed(2);
   }
 }
+/* ─── WARLOCK CURSE-ORB ─── boss-variant projectile. Lobbed at the player,
+   slow + tracking, explodes on contact / max life. A small pool of three
+   sprite + light pairs cycles. The Warlock fires one every ~1.6s while
+   the player is in range. */
+const _curseOrbs = [];
+(function () {
+  for (let i = 0; i < 3; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex,
+      color: 0x9a30ff, transparent: true, opacity: 0,
+      depthWrite: false, blending: THREE.AdditiveBlending }));
+    s.scale.set(3, 3, 1);
+    scene.add(s);
+    _curseOrbs.push({ s, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0,
+      life: 0, dmg: 0, active: false });
+  }
+})();
+function warlockCurseOrb(boss, dmgScale) {
+  const slot = _curseOrbs.find(o => !o.active);
+  if (!slot) return;
+  const dx = player.x - boss.x, dz = player.z - boss.z;
+  const d = Math.hypot(dx, dz) || 1;
+  const SPEED = 18;
+  slot.x = boss.x; slot.y = boss.y + 2.4; slot.z = boss.z;
+  slot.vx = dx / d * SPEED; slot.vz = dz / d * SPEED;
+  slot.vy = 2.0;            // gentle arc — lobbed, not laser
+  slot.life = 2.6;
+  slot.dmg = ETYPES.boss.dmg * 0.7 * dmgScale;
+  slot.active = true;
+  slot.s.material.opacity = 0.92;
+  slot.s.position.set(slot.x, slot.y, slot.z);
+  Sound.tone && Sound.tone("sawtooth", 280, 120, 0.42, 0.16);
+}
+function updateCurseOrbs(dt) {
+  for (const o of _curseOrbs) {
+    if (!o.active) continue;
+    o.life -= dt;
+    o.x += o.vx * dt; o.y += o.vy * dt; o.z += o.vz * dt;
+    o.vy -= 4.5 * dt;            // gravity-like arc
+    o.s.position.set(o.x, o.y, o.z);
+    // particle trail — small, capped
+    spawnParts(o.x, o.y, o.z, 1,
+      { color: 0x9a30ff, speed: 2, life: 0.4 });
+    // hit check: ground or player or out of time
+    let hit = o.life <= 0;
+    if (!hit && player && player.alive) {
+      const dx2 = player.x - o.x, dz2 = player.z - o.z;
+      if (dx2 * dx2 + dz2 * dz2 < 3 * 3 &&
+          Math.abs(player.y + 1.6 - o.y) < 2.5) hit = true;
+    }
+    if (!hit && o.y <= groundHeight(o.x, o.z) + 0.4) hit = true;
+    if (hit) {
+      // impact burst + curse damage in small radius
+      Sound.zap && Sound.zap(); shake(0.4);
+      spawnParts(o.x, o.y, o.z, 18,
+        { color: 0x9a30ff, speed: 14, up: 4, life: 0.6 });
+      flashLight(o.x, o.y, o.z, 0.3, 0x9a30ff);
+      smashRing.setColor(0x9a30ff);
+      smashRing.show(o.x, groundHeight(o.x, o.z) + 0.2, o.z, 4, 0.4);
+      if (player && player.alive) {
+        const dx2 = player.x - o.x, dz2 = player.z - o.z;
+        if (dx2 * dx2 + dz2 * dz2 < 4 * 4)
+          hurtPlayer(o.dmg, { x: o.x, z: o.z });
+      }
+      o.active = false; o.s.material.opacity = 0;
+    }
+  }
+}
+
 /* the boss rears up and slams the earth — a wide, brutal shockwave */
 function bossSlam(z, dmgScale) {
   Sound.quake(); shake(1.2);
@@ -12581,33 +12664,115 @@ function updateZombies(dt) {
               } } }
         }
       } else if (z.type === "boss") {
-        // a slow colossus — closes in, then a ground-shattering slam
-        if (dist > z.r + P.r + 2) {
-          const sp = z.speed * chillMul * magnetMul;
-          const ba = steerAround(z, Math.atan2(dx, dz));
-          z.x += Math.sin(ba) * sp * dt; z.z += Math.cos(ba) * sp * dt;
-          z.walkP += dt * 4; z.state = "chase";
-        } else {
-          z.state = "attack"; z.atkCd -= dt;
-          if (z.atkCd <= 0) { z.atkCd = 2.2; bossSlam(z, dmgScale); }
+        // ── WARLOCK ── stays at range and lobs curse-orbs. Backpedals if
+        // the player closes in. No slam — pure ranged kiter.
+        if (z.bossVariant === "warlock") {
+          const KITE_NEAR = 18, KITE_FAR = 32;
+          if (dist < KITE_NEAR) {
+            // back away from the player
+            const sp = z.speed * 1.3 * chillMul;
+            const a = Math.atan2(-dx, -dz);
+            z.x += Math.sin(a) * sp * dt; z.z += Math.cos(a) * sp * dt;
+            z.walkP += dt * 5; z.state = "chase";
+          } else if (dist > KITE_FAR) {
+            // close to optimal range
+            const sp = z.speed * chillMul * magnetMul;
+            const ba = steerAround(z, Math.atan2(dx, dz));
+            z.x += Math.sin(ba) * sp * dt; z.z += Math.cos(ba) * sp * dt;
+            z.walkP += dt * 4; z.state = "chase";
+          } else {
+            z.state = "attack";
+          }
+          // cast curse-orbs on a timer regardless of state
+          z.castCd -= dt;
+          if (z.castCd <= 0 && dist < 50) {
+            z.castCd = 1.6;
+            warlockCurseOrb(z, dmgScale);
+          }
         }
-        // NECROMANCER LORD variant — between slams, periodically raise three
-        // shamblers around itself to drown the player in numbers. The summon
-        // doesn't interrupt or replace the slam — both clocks run in parallel.
-        if (z.bossVariant === "lord") {
-          z.summonCd -= dt;
-          if (z.summonCd <= 0 && zombiesAlive < 100) {
-            z.summonCd = 7.0;
-            spawnParts(z.x, z.y + 0.6, z.z, 50,
-              { color: 0xb45aff, speed: 18, up: 9, life: 0.95 });
-            flashLight(z.x, z.y + 2.0, z.z, 0.5, 0xb45aff);
-            boomRing.setColor(0xb45aff);
-            boomRing.show(z.x, z.y + 0.2, z.z, z.r + 8, 0.5);
-            Sound.zap && Sound.zap();
-            for (let i = 0; i < 3; i++) {
-              const a = (i / 3) * TAU + rand(-0.3, 0.3), d = rand(5, 8);
-              spawnZombieAt("shambler", z.x + Math.cos(a) * d,
-                                        z.z + Math.sin(a) * d);
+        // ── JUGGERNAUT ── periodic bull-rush. Stops to wind up, then
+        // sprints in a straight line, doing massive damage + knockback.
+        else if (z.bossVariant === "juggernaut") {
+          if (z.chargeState === 1) {
+            // windup — stand still and lean
+            z.chargeT -= dt;
+            if (z.chargeT <= 0) {
+              z.chargeState = 2; z.chargeT = 1.1;
+              z.chargeAng = Math.atan2(dx, dz);
+              Sound.bossRoar && Sound.bossRoar();
+            }
+          } else if (z.chargeState === 2) {
+            // RUSH — straight line, fast
+            z.chargeT -= dt;
+            const sp = z.speed * 5.5 * chillMul;
+            z.x += Math.sin(z.chargeAng) * sp * dt;
+            z.z += Math.cos(z.chargeAng) * sp * dt;
+            z.walkP += dt * 16;
+            // hit check during rush
+            if (dist < z.r + P.r + 1.5) {
+              hurtPlayer(d.dmg * 2.0 * dmgScale, z);
+              shake(0.8);
+              // knock the player back along the charge direction
+              player.x += Math.sin(z.chargeAng) * 4;
+              player.z += Math.cos(z.chargeAng) * 4;
+              z.chargeState = 3; z.chargeT = 1.6;
+            }
+            if (z.chargeT <= 0) { z.chargeState = 3; z.chargeT = 1.0; }
+            // VFX trail during rush
+            spawnParts(z.x, z.y + 0.5, z.z, 2,
+              { color: 0xff7a2a, speed: 8, up: 4, life: 0.5 });
+          } else if (z.chargeState === 3) {
+            // recovery — stand still briefly
+            z.chargeT -= dt;
+            if (z.chargeT <= 0) { z.chargeState = 0; z.chargeCd = rand(3, 5); }
+          } else {
+            // idle / approach — same as default slam but commit to charge
+            // when in mid-range
+            z.chargeCd -= dt;
+            if (z.chargeCd <= 0 && dist > 8 && dist < 50) {
+              z.chargeState = 1; z.chargeT = 0.7;
+              Sound.groan && Sound.groan();
+              // visual: scorch ring telegraphing windup
+              smashRing.setColor(0xff5a1e);
+              smashRing.show(z.x, z.y + 0.2, z.z, z.r + 4, 0.6);
+            } else if (dist > z.r + P.r + 2) {
+              const sp = z.speed * 1.1 * chillMul * magnetMul;
+              const ba = steerAround(z, Math.atan2(dx, dz));
+              z.x += Math.sin(ba) * sp * dt; z.z += Math.cos(ba) * sp * dt;
+              z.walkP += dt * 5; z.state = "chase";
+            } else {
+              z.state = "attack"; z.atkCd -= dt;
+              if (z.atkCd <= 0) { z.atkCd = 1.4; bossSlam(z, dmgScale); }
+            }
+          }
+        }
+        // ── SLAM (default) and LORD — a slow colossus that closes in then
+        // ground-shatters. The LORD also raises shamblers in parallel.
+        else {
+          if (dist > z.r + P.r + 2) {
+            const sp = z.speed * chillMul * magnetMul;
+            const ba = steerAround(z, Math.atan2(dx, dz));
+            z.x += Math.sin(ba) * sp * dt; z.z += Math.cos(ba) * sp * dt;
+            z.walkP += dt * 4; z.state = "chase";
+          } else {
+            z.state = "attack"; z.atkCd -= dt;
+            if (z.atkCd <= 0) { z.atkCd = 2.2; bossSlam(z, dmgScale); }
+          }
+          if (z.bossVariant === "lord") {
+            z.summonCd -= dt;
+            if (z.summonCd <= 0 && zombiesAlive < 100) {
+              z.summonCd = 7.0;
+              spawnParts(z.x, z.y + 0.6, z.z, 50,
+                { color: 0xb45aff, speed: 18, up: 9, life: 0.95 });
+              flashLight(z.x, z.y + 2.0, z.z, 0.5, 0xb45aff);
+              boomRing.setColor(0xb45aff);
+              boomRing.show(z.x, z.y + 0.2, z.z, z.r + 8, 0.5);
+              Sound.zap && Sound.zap();
+              for (let i = 0; i < 3; i++) {
+                const a = (i / 3) * TAU + rand(-0.3, 0.3), d = rand(5, 8);
+                spawnZombieAt("shambler", z.x + Math.cos(a) * d,
+                                          z.z + Math.sin(a) * d);
+              }
             }
           }
         }
@@ -13319,6 +13484,7 @@ function update(dt) {
   updateInteractables(dt);
   updatePortal(dt);
   updateFallingDebris(dt);
+  updateCurseOrbs(dt);
   updateBuffs(dt);
   updateParts(dt);
   updateFlashes(dt);
