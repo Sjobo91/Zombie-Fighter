@@ -804,6 +804,29 @@
     font-weight: 800; margin-top: 3px; letter-spacing: 1px; }
   body.touch #objHud { top: 56px; padding: 6px 12px; min-width: 160px; }
   body.touch #objHud .objHudProg { font-size: 13px; }
+  /* ── quest-complete enhancement picker (Diablo-style overlay) ── */
+  #enhPicker { position: fixed; inset: 0; background: rgba(8,4,4,0.75);
+    z-index: 9; display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+  #enhPicker.show { display: flex; }
+  #enhPicker .enhCard-row { display: flex; gap: 16px; flex-wrap: wrap;
+    justify-content: center; padding: 24px; max-width: 760px; }
+  #enhPicker .enhCard { width: 200px; padding: 22px 18px;
+    background: linear-gradient(180deg, #2a1f3a, #14101a);
+    border: 2px solid #6a4a90; border-radius: 12px; cursor: pointer;
+    transition: border-color .15s, transform .12s, box-shadow .15s;
+    text-align: center; color: #f0e6d2; }
+  #enhPicker .enhCard:hover { border-color: #f0cf72; transform: translateY(-3px);
+    box-shadow: 0 8px 32px rgba(240,207,114,.4); }
+  #enhPicker .enhGlyph { font-size: 48px; color: #c870ff; margin-bottom: 8px;
+    text-shadow: 0 0 16px rgba(200,112,255,.6); }
+  #enhPicker .enhN { font-size: 16px; font-weight: 800; letter-spacing: 2px;
+    color: #ffd06a; margin-bottom: 6px; }
+  #enhPicker .enhD { font-size: 12px; color: #b0a890; line-height: 1.4; }
+  body.touch #enhPicker .enhCard { width: 150px; padding: 14px 10px; }
+  body.touch #enhPicker .enhGlyph { font-size: 32px; }
+  body.touch #enhPicker .enhN { font-size: 13px; }
+  body.touch #enhPicker .enhD { font-size: 10px; }
   /* death cinematic overlay — desaturated dark vignette fades in over
      ~1.4s as the hero falls. Pointer-events none so it never blocks
      input on the next run (defensive). */
@@ -1169,8 +1192,8 @@
       <div id="rpShards">SOUL SHARDS: <b id="rpShardNum">0</b></div>
       <div id="rpPoints">UNSPENT STAT POINTS: <b id="rpPtsNum">0</b></div>
       <div id="rpStats"></div>
-      <div id="rpObjLabel">CHOOSE YOUR WAVE OBJECTIVE</div>
-      <div id="rpObjPick"></div>
+      <div id="rpObjLabel" style="display:none">CHOOSE YOUR WAVE OBJECTIVE</div>
+      <div id="rpObjPick" style="display:none"></div>
       <div class="rpBtns">
         <button id="rpForge" class="rpBtnAlt">SOUL FORGE</button>
         <button id="rpStart">START NEXT WAVE</button>
@@ -10392,6 +10415,7 @@ function killZombie(z) {
   // notify the objective system that a zombie has fallen
   if (typeof objectiveOnKill === "function") objectiveOnKill(z);
   if (typeof onWaveObjectiveKill === "function") onWaveObjectiveKill(z);
+  if (typeof questOnKill === "function") questOnKill(z);
 }
 
 /* ─── progression & waves ─────────────────────────────────────────────────── */
@@ -10441,18 +10465,9 @@ function gainXp(n) {
 function startWave(n) {
   wave = n;
   toSpawn = [];
-  // Wave-1 fallback: the round popup hasn't fired yet, so no objective
-  // has been chosen. Auto-assign the simplest objective (REAPER) so the
-  // HUD chip + win-condition still work from the very first wave.
-  // Wrapped defensively — a bug here must NEVER prevent the wave from
-  // starting (the player would be stuck on a title-orbit camera).
-  try {
-    if (typeof WAVE_OBJECTIVES !== "undefined" &&
-        WAVE_OBJECTIVES && WAVE_OBJECTIVES[0] && player &&
-        (!player.waveObjective || player.waveObjective.wave !== n)) {
-      setWaveObjective(WAVE_OBJECTIVES[0], n);
-    }
-  } catch (e) { console.warn("[wave-objective] init failed", e); }
+  // The per-wave objective picker is RETIRED in favour of the long-term
+  // QUEST_CHAIN (see below). Waves now end naturally when the spawn
+  // queue empties and the horde is cleared.
   let count;
   // wave 1 is a softer opener now (was 78 → too many at once). It still
   // grows fast, so by wave 3-4 you're swarmed.
@@ -11718,6 +11733,47 @@ const WEAP_SVG = {
       '<polygon points="86,64 70,52 78,46"/></g>' +
     '<circle cx="65" cy="40" r="13" fill="#cdd2dc" ' +
       'stroke="#aab0bc" stroke-width="2"/>',
+  // STAFF — wizard's icon. Wood haft, gold collar, glowing blue orb at the
+  // tip with a halo ring. Bright + colourful so the wizard's HUD reads
+  // instantly as a spellcaster, not a sword-fighter.
+  staff:
+    '<line x1="20" y1="88" x2="74" y2="22" stroke="#6a4a2a" ' +
+      'stroke-width="6" stroke-linecap="round"/>' +
+    '<g fill="#caa24a" stroke="#7a5a20" stroke-width="1.2">' +
+      '<rect x="40" y="42" width="6" height="14" rx="1"/>' +
+      '<rect x="48" y="34" width="6" height="14" rx="1"/></g>' +
+    '<circle cx="74" cy="22" r="14" fill="#6aaaff" opacity="0.35"/>' +
+    '<circle cx="74" cy="22" r="9" fill="#9adfff" ' +
+      'stroke="#3a8ad8" stroke-width="2"/>' +
+    '<circle cx="71" cy="19" r="2.5" fill="#fff" opacity="0.9"/>',
+  // BOW — bowman's icon. Arc + bowstring + nocked arrow.
+  bow:
+    '<path d="M28,12 Q 78,50 28,88" fill="none" stroke="#6a4a2a" ' +
+      'stroke-width="6" stroke-linecap="round"/>' +
+    '<line x1="28" y1="12" x2="28" y2="88" stroke="#caa24a" ' +
+      'stroke-width="1.5"/>' +
+    '<line x1="14" y1="50" x2="72" y2="50" stroke="#dfe4ec" ' +
+      'stroke-width="3" stroke-linecap="round"/>' +
+    '<polygon points="72,50 64,46 64,54" fill="#caa24a"/>' +
+    '<polygon points="14,50 22,46 22,54" fill="#caa24a"/>',
+  // PISTOL — gunslinger revolver icon.
+  pistol:
+    '<rect x="22" y="42" width="46" height="14" rx="3" fill="#3a3a44" ' +
+      'stroke="#aab0bc" stroke-width="2"/>' +
+    '<circle cx="36" cy="49" r="7" fill="#6a6a72" stroke="#aab0bc" ' +
+      'stroke-width="1.5"/>' +
+    '<rect x="32" y="55" width="14" height="22" rx="2" fill="#3a2a18"/>' +
+    '<rect x="62" y="48" width="22" height="6" rx="1" fill="#5a5860" ' +
+      'stroke="#aab0bc" stroke-width="1.2"/>' +
+    '<circle cx="36" cy="49" r="1.8" fill="#caa24a"/>',
+  // DAGGER — rogue's twin-blade icon.
+  dagger:
+    '<g transform="rotate(-30 50 50)">' +
+      '<polygon points="50,18 56,55 50,62 44,55" fill="#dfe4ec" ' +
+        'stroke="#aab0bc" stroke-width="1.5"/>' +
+      '<rect x="40" y="60" width="20" height="5" fill="#caa24a"/>' +
+      '<rect x="45" y="65" width="10" height="14" fill="#3a2a18"/>' +
+      '<circle cx="50" cy="82" r="3.5" fill="#f06aff"/></g>',
 };
 const LMB_SLASH =
   '<path d="M12,82 C 30,30 58,12 93,19 C 63,30 41,52 27,87 Z" ' +
@@ -11733,7 +11789,79 @@ const SMASH_SLASH =
     '<polygon points="90,38 99,44 88,49"/>' +
     '<polygon points="62,8 70,15 58,18"/>' +
     '<polygon points="14,66 22,72 11,76"/></g>';
+// Class-specific overlay glyphs for the LMB / RMB ability buttons.
+// Each class gets a unique pair so the wizard's icons don't read as
+// "swing your sword" when his actual abilities are flame stream + wall.
+const CLASS_LMB_GLYPHS = {
+  staff:                              // wizard — flame stream
+    '<g fill="#ff8a32">' +
+      '<path d="M22,82 Q 35,40 60,30 Q 50,52 32,80 Z"/>' +
+      '<path d="M40,76 Q 55,46 80,40 Q 65,60 48,80 Z" opacity="0.7"/>' +
+      '<circle cx="80" cy="40" r="6" fill="#ffd070"/>' +
+      '<circle cx="60" cy="30" r="4" fill="#fff2cc"/>' +
+    '</g>',
+  bow:                                // hunter — drawn arrow
+    '<g stroke="#caa24a" stroke-width="3.5" stroke-linecap="round">' +
+      '<line x1="14" y1="86" x2="86" y2="14"/></g>' +
+    '<polygon points="86,14 76,16 84,24" fill="#dfe4ec" ' +
+      'stroke="#aab0bc" stroke-width="1.4"/>' +
+    '<polygon points="14,86 18,76 24,82" fill="#caa24a"/>',
+  pistol:                             // gunslinger — bullet + muzzle flash
+    '<g fill="#ffae50">' +
+      '<polygon points="50,20 38,52 50,46 62,52" opacity="0.9"/>' +
+      '<polygon points="50,28 30,76 50,64 70,76" opacity="0.7"/></g>' +
+    '<rect x="46" y="48" width="8" height="22" fill="#dfe4ec" ' +
+      'stroke="#aab0bc" stroke-width="1.4"/>' +
+    '<rect x="44" y="68" width="12" height="6" fill="#caa24a"/>',
+  dagger:                             // rogue — twin slash X
+    '<g stroke="#f06aff" stroke-width="6" stroke-linecap="round" ' +
+       'opacity="0.95">' +
+      '<line x1="18" y1="20" x2="82" y2="84"/>' +
+      '<line x1="82" y1="20" x2="18" y2="84"/></g>',
+};
+const CLASS_RMB_GLYPHS = {
+  staff:                              // wizard — fire wall
+    '<g fill="#ff5a18">' +
+      '<rect x="10" y="60" width="80" height="20" rx="3"/></g>' +
+    '<g fill="#ff8a3a">' +
+      '<polygon points="14,60 20,22 30,60"/>' +
+      '<polygon points="30,60 38,18 50,60"/>' +
+      '<polygon points="50,60 58,12 70,60"/>' +
+      '<polygon points="70,60 80,20 86,60"/></g>' +
+    '<g fill="#ffd06a" opacity="0.85">' +
+      '<polygon points="22,60 26,40 32,60"/>' +
+      '<polygon points="42,60 48,32 54,60"/>' +
+      '<polygon points="62,60 68,30 74,60"/></g>',
+  bow:                                // hunter — multi-arrow burst
+    '<g stroke="#caa24a" stroke-width="3" stroke-linecap="round">' +
+      '<line x1="50" y1="50" x2="14" y2="20"/>' +
+      '<line x1="50" y1="50" x2="50" y2="12"/>' +
+      '<line x1="50" y1="50" x2="86" y2="20"/></g>' +
+    '<g fill="#dfe4ec">' +
+      '<polygon points="14,20 22,24 18,30"/>' +
+      '<polygon points="50,12 46,22 54,22"/>' +
+      '<polygon points="86,20 78,24 82,30"/></g>',
+  pistol:                             // gunslinger — fan-the-hammer trio
+    '<g fill="#ff8a3a">' +
+      '<polygon points="20,82 14,40 26,52"/>' +
+      '<polygon points="50,82 44,30 56,42"/>' +
+      '<polygon points="80,82 74,40 86,52"/></g>' +
+    '<g fill="#ffd06a">' +
+      '<circle cx="20" cy="40" r="3"/>' +
+      '<circle cx="50" cy="30" r="3"/>' +
+      '<circle cx="80" cy="40" r="3"/></g>',
+  dagger:                             // rogue — shadowstep + crit dagger
+    '<path d="M14,20 L 78,84" stroke="#c850a8" stroke-width="6" ' +
+      'stroke-linecap="round" opacity="0.9"/>' +
+    '<polygon points="78,84 60,82 76,68" fill="#dfe4ec" ' +
+      'stroke="#aab0bc" stroke-width="1.4"/>' +
+    '<circle cx="14" cy="20" r="6" fill="#f06aff"/>',
+};
 function slashIcon(model, strong) {
+  // class-specific glyph if we have one (wizard / hunter / gunslinger /
+  // rogue), otherwise fall back to the generic sword-slash + weapon
+  const cg = strong ? CLASS_RMB_GLYPHS[model] : CLASS_LMB_GLYPHS[model];
+  if (cg) return svgEl(cg);
   return svgEl((strong ? SMASH_SLASH : LMB_SLASH) +
     (WEAP_SVG[model] || WEAP_SVG.greatsword));
 }
@@ -12581,6 +12709,196 @@ function updateObjHud() {
   if (el._lastHtml !== html) { el.innerHTML = html; el._lastHtml = html; }
 }
 
+/* ─── LONG-TERM QUEST CHAIN ───────────────────────────────────────────────────
+   Replaces the per-wave objective picker. One quest at a time, harder
+   to complete. On completion the player picks an ENHANCEMENT card — a
+   permanent (for this run) power-up. Diablo-style: meaningful goals,
+   meaningful choices. */
+const QUEST_CHAIN = [
+  { id: "blood", name: "FIRST BLOOD",
+    desc: "Slay 25 of the dead",
+    init: () => ({ target: 25, progress: 0 }),
+    onKill: (s) => { s.progress++; },
+    progressText: (s) => s.progress + " / 25",
+    complete: (s) => s.progress >= 25 },
+  { id: "elite", name: "ELITE HUNTER",
+    desc: "Drop 3 elite undead (brute / charger / lunger / necro)",
+    init: () => ({ target: 3, progress: 0 }),
+    onKill: (s, z) => {
+      if (z && (z.type === "brute" || z.type === "charger" ||
+          z.type === "lunger" || z.type === "necro")) s.progress++;
+    },
+    progressText: (s) => s.progress + " / 3 elites",
+    complete: (s) => s.progress >= 3 },
+  { id: "boss1", name: "SLAYER OF KINGS",
+    desc: "Strike down the first boss",
+    init: () => ({ progress: 0 }),
+    onKill: (s, z) => { if (z && z.boss) s.progress = 1; },
+    progressText: (s) => s.progress ? "BOSS DOWN" : "the boss yet stirs",
+    complete: (s) => s.progress >= 1 },
+  { id: "stage2", name: "BEYOND THE FOG",
+    desc: "Reach stage 2",
+    init: () => ({ progress: 0 }),
+    onStage: (s, n) => { if (n >= 2) s.progress = 1; },
+    progressText: (s) => s.progress ? "BREACHED" : "stage 1 / 2",
+    complete: (s) => s.progress >= 1 },
+  { id: "century", name: "CENTURION",
+    desc: "Slay 100 zombies (run total)",
+    init: () => ({ target: 100, progress: 0 }),
+    onKill: (s) => { s.progress++; },
+    progressText: (s) => s.progress + " / 100",
+    complete: (s) => s.progress >= 100 },
+  { id: "tribunal", name: "TRIBUNAL",
+    desc: "Defeat 3 bosses",
+    init: () => ({ target: 3, progress: 0 }),
+    onKill: (s, z) => { if (z && z.boss) s.progress++; },
+    progressText: (s) => s.progress + " / 3 bosses",
+    complete: (s) => s.progress >= 3 },
+  { id: "stage3", name: "DEEPER STILL",
+    desc: "Reach stage 3",
+    init: () => ({ progress: 0 }),
+    onStage: (s, n) => { if (n >= 3) s.progress = 1; },
+    progressText: (s) => s.progress ? "BREACHED" : "stage 2 / 3",
+    complete: (s) => s.progress >= 1 },
+  { id: "millennium", name: "REAPER ETERNAL",
+    desc: "Slay 500 zombies (run total)",
+    init: () => ({ target: 500, progress: 0 }),
+    onKill: (s) => { s.progress++; },
+    progressText: (s) => s.progress + " / 500",
+    complete: (s) => s.progress >= 500 },
+  { id: "abyss", name: "INTO THE ABYSS",
+    desc: "Reach stage 10 — the Abyss itself",
+    init: () => ({ progress: 0 }),
+    onStage: (s, n) => { if (n >= 10) s.progress = 1; },
+    progressText: (s) => s.progress ? "WITHIN" : "the void calls",
+    complete: (s) => s.progress >= 1 },
+];
+// Enhancement choices offered when a quest completes. Pure stat lifts
+// so they work on every class. Three are rolled at random per pick.
+const QUEST_ENHANCEMENTS = [
+  { id: "vampire", name: "VAMPIRIC", glyph: "♥",
+    desc: "+5% Lifesteal — every hit returns life",
+    apply: (p) => { p.lifesteal = (p.lifesteal || 0) + 0.05; } },
+  { id: "bloodlust", name: "BLOODLUST", glyph: "⚔",
+    desc: "+15% Attack speed",
+    apply: (p) => { p.atkSpeed = (p.atkSpeed || 1) * 1.15;
+      if (typeof recalc === "function") recalc(); } },
+  { id: "juggernaut", name: "JUGGERNAUT", glyph: "🛡",
+    desc: "+25% Max HP",
+    apply: (p) => { p.perma.hp += Math.round(p.maxHp * 0.25);
+      recalc(); p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.25); } },
+  { id: "stormwalker", name: "STORMWALKER", glyph: "⚡",
+    desc: "+20% Movement speed",
+    apply: (p) => { p.perma.spd += 0.2; recalc(); } },
+  { id: "executioner", name: "EXECUTIONER", glyph: "✦",
+    desc: "+15% Critical chance",
+    apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
+  { id: "wrath", name: "WRATH", glyph: "✶",
+    desc: "+20% Damage",
+    apply: (p) => { p.perma.dmg += Math.round(p.dmg * 0.2); recalc(); } },
+  { id: "soulbound", name: "SOULBOUND", glyph: "✧",
+    desc: "Rage / Spirit fills 40% faster",
+    apply: (p) => { p.rageMul = (p.rageMul || 1) * 1.4; } },
+  { id: "stoneskin", name: "STONESKIN", glyph: "◊",
+    desc: "-15% Damage taken",
+    apply: (p) => { p.dmgTakenMul = (p.dmgTakenMul || 1) * 0.85; } },
+];
+function questPickEnhancements() {
+  const pool = QUEST_ENHANCEMENTS.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, 3);
+}
+function startNextQuest() {
+  if (!player) return;
+  if (player.questIdx == null) player.questIdx = 0;
+  if (player.questIdx >= QUEST_CHAIN.length) {
+    player.activeQuest = null; return;
+  }
+  const template = QUEST_CHAIN[player.questIdx];
+  player.activeQuest = { template, state: template.init(), won: false };
+}
+function questOnKill(z) {
+  if (!player || !player.activeQuest) return;
+  const q = player.activeQuest;
+  if (q.won) return;
+  if (q.template.onKill) q.template.onKill(q.state, z);
+  if (q.template.complete(q.state)) { q.won = true; questComplete(); }
+}
+function questOnStage(n) {
+  if (!player || !player.activeQuest) return;
+  const q = player.activeQuest;
+  if (q.won) return;
+  if (q.template.onStage) q.template.onStage(q.state, n);
+  if (q.template.complete(q.state)) { q.won = true; questComplete(); }
+}
+function questComplete() {
+  if (!player || !player.activeQuest) return;
+  const q = player.activeQuest;
+  banner(q.template.name + " — COMPLETE", "CHOOSE YOUR REWARD");
+  Sound.levelup && Sound.levelup();
+  screenFlash("#fff8dc", 0.5); shake(0.6);
+  if (Meta && Meta.awardShards) Meta.awardShards(60, "QUEST");
+  openEnhancementPicker();
+}
+// Renders the live quest chip top-centre (reuses #objHud div + CSS).
+function updateQuestHud() {
+  const el = document.getElementById("objHud");
+  if (!el) return;
+  if (!player || !player.activeQuest || state !== ST.PLAYING) {
+    el.classList.remove("show"); return;
+  }
+  const q = player.activeQuest;
+  el.classList.add("show");
+  const html = '<div class="objHudName">' + q.template.name + '</div>' +
+    '<div class="objHudProg">' + q.template.progressText(q.state) + '</div>';
+  if (el._lastHtml !== html) { el.innerHTML = html; el._lastHtml = html; }
+}
+// Diablo-style enhancement picker — overlay with 3 cards. Hides
+// itself + advances the quest index on pick.
+function openEnhancementPicker() {
+  let wrap = document.getElementById("enhPicker");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "enhPicker";
+    document.body.appendChild(wrap);
+  }
+  const picks = questPickEnhancements();
+  let cards = "";
+  for (let i = 0; i < picks.length; i++) {
+    const p = picks[i];
+    cards += '<div class="enhCard" data-idx="' + i + '">' +
+      '<div class="enhGlyph">' + (p.glyph || "✦") + '</div>' +
+      '<div class="enhN">' + p.name + '</div>' +
+      '<div class="enhD">' + p.desc + '</div>' +
+      '</div>';
+  }
+  wrap.innerHTML = '<div class="enhCard-row">' + cards + '</div>';
+  wrap.classList.add("show");
+  // pause the world: time stops while picking
+  state = ST.CHOICE;
+  document.body.style.cursor = "default";
+  try { document.exitPointerLock(); } catch (e) {}
+  for (const card of wrap.querySelectorAll(".enhCard")) {
+    card.addEventListener("click", () => {
+      const i = +card.getAttribute("data-idx");
+      const pick = picks[i];
+      Sound.choose && Sound.choose();
+      try { pick.apply(player); } catch (e) {
+        console.warn("[enhancement] apply failed", e); }
+      banner("+" + pick.name, pick.desc);
+      wrap.classList.remove("show");
+      state = ST.PLAYING;
+      if (!isTouch) canvas.requestPointerLock();
+      // advance to the next quest in the chain
+      player.questIdx = (player.questIdx || 0) + 1;
+      startNextQuest();
+    }, { once: true });
+  }
+}
+
 /* ─── round-end popup ─── shown between waves so the player can spend
    accumulated stat points without dipping into a full character sheet.
    The big countdown is the focal point: 10 → 0, then the next wave begins
@@ -12595,7 +12913,7 @@ function openRoundPopup() {
   roundTimerPaused = false;
   UI.rpTitle.textContent = "WAVE " + wave + " CLEARED";
   renderRoundStats();
-  renderObjectivePicker(wave + 1);
+  // per-wave picker retired — long-term QUEST_CHAIN handles goals now
   UI.roundPopup.classList.remove("hidden");
   // pre-paint the big number so the player sees 10 the instant the popup opens
   UI.rpCountdown.textContent = ROUND_SECS;
@@ -12802,6 +13120,8 @@ function advanceLevel() {
   // shifting around them — paired with the fog/light retint above
   banner("STAGE " + level + " — " + stageTheme(level).name,
     level >= 10 ? "THE ABYSS BECKONS" : "BEGIN");
+  // tick the long-term quest chain on stage advance (BEYOND, ABYSS, etc.)
+  if (typeof questOnStage === "function") questOnStage(level);
   startWave(1);
 }
 function openAbilityChoice() {
@@ -13012,6 +13332,12 @@ function startGame(opts) {
     } else {
       Meta.applyOnNewRun();
       startWave(1);
+    }
+    // kick off the long-term quest chain — one chained quest at a time,
+    // each completion gives an enhancement card. Diablo-style progression.
+    if (player) {
+      player.questIdx = 0;
+      if (typeof startNextQuest === "function") startNextQuest();
     }
   } catch (e) {
     console.error("[startGame] setup failed:", e);
@@ -14842,8 +15168,7 @@ function update(dt) {
   Music.setIntensity(intent);
   Music.update(dt);
   updateToasts(dt);
-  waveObjectiveTick(dt);
-  updateObjHud();
+  updateQuestHud();
   flushVfxQueue();
 }
 
