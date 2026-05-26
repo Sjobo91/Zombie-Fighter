@@ -930,12 +930,14 @@
     justify-content: center; font-size: 20px; color: #fff; }
   .tbtn.cooling .tcd { display: flex; }
   .tbtn.cooling { color: #6b6660; }
-  /* action buttons — bottom-right, ~30% smaller, biggest is the attack */
-  #tb-atk { right: 22px; bottom: 22px; width: 86px; height: 86px;
-    font-size: 14px; }
-  #tb-smash { right: 116px; bottom: 60px; width: 64px; height: 64px; }
-  #tb-leap { right: 30px; bottom: 118px; width: 60px; height: 60px; }
-  #tb-ult { right: 96px; bottom: 138px; width: 58px; height: 58px;
+  /* action buttons. ATTACK is gone (twin-stick: right-thumb drag both
+     aims and fires now). SMASH / LEAP / ULT cluster at the right edge,
+     mid-height, so the right thumb can either tap a button or drag in
+     the bottom-right empty space for aim + attack. */
+  #tb-atk { display: none; }
+  #tb-smash { right: 22px; bottom: 60px; width: 70px; height: 70px; }
+  #tb-leap { right: 102px; bottom: 60px; width: 64px; height: 64px; }
+  #tb-ult { right: 22px; bottom: 144px; width: 64px; height: 64px;
     color: #ffd23a; }
   #qualityBtn { position: absolute; right: 12px; top: 12px; width: 46px;
     height: 30px; border-radius: 8px; font-size: 11px; }
@@ -11144,14 +11146,31 @@ function setupTouchControls() {
   base.addEventListener("touchend", joyEnd);
   base.addEventListener("touchcancel", joyEnd);
 
-  // ---- right thumb: drag empty space to look around ----
+  // ---- right thumb: drag empty space to AIM + ATTACK simultaneously ----
+  // Twin-stick layout per user request: left thumb runs, right thumb does
+  // BOTH camera rotation AND attacking. Touch on the right side of the
+  // screen starts attacking + drag rotates the camera. Lift to stop both.
+  // The dedicated ATTACK button is hidden on touch (right-drag covers it).
   let lookId = null, lookX = 0, lookY = 0;
+  let _lookAttack = false, _btnAttack = false;
+  function syncTouchAttack() {
+    const newVal = _lookAttack || _btnAttack;
+    if (newVal === touchAttackHeld) return;
+    touchAttackHeld = newVal;
+    if (newVal) {
+      if (state === ST.PLAYING) tryAttack();
+    } else {
+      if (player && player.drawing) releaseBowShot();
+      if (player && player.channeling) player.channeling = false;
+    }
+  }
   window.addEventListener("touchstart", (e) => {
     if (state !== ST.PLAYING || lookId !== null) return;
     for (const t of e.changedTouches) {
       const el = document.elementFromPoint(t.clientX, t.clientY);
       if (el && el.closest("#touchUI")) continue;
       lookId = t.identifier; lookX = t.clientX; lookY = t.clientY;
+      _lookAttack = true; syncTouchAttack();          // attack on touch
       break;
     }
   }, { passive: true });
@@ -11164,8 +11183,12 @@ function setupTouchControls() {
     }
   }, { passive: true });
   function lookEnd(e) {
-    for (const t of e.changedTouches)
-      if (t.identifier === lookId) lookId = null;
+    for (const t of e.changedTouches) {
+      if (t.identifier === lookId) {
+        lookId = null;
+        _lookAttack = false; syncTouchAttack();        // stop attacking
+      }
+    }
   }
   window.addEventListener("touchend", lookEnd);
   window.addEventListener("touchcancel", lookEnd);
@@ -11186,11 +11209,15 @@ function setupTouchControls() {
     el.addEventListener("touchend", up);
     el.addEventListener("touchcancel", up);
   }
+  // The dedicated ATTACK button is now redundant — right-thumb drag
+  // already attacks + aims. Hide it so the screen has more breathing
+  // room for the actual gameplay. The button is wired up too, just in
+  // case the user prefers the explicit tap; the CSS hides it by default.
+  const atkBtn = document.getElementById("tb-atk");
+  if (atkBtn) atkBtn.style.display = "none";
   btn("tb-atk",
-    () => { touchAttackHeld = true; if (state === ST.PLAYING) tryAttack(); },
-    () => { touchAttackHeld = false;
-      if (player && player.drawing) releaseBowShot();
-      if (player && player.channeling) player.channeling = false; });
+    () => { _btnAttack = true; syncTouchAttack(); },
+    () => { _btnAttack = false; syncTouchAttack(); });
   btn("tb-smash", () => { if (state === ST.PLAYING) trySmash(); });
   btn("tb-leap", () => { if (state === ST.PLAYING) tryDash(); });
   btn("tb-ult", () => { if (state === ST.PLAYING) tryUltimate(); });
