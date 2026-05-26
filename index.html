@@ -804,6 +804,17 @@
     font-weight: 800; margin-top: 3px; letter-spacing: 1px; }
   body.touch #objHud { top: 56px; padding: 6px 12px; min-width: 160px; }
   body.touch #objHud .objHudProg { font-size: 13px; }
+  /* death cinematic overlay — desaturated dark vignette fades in over
+     ~1.4s as the hero falls. Pointer-events none so it never blocks
+     input on the next run (defensive). */
+  #deathFade { position: fixed; inset: 0; z-index: 4;
+    background: radial-gradient(ellipse at center,
+      rgba(20,8,8,0.35) 0%, rgba(8,4,4,0.78) 70%, rgba(0,0,0,0.92) 100%);
+    backdrop-filter: grayscale(0.85) brightness(0.55);
+    -webkit-backdrop-filter: grayscale(0.85) brightness(0.55);
+    opacity: 0; transition: opacity 1.4s ease-in;
+    pointer-events: none; }
+  #deathFade.show { opacity: 1; }
   body.touch #rpTitle { font-size: 18px; }
   body.touch .rpRow { padding: 7px 10px; }
   body.touch .rpRow .sbtn { width: 36px; height: 36px; font-size: 21px; }
@@ -1144,6 +1155,11 @@
     <div class="blink" id="over-again" style="visibility:hidden">
       CLICK TO RISE AGAIN</div>
   </div>
+
+  <!-- death cinematic overlay — fades in over 1.4s as the hero falls. A
+       plain DOM div is far more reliable than a canvas filter for this
+       (no browser quirks, no transition leaks into gameplay). -->
+  <div id="deathFade"></div>
 
   <div id="roundPopup" class="overlay hidden">
     <div class="rpCard">
@@ -12985,10 +13001,12 @@ function startGame(opts) {
   }
   UI.title.classList.add("hidden");
   UI.over.classList.add("hidden");
-  // clear the death cinematic's desaturate/dim canvas filter so the
-  // new run starts looking normal
-  canvas.style.transition = "filter 0.4s ease-out";
-  canvas.style.filter = "";
+  // HARD-clear the death cinematic overlay + (legacy) canvas filter so
+  // a fresh run is never dimmed by leftover state.
+  const dfd = document.getElementById("deathFade");
+  if (dfd) dfd.classList.remove("show");
+  canvas.style.transition = "none";
+  canvas.style.filter = "none";
   crosshairEl.style.display = "block";
   document.body.style.cursor = "none";
   state = ST.PLAYING;
@@ -12999,13 +13017,12 @@ function gameOver() {
   if (player) { player.drawing = false; player.drawT = 0; }
   state = ST.GAMEOVER; gameOverT = 0; shake(2.0);
   Sound.death && Sound.death();
-  // ── CINEMATIC ── the most important moment in a roguelike. Push
-  // the canvas into a desaturated half-bright "last breath" look,
-  // and the loop will slow time to a crawl for ~2.5s before the
-  // YOU FELL overlay slides in. Filter applied via CSS so the GPU
-  // does the desaturation, no JS frame cost.
-  canvas.style.transition = "filter 1.4s ease-in";
-  canvas.style.filter = "saturate(0.15) brightness(0.5) contrast(1.1)";
+  // ── CINEMATIC ── the most important moment in a roguelike. Fade in
+  // a desaturated DOM overlay over the canvas. Using a div instead of
+  // a canvas CSS filter avoids browser quirks where the filter would
+  // sometimes persist into the next run.
+  const dfd = document.getElementById("deathFade");
+  if (dfd) dfd.classList.add("show");
   // a few extra blood-splat particles + a low groan layer to sell
   // the moment as the hero falls
   if (player) {
