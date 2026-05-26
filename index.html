@@ -5633,19 +5633,45 @@ const pPos = new Float32Array(PCOUNT * 3);
 const pCol = new Float32Array(PCOUNT * 3);
 for (let i = 0; i < PCOUNT; i++) {
   pPos[i*3+1] = -999;
-  pState.push({ vx: 0, vy: 0, vz: 0, age: 0, life: 0, grav: 1 });
+  // s.fric = per-particle friction. Default 0.92 (heavy decay, good for
+  // blood/gibs that should fall + stop). Flame stream particles get
+  // 0.995 so they actually BLAST forward instead of stopping in mid-air.
+  pState.push({ vx: 0, vy: 0, vz: 0, age: 0, life: 0,
+    grav: 1, fric: 0.92 });
 }
 pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
 pGeo.setAttribute("color", new THREE.BufferAttribute(pCol, 3));
+// CIRCULAR particle texture — without this Three.js renders Points as
+// flat SQUARES which look like Minecraft blocks, not fire. A small
+// radial-gradient canvas gives every particle a soft round silhouette.
+const partTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 32;
+  const g = c.getContext("2d");
+  const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0,    "rgba(255,255,255,1)");
+  gr.addColorStop(0.35, "rgba(255,255,255,0.75)");
+  gr.addColorStop(1,    "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+  return new THREE.CanvasTexture(c);
+})();
+// Normal blending (not additive) so blood spatter stays readable on
+// both dark grass and bright cobblestone. The circular map alone takes
+// care of "no more square Minecraft particles" — the round silhouette
+// + dark-red palette already reads as fire without bloom additive.
 const pPoints = new THREE.Points(pGeo, new THREE.PointsMaterial({
-  size: 0.44, vertexColors: true, transparent: true, opacity: 0.95,
-  depthWrite: false, sizeAttenuation: true }));
+  size: 0.65, vertexColors: true, transparent: true, opacity: 0.95,
+  depthWrite: false, sizeAttenuation: true,
+  map: partTex, alphaTest: 0.05 }));
 pPoints.frustumCulled = false;
 scene.add(pPoints);
 const _pc = new THREE.Color();
 function spawnParts(x, y, z, n, opt) {
   opt = opt || {};
   const sp = opt.speed || 9, life = opt.life || 0.55, up = opt.up || 0;
+  // opt.fric lets the caller override the friction-per-frame coefficient.
+  // Default 0.92 = "blood / gibs that fall + stop quickly". The flame
+  // stream calls with 0.995 so the fire actually flies forward.
+  const fric = opt.fric == null ? 0.92 : opt.fric;
   _pc.set(opt.color == null ? 0x7c1109 : opt.color);
   for (let i = 0; i < n; i++) {
     const idx = pCursor; pCursor = (pCursor + 1) % PCOUNT;
@@ -5656,6 +5682,7 @@ function spawnParts(x, y, z, n, opt) {
     s.vy = Math.sin(el) * sp * rand(0.3, 1) + up;
     s.age = 0; s.life = life * rand(0.7, 1.2);
     s.grav = opt.grav == null ? 1 : opt.grav;
+    s.fric = fric;
     pPos[idx*3] = x; pPos[idx*3+1] = y; pPos[idx*3+2] = z;
     pCol[idx*3] = _pc.r; pCol[idx*3+1] = _pc.g; pCol[idx*3+2] = _pc.b;
   }
@@ -5666,7 +5693,11 @@ function updateParts(dt) {
     if (s.age >= s.life) continue;
     s.age += dt;
     if (s.age >= s.life) { pPos[i*3+1] = -999; continue; }
-    s.vx *= 0.92; s.vz *= 0.92;
+    // per-particle friction (default 0.92 = blood-stopping, ~0.995 =
+    // flame-flying). Without this the flame stream stopped 5 yards out
+    // and the player could outrun it.
+    const f = s.fric || 0.92;
+    s.vx *= f; s.vz *= f;
     s.vy = s.vy * 0.96 - 22 * s.grav * dt;
     pPos[i*3]   += s.vx * dt;
     pPos[i*3+1] += s.vy * dt;
@@ -8427,6 +8458,8 @@ function spawnFlamePart(x, y, z, vx, vy, vz, life, color) {
   s.vx = vx; s.vy = vy; s.vz = vz;
   s.age = 0; s.life = life;
   s.grav = -0.15;                 // slight upward float — flames lick up
+  s.fric = 0.995;                 // BLAST forward — minimal friction so
+                                  // the stream actually flies, not stops
   pPos[idx*3]   = x;
   pPos[idx*3+1] = y;
   pPos[idx*3+2] = z;
@@ -8465,46 +8498,47 @@ function wizardChannelTick(dt) {
   const NBODY  = lowQ ? 14 : 28;   // dense orange flame body
   const NSMOKE = lowQ ? 3  : 6;    // dim red/smoke wisps trailing
   const NEMBER = lowQ ? 2  : 5;    // sparking embers that curl up
-  // CORE — short-lived, fast, narrow spread. DARK RED-ORANGE source
-  // (no more white-cream pale stuff that washed out as "beige sparks").
+  // CORE — fast, narrow, DEEP RED-ORANGE. Speed + life bumped so the
+  // jet actually crosses the full 22-unit channel range. The new low-
+  // friction (0.995) per particle keeps the velocity 90% intact over
+  // life, so 38 unit/sec × 0.6s ≈ 23 units travelled. The player can't
+  // outrun the flame anymore.
   for (let i = 0; i < NCORE; i++) {
-    const sp = rand(22, 32);
-    const sa = rand(-0.16, 0.16);                       // narrow cone
-    const lat = rand(-0.8, 0.8);                        // sideways jitter
+    const sp = rand(36, 50);
+    const sa = rand(-0.14, 0.14);                       // narrow cone
+    const lat = rand(-0.7, 0.7);                        // sideways jitter
     const yJit = rand(-0.3, 0.45);
     const vx = (Math.sin(e.aim + sa)) * sp + perpX * lat * 4;
     const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 4;
     spawnFlamePart(mx + perpX * lat * 0.35, my + yJit,
       mz + perpZ * lat * 0.35,
       vx, rand(0, 1.6), vz,
-      rand(0.20, 0.36), pick([0xff5a18, 0xff7a28, 0xff3a18, 0xff8a30]));
+      rand(0.45, 0.65), pick([0xff5a18, 0xff7a28, 0xff3a18, 0xff8a30]));
   }
-  // BODY — the bulk of the flame; DEEP RED to mid-orange so the stream
-  // reads as actual fire instead of pale sparks.
+  // BODY — the bulk of the flame; DEEP RED to mid-orange.
   for (let i = 0; i < NBODY; i++) {
-    const sp = rand(13, 24);
-    const sa = rand(-CHANNEL_HALF_ARC * 0.6, CHANNEL_HALF_ARC * 0.6);
-    const lat = rand(-2.2, 2.2);
+    const sp = rand(26, 40);
+    const sa = rand(-CHANNEL_HALF_ARC * 0.55, CHANNEL_HALF_ARC * 0.55);
+    const lat = rand(-1.8, 1.8);
     const yJit = rand(-0.7, 1.0);
     const vx = (Math.sin(e.aim + sa)) * sp + perpX * lat * 2;
     const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 2;
     spawnFlamePart(mx + perpX * lat * 0.18, my + yJit,
       mz + perpZ * lat * 0.18,
       vx, rand(0.7, 3.0), vz,
-      rand(0.4, 0.75), pick([0xc8281e, 0xa01a14, 0xff3a18,
+      rand(0.55, 0.85), pick([0xc8281e, 0xa01a14, 0xff3a18,
         0xff5a18, 0xe04020]));
   }
-  // SMOKE — VERY dark red-brown / near black so it reads as charred
-  // smoke behind the fire, not as more beige sparkle.
+  // SMOKE — VERY dark red-brown / near black, slower trailing edge.
   for (let i = 0; i < NSMOKE; i++) {
-    const sp = rand(5, 10);
+    const sp = rand(14, 22);
     const sa = rand(-CHANNEL_HALF_ARC, CHANNEL_HALF_ARC);
-    const lat = rand(-3.0, 3.0);
+    const lat = rand(-2.4, 2.4);
     const vx = (Math.sin(e.aim + sa)) * sp + perpX * lat * 1.5;
     const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 1.5;
     spawnFlamePart(mx, my + rand(-0.3, 1.0),
       mz, vx, rand(0.8, 2.2), vz,
-      rand(0.7, 1.0), pick([0x3a1410, 0x281008, 0x180604]));
+      rand(0.85, 1.15), pick([0x3a1410, 0x281008, 0x180604]));
   }
   // EMBERS — dark orange sparks that curl up. Keep these slightly brighter
   // so they read as live cinders against the dark-red body.
