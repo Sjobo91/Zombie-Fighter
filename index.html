@@ -10444,10 +10444,15 @@ function startWave(n) {
   // Wave-1 fallback: the round popup hasn't fired yet, so no objective
   // has been chosen. Auto-assign the simplest objective (REAPER) so the
   // HUD chip + win-condition still work from the very first wave.
-  if (player && (!player.waveObjective || player.waveObjective.wave !== n)) {
-    const fallback = WAVE_OBJECTIVES[0];
-    setWaveObjective(fallback, n);
-  }
+  // Wrapped defensively — a bug here must NEVER prevent the wave from
+  // starting (the player would be stuck on a title-orbit camera).
+  try {
+    if (typeof WAVE_OBJECTIVES !== "undefined" &&
+        WAVE_OBJECTIVES && WAVE_OBJECTIVES[0] && player &&
+        (!player.waveObjective || player.waveObjective.wave !== n)) {
+      setWaveObjective(WAVE_OBJECTIVES[0], n);
+    }
+  } catch (e) { console.warn("[wave-objective] init failed", e); }
   let count;
   // wave 1 is a softer opener now (was 78 → too many at once). It still
   // grows fast, so by wave 3-4 you're swarmed.
@@ -12979,37 +12984,38 @@ function prewarmZombieAssets() {
 function startGame(opts) {
   const snap = opts && opts.resume ? SaveLoad.read() : null;
   if (snap && snap.cls) chosenClass = snap.cls;     // class must match the save
-  prewarmZombieAssets();                            // shader-compile up-front
-  resetGame();
-  // resume path: paste the snapshot over the freshly-rebuilt player. The
-  // class match above keeps the visual + ability pool consistent.
-  if (snap) {
-    SaveLoad.applyTo(snap);
-    level = snap.stage || 1;
-    kills = snap.kills || 0; score = snap.score || 0;
-    totalDmg = snap.totalDmg || 0;
-    waveCountPrev = snap.waveCountPrev || 0;
-    // restoring the run also restores the world palette for that stage
-    applyStageTheme(level);
-    // the autosave fires AFTER a wave is cleared, so the next wave starts here
-    startWave((snap.wave || 0) + 1);
-    banner("Stage " + level + " — wave " + ((snap.wave || 0) + 1) + " resumes",
-      "WELCOME BACK");
-  } else {
-    Meta.applyOnNewRun();
-    startWave(1);
-  }
+  // FLIP TO PLAYING UP-FRONT — even if some later setup step throws an
+  // error, the player still has control. Camera stops orbiting, input
+  // works, the loop renders the world properly. Errors are logged.
+  state = ST.PLAYING;
   UI.title.classList.add("hidden");
   UI.over.classList.add("hidden");
-  // HARD-clear the death cinematic overlay + (legacy) canvas filter so
-  // a fresh run is never dimmed by leftover state.
   const dfd = document.getElementById("deathFade");
   if (dfd) dfd.classList.remove("show");
   canvas.style.transition = "none";
   canvas.style.filter = "none";
-  crosshairEl.style.display = "block";
+  if (crosshairEl) crosshairEl.style.display = "block";
   document.body.style.cursor = "none";
-  state = ST.PLAYING;
+  try {
+    prewarmZombieAssets();                          // shader-compile up-front
+    resetGame();
+    if (snap) {
+      SaveLoad.applyTo(snap);
+      level = snap.stage || 1;
+      kills = snap.kills || 0; score = snap.score || 0;
+      totalDmg = snap.totalDmg || 0;
+      waveCountPrev = snap.waveCountPrev || 0;
+      applyStageTheme(level);
+      startWave((snap.wave || 0) + 1);
+      banner("Stage " + level + " — wave " + ((snap.wave || 0) + 1) +
+        " resumes", "WELCOME BACK");
+    } else {
+      Meta.applyOnNewRun();
+      startWave(1);
+    }
+  } catch (e) {
+    console.error("[startGame] setup failed:", e);
+  }
   Sound.actx(); Audio_.apply(); Ambience.start(); Music.start();
   if (!isTouch) canvas.requestPointerLock();   // grab the mouse for mouse-look
 }
@@ -13122,6 +13128,11 @@ if (UI.btnNew) {
     SaveLoad.clear();                  // a "new game" wipes any old in-progress save
     UI.title.classList.add("hidden");
     UI.classSelect.classList.remove("hidden");
+    // Stop the title-orbit camera the moment we leave the title — if
+    // startGame() later fails partway, the user shouldn't be stuck
+    // watching a slow auto-orbit they can't control. ST.CHAR makes the
+    // loop idle-tick without animating the camera around the origin.
+    state = ST.CHAR;
   });
 }
 if (UI.btnForge) {
