@@ -4600,15 +4600,17 @@ function buildWizard() {
   const skin = mat(0xc89a72, 0.7), gold = metalMat(0xc9a23a, 0.55);
   const cloth = mat(0x1a1d3a, 1);
   const dark = mat(0x0a0810, 0.95);
-  // ARCANE GLOW — the wizard's signature blue is now actually emissive
-  // so the hood band, chest runes and shoulder studs cast their own
-  // light. Without this they read as "painted lines" not "magic glyphs".
+  // ARCANE GLOW — the wizard's signature blue, emissive but DIMMED from
+  // the earlier 2.2 intensity. The previous setting was so bright the
+  // wizard glowed like a Christmas tree and washed out the actual fire
+  // spell when casting. Lower intensity keeps the runes readable as
+  // glyphs without competing with the spell visuals.
   const arcane = new THREE.MeshStandardMaterial({
-    color: 0x9adfff, emissive: 0x6aaaff, emissiveIntensity: 2.2,
-    roughness: 0.35, metalness: 0.2 });
+    color: 0x6aaaff, emissive: 0x4a7ad8, emissiveIntensity: 0.95,
+    roughness: 0.4, metalness: 0.25 });
   const arcaneGold = new THREE.MeshStandardMaterial({
-    color: 0xffd06a, emissive: 0xe4a838, emissiveIntensity: 1.4,
-    roughness: 0.4, metalness: 0.5 });
+    color: 0xc89a3a, emissive: 0xa07020, emissiveIntensity: 0.7,
+    roughness: 0.5, metalness: 0.5 });
   // ══ legs — long robe; just feet sticking out the bottom ══
   const legs = [];
   for (const sx of [-0.34, 0.34]) {
@@ -8290,15 +8292,16 @@ function tryAttack() {
       player.channeling = true; player.channelT = 0;
       // IGNITE BURST — a real "fwoosh" the moment the stream opens. The
       // staff erupts, the ground lights up, the player feels the cast
-      // catch. Without this the channel just fades in and reads as weak.
+      // catch. DEEP RED palette matches the new flame look — no more
+      // pale yellow-white sparks that read as "dust".
       const dirX = Math.sin(player.aim), dirZ = Math.cos(player.aim);
       const my = (player.y || 0) + 2.0;
       const mx = player.x + dirX * 1.7, mz = player.z + dirZ * 1.7;
       spawnParts(mx, my, mz, lowQ ? 14 : 28,
-        { color: pick([0xff8a3a, 0xffd06a, 0xffae50, 0xffffff]),
+        { color: pick([0xff3a18, 0xff5a18, 0xc8281e, 0xa01a14]),
           speed: 22, up: 8, life: 0.5 });
-      flare(mx, my, mz, 7, 0xff8a3a, 0.4, 1);
-      flashLight(mx, my + 0.5, mz, 0.45, 0xff7a2a);
+      flare(mx, my, mz, 7, 0xff3a18, 0.4, 1);
+      flashLight(mx, my + 0.5, mz, 0.45, 0xff3a18);
       shake(0.35);
       Sound.tone && Sound.tone("sawtooth", 80, 200, 0.22, 0.12);
       Sound.tone && Sound.tone("triangle", 220, 140, 0.4, 0.16);
@@ -8462,7 +8465,8 @@ function wizardChannelTick(dt) {
   const NBODY  = lowQ ? 14 : 28;   // dense orange flame body
   const NSMOKE = lowQ ? 3  : 6;    // dim red/smoke wisps trailing
   const NEMBER = lowQ ? 2  : 5;    // sparking embers that curl up
-  // CORE — short-lived, fast, narrow spread
+  // CORE — short-lived, fast, narrow spread. DARK RED-ORANGE source
+  // (no more white-cream pale stuff that washed out as "beige sparks").
   for (let i = 0; i < NCORE; i++) {
     const sp = rand(22, 32);
     const sa = rand(-0.16, 0.16);                       // narrow cone
@@ -8473,9 +8477,10 @@ function wizardChannelTick(dt) {
     spawnFlamePart(mx + perpX * lat * 0.35, my + yJit,
       mz + perpZ * lat * 0.35,
       vx, rand(0, 1.6), vz,
-      rand(0.20, 0.36), pick([0xffffff, 0xfff2cc, 0xffe0a0, 0xffd070]));
+      rand(0.20, 0.36), pick([0xff5a18, 0xff7a28, 0xff3a18, 0xff8a30]));
   }
-  // BODY — the bulk of the flame; medium speed + life, wider cone
+  // BODY — the bulk of the flame; DEEP RED to mid-orange so the stream
+  // reads as actual fire instead of pale sparks.
   for (let i = 0; i < NBODY; i++) {
     const sp = rand(13, 24);
     const sa = rand(-CHANNEL_HALF_ARC * 0.6, CHANNEL_HALF_ARC * 0.6);
@@ -8486,10 +8491,11 @@ function wizardChannelTick(dt) {
     spawnFlamePart(mx + perpX * lat * 0.18, my + yJit,
       mz + perpZ * lat * 0.18,
       vx, rand(0.7, 3.0), vz,
-      rand(0.4, 0.75), pick([0xff8a3a, 0xff6a20, 0xff5a18,
-        0xffae50, 0xffc870]));
+      rand(0.4, 0.75), pick([0xc8281e, 0xa01a14, 0xff3a18,
+        0xff5a18, 0xe04020]));
   }
-  // SMOKE — slow, long-lived, dim. Drifts at the edges, sells "burn aftermath"
+  // SMOKE — VERY dark red-brown / near black so it reads as charred
+  // smoke behind the fire, not as more beige sparkle.
   for (let i = 0; i < NSMOKE; i++) {
     const sp = rand(5, 10);
     const sa = rand(-CHANNEL_HALF_ARC, CHANNEL_HALF_ARC);
@@ -8498,17 +8504,17 @@ function wizardChannelTick(dt) {
     const vz = (Math.cos(e.aim + sa)) * sp + perpZ * lat * 1.5;
     spawnFlamePart(mx, my + rand(-0.3, 1.0),
       mz, vx, rand(0.8, 2.2), vz,
-      rand(0.7, 1.0), pick([0x6a3a2a, 0x4a2a1c, 0x2a1a14]));
+      rand(0.7, 1.0), pick([0x3a1410, 0x281008, 0x180604]));
   }
-  // EMBERS — slow, lazy, curl upward. Use the regular particle path (with
-  // gravity flipped slightly) so they read as floating sparks
+  // EMBERS — dark orange sparks that curl up. Keep these slightly brighter
+  // so they read as live cinders against the dark-red body.
   for (let i = 0; i < NEMBER; i++) {
     const sa = rand(-CHANNEL_HALF_ARC * 0.8, CHANNEL_HALF_ARC * 0.8);
     const sp = rand(6, 12);
     const lat = rand(-1.4, 1.4);
     spawnParts(mx + perpX * lat * 0.4, my + rand(0, 0.4),
       mz + perpZ * lat * 0.4, 1,
-      { color: pick([0xffd06a, 0xffae50, 0xff8a3a, 0xffe0a0]),
+      { color: pick([0xff5a18, 0xff3a18, 0xff7a28]),
         speed: sp, up: rand(7, 11), grav: -0.35, life: rand(0.7, 1.1) });
   }
   // ── lighting + ground burn ── two visible cues per second so the
@@ -8520,7 +8526,7 @@ function wizardChannelTick(dt) {
   if ((fx & 3) === 0) {
     const stEnd = CHANNEL_RANGE * 0.65;
     flashLight(mx + dirX * stEnd, my + 1.2, mz + dirZ * stEnd,
-      0.35, 0xff6a1e);
+      0.35, 0xff3a18);                                  // deep red light
   }
   if ((fx & 7) === 0) {
     const sd = CHANNEL_RANGE * (0.35 + Math.random() * 0.45);
@@ -8531,7 +8537,7 @@ function wizardChannelTick(dt) {
     flare(mx + dirX * sd + rand(-0.8, 0.8),
       my + rand(-0.4, 0.8),
       mz + dirZ * sd + rand(-0.8, 0.8),
-      rand(3.5, 6), pick([0xffae50, 0xffd06a, 0xff8a3a]), 0.55);
+      rand(3.5, 6), pick([0xff5a18, 0xff3a18, 0xc8281e]), 0.55);
   }
   // subtle kinetic feedback while channelling — the stream pulls the
   // camera ever-so-slightly so the player feels recoil/force.
@@ -13804,21 +13810,21 @@ function updatePlayer(dt) {
       wizardChannelTick(dt);
     }
   }
-  // wizard — pulse the staff-torch hot orange while the channel is open,
-  // settle it back to the cool arcane blue when it closes. Sells the
-  // "this is a spell being CAST" feeling without needing extra meshes.
+  // wizard — pulse the staff-torch hot DEEP RED while the channel is
+  // open, settle to the cool arcane blue when it closes. Hot red better
+  // matches the new dark-red flame palette.
   if (e.obj && e.obj.userData && e.obj.userData.torch &&
       e.obj.userData.cls === "wizard") {
     const T = e.obj.userData.torch;
     if (e.channeling) {
       const pulse = 1 + Math.sin(clock * 28) * 0.18;
-      T.color.setHex(0xff8a3a);
-      T.intensity = lerp(T.intensity || 1.2, 4.6 * pulse, 0.4);
-      T.distance = 38;
+      T.color.setHex(0xff3a18);
+      T.intensity = lerp(T.intensity || 1.2, 3.6 * pulse, 0.4);
+      T.distance = 32;
     } else {
       T.color.setHex(0x6aaaff);
-      T.intensity = lerp(T.intensity || 1.2, 1.2, 0.18);
-      T.distance = 28;
+      T.intensity = lerp(T.intensity || 1.2, 1.0, 0.18);
+      T.distance = 26;
     }
   }
   // hunter — tick the bow draw while the button is held
