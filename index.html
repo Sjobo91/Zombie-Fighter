@@ -930,14 +930,15 @@
     justify-content: center; font-size: 20px; color: #fff; }
   .tbtn.cooling .tcd { display: flex; }
   .tbtn.cooling { color: #6b6660; }
-  /* action buttons. ATTACK is gone (twin-stick: right-thumb drag both
-     aims and fires now). SMASH / LEAP / ULT cluster at the right edge,
-     mid-height, so the right thumb can either tap a button or drag in
-     the bottom-right empty space for aim + attack. */
-  #tb-atk { display: none; }
-  #tb-smash { right: 22px; bottom: 60px; width: 70px; height: 70px; }
-  #tb-leap { right: 102px; bottom: 60px; width: 64px; height: 64px; }
-  #tb-ult { right: 22px; bottom: 144px; width: 64px; height: 64px;
+  /* Action buttons — bottom-right cluster. ATTACK is the big anchor in
+     the corner (tap to fire). Right-drag in the empty area ABOVE the
+     buttons ALSO aims + auto-attacks (twin-stick), so the player has
+     both a dedicated button AND the drag-shoot option. */
+  #tb-atk { right: 18px; bottom: 18px; width: 78px; height: 78px;
+    font-size: 13px; }
+  #tb-smash { right: 106px; bottom: 38px; width: 64px; height: 64px; }
+  #tb-leap { right: 30px; bottom: 110px; width: 60px; height: 60px; }
+  #tb-ult { right: 100px; bottom: 124px; width: 58px; height: 58px;
     color: #ffd23a; }
   #qualityBtn { position: absolute; right: 12px; top: 12px; width: 46px;
     height: 30px; border-radius: 8px; font-size: 11px; }
@@ -11209,12 +11210,9 @@ function setupTouchControls() {
     el.addEventListener("touchend", up);
     el.addEventListener("touchcancel", up);
   }
-  // The dedicated ATTACK button is now redundant — right-thumb drag
-  // already attacks + aims. Hide it so the screen has more breathing
-  // room for the actual gameplay. The button is wired up too, just in
-  // case the user prefers the explicit tap; the CSS hides it by default.
-  const atkBtn = document.getElementById("tb-atk");
-  if (atkBtn) atkBtn.style.display = "none";
+  // ATTACK button stays visible alongside the right-drag attack. Either
+  // path can fire — _lookAttack (drag) and _btnAttack (tap) are OR'd
+  // by syncTouchAttack() so the player can choose whichever feels better.
   btn("tb-atk",
     () => { _btnAttack = true; syncTouchAttack(); },
     () => { _btnAttack = false; syncTouchAttack(); });
