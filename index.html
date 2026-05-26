@@ -1786,6 +1786,7 @@ const Music = (() => {
   // Called from update() each frame with the current game state. The
   // intensity target is a function of (state, boss-alive, zombie-count).
   function setIntensity(target) { intensity = target; }
+  let _lastRate = -1;
   function update(dt) {
     intensityT = lerp(intensityT, intensity, Math.min(1, dt * 1.2));
     if (dir > 0) {
@@ -1799,10 +1800,16 @@ const Music = (() => {
     } else if (on) {
       audio.volume = TARGET_VOL * intensityT;
     }
-    // subtle tempo lift on boss waves — playbackRate up to 1.10 at peak
-    try {
-      audio.playbackRate = 0.92 + intensityT * 0.13;
-    } catch (e) {}
+    // subtle tempo lift on boss waves — playbackRate up to 1.10 at peak.
+    // MOBILE BROWSERS RE-BUFFER on every playbackRate change, which was
+    // a major stutter source. Only write when the rate changes by more
+    // than 0.02 — gives the same audible effect at a fraction of the
+    // re-buffer churn.
+    const newRate = 0.92 + intensityT * 0.13;
+    if (Math.abs(newRate - _lastRate) > 0.02) {
+      try { audio.playbackRate = newRate; _lastRate = newRate; }
+      catch (e) {}
+    }
   }
   function setVolume(v) {
     TARGET_VOL = 0.22 * v;
@@ -5661,10 +5668,14 @@ const partTex = (() => {
 // both dark grass and bright cobblestone. The circular map alone takes
 // care of "no more square Minecraft particles" — the round silhouette
 // + dark-red palette already reads as fire without bloom additive.
+// MOBILE: alphaTest is brutal on phone GPUs (early-z fail per-fragment
+// + branch). Drop it on touch; transparent + depthWrite:false already
+// handles the round silhouette without needing the discard shader path.
 const pPoints = new THREE.Points(pGeo, new THREE.PointsMaterial({
   size: 0.65, vertexColors: true, transparent: true, opacity: 0.95,
   depthWrite: false, sizeAttenuation: true,
-  map: partTex, alphaTest: 0.05 }));
+  map: partTex,
+  alphaTest: lowQ ? 0 : 0.05 }));
 pPoints.frustumCulled = false;
 scene.add(pPoints);
 const _pc = new THREE.Color();
@@ -8476,9 +8487,12 @@ function wizardChannelTick(dt) {
   const e = player;
   e.channelT += dt;
   e.channelTickT -= dt;
-  // slower tick (0.12s = ~8/sec) — still smooth, far less GC pressure
+  // PC: 0.12s tick (~8 Hz). MOBILE: 0.18s (~5.5 Hz). The visual
+  // density still reads as a continuous stream thanks to the per-
+  // particle low friction making them fly far, but each tick fires
+  // 40% fewer particle batches → way less stutter on phone GPUs.
   if (e.channelTickT > 0) return;
-  e.channelTickT = 0.12;
+  e.channelTickT = lowQ ? 0.18 : 0.12;
   e._channelFx = ((e._channelFx || 0) + 1) | 0;       // tick counter for FX
   const dirX = Math.sin(e.aim), dirZ = Math.cos(e.aim);
   const warriorBase = P.baseDmg * (CLASSES.knight.dmgMul || 1) +
