@@ -15211,32 +15211,50 @@ function poseZombie(z, d, chillMul) {
       u.arms[0].rotation.x = -0.55 + Math.sin(z.walkP * 1.5) * 0.55;
       u.arms[1].rotation.x = -0.55 + Math.sin(z.walkP * 1.5 + Math.PI) * 0.55;
     } else if (z.state === "attack") {
-      // BITE / CLAW — arms thrust forward in a fast snap, then retract.
-      // Sin*18 cycles fast so the player sees an actual snap, not a hold.
-      const bite = 0.5 + 0.5 * Math.sin(z.t * 18);
-      u.arms[0].rotation.x = -1.05 - bite * 0.95;
-      u.arms[1].rotation.x = -1.05 - bite * 0.95;
-      // elbows extend FULLY when arms snap forward (claws reach for you)
+      // ── BITE / CLAW ── arms THRUST FORWARD into the player. They no
+      // longer raise up over the head (that was the old "zombie hands-
+      // up" pose). The bite cycle is fast (sin*16) so the player sees
+      // an active clawing animation, not a frozen stance.
+      const bite = 0.5 + 0.5 * Math.sin(z.t * 16);
+      // base reach is -0.4 (forward-down, "reaching for the player"),
+      // bite-peak adds -0.55 → -0.95 (more forward thrust, never up).
+      u.arms[0].rotation.x = -0.4 - bite * 0.55;
+      u.arms[1].rotation.x = -0.4 - bite * 0.55;
+      // elbows extend on the thrust, retract on the pullback
       const ao0 = u.arms[0].userData && u.arms[0].userData.lower;
       const ao1 = u.arms[1].userData && u.arms[1].userData.lower;
-      if (ao0) ao0.rotation.x = -0.10 + bite * -0.30;
-      if (ao1) ao1.rotation.x = -0.10 + bite * -0.30;
-      // head ducks forward as the jaw snaps shut on the player
-      if (u.head) u.head.rotation.x = bite * 0.55;
+      if (ao0) ao0.rotation.x = -0.5 + bite * 0.30;
+      if (ao1) ao1.rotation.x = -0.5 + bite * 0.30;
+      // head + jaw thrust forward as the bite snaps shut
+      if (u.head) u.head.rotation.x = bite * 0.45;
+      // ── LEGS keep shuffling during attack — they don't freeze. A
+      // slow weight-shift sells "still trying to grab you" instead of
+      // "polite zombie standing still". ──
+      if (u.legs && u.legs[0]) {
+        const shuffle = Math.sin(z.t * 6) * 0.22;
+        u.legs[0].rotation.x = shuffle;
+        u.legs[1].rotation.x = -shuffle;
+        const lo0 = u.legs[0].userData && u.legs[0].userData.lower;
+        const lo1 = u.legs[1].userData && u.legs[1].userData.lower;
+        if (lo0) lo0.rotation.x = -Math.max(0, shuffle) * 0.5;
+        if (lo1) lo1.rotation.x = -Math.max(0, -shuffle) * 0.5;
+      }
     } else if (moving) {
-      // RUNNING — arms PUMP in opposite phase to legs. Amplitude bumped
-      // so the silhouette reads as an all-out sprint, not a stroll.
-      const armSw = 1.25;
-      const ap0 = -0.10 - Math.sin(z.walkP) * armSw;
-      const ap1 = -0.10 + Math.sin(z.walkP) * armSw;
+      // ── RUNNING ── arms pump forward-back around a "reaching for
+      // the player" pose. Centred at -0.4 with ±0.5 swing → range
+      // -0.9 to +0.1, so the arms NEVER raise above horizontal. No
+      // more "classic zombie hands-up". Looks like a hungry sprinter.
+      const armSw = 0.5;
+      const ap0 = -0.4 - Math.sin(z.walkP) * armSw;
+      const ap1 = -0.4 + Math.sin(z.walkP) * armSw;
       u.arms[0].rotation.x = ap0;
       u.arms[1].rotation.x = ap1;
       // elbow bend opposite to swing — arm forward = elbow STRAIGHTER,
-      // arm back = elbow BENT 90° like a real sprinter pumping
+      // arm back = elbow BENT ~60° like a real sprinter pumping
       const ao0 = u.arms[0].userData && u.arms[0].userData.lower;
       const ao1 = u.arms[1].userData && u.arms[1].userData.lower;
-      if (ao0) ao0.rotation.x = -0.55 - Math.max(0, -Math.sin(z.walkP)) * 0.8;
-      if (ao1) ao1.rotation.x = -0.55 - Math.max(0,  Math.sin(z.walkP)) * 0.8;
+      if (ao0) ao0.rotation.x = -0.55 - Math.max(0, -Math.sin(z.walkP)) * 0.6;
+      if (ao1) ao1.rotation.x = -0.55 - Math.max(0,  Math.sin(z.walkP)) * 0.6;
       if (u.head) u.head.rotation.x =
         lerp(u.head.rotation.x || 0, 0.18, 0.22);
     } else {
