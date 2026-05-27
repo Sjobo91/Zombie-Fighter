@@ -852,6 +852,37 @@
   body.touch #objLabel .oN { font-size: 11px; }
   body.touch #objLabel .oT { font-size: 9px; }
   body.touch #objLabel .oP { font-size: 12px; }
+  /* ── PAUSE MENU (ESC) ── overlay with Resume / Restart Run. Stops
+     the world updating until the player picks something. */
+  #pauseMenu .pmCard { width: 360px; padding: 32px 28px 24px;
+    background: linear-gradient(180deg, #1c1828, #11101a);
+    border: 2px solid #6a4090; border-radius: 14px;
+    box-shadow: 0 18px 60px rgba(0,0,0,.7), 0 0 64px rgba(124,80,168,.18);
+    text-align: center; color: #f0e6d2; }
+  #pauseMenu .pmTitle { font-size: 38px; font-weight: 800;
+    letter-spacing: 8px; color: #e7b8ff;
+    text-shadow: 0 0 24px rgba(176,112,208,.6); }
+  #pauseMenu .pmSub { font-size: 12px; letter-spacing: 3px;
+    color: #857f72; margin-top: 4px; margin-bottom: 24px;
+    font-style: italic; }
+  #pauseMenu .pmBtns { display: flex; flex-direction: column;
+    gap: 10px; align-items: stretch; }
+  #pauseMenu .pmBtn { padding: 14px 24px; font-size: 14px;
+    font-weight: 800; letter-spacing: 3px; color: #f4d8a0;
+    cursor: pointer;
+    background: linear-gradient(180deg, #4c2a18, #2a160a);
+    border: 1px solid #c97a30; border-radius: 8px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+  #pauseMenu .pmBtn:hover { background: linear-gradient(180deg, #6c3e22, #381c0e);
+    color: #fff0c8; border-color: #f0cf72; }
+  #pauseMenu .pmBtnAlt { background: linear-gradient(180deg, #4a1a2a, #2a0a18);
+    color: #ffb8c8; border-color: #c0506a; }
+  #pauseMenu .pmBtnAlt:hover { background: linear-gradient(180deg, #6c243a, #381018);
+    color: #ffe0e8; border-color: #f06a8a; }
+  #pauseMenu .pmHint { font-size: 11px; letter-spacing: 2px;
+    color: #6f6a60; margin-top: 18px; }
+  body.touch #pauseMenu .pmCard { width: 280px; padding: 22px 18px 16px; }
+  body.touch #pauseMenu .pmTitle { font-size: 28px; letter-spacing: 6px; }
   /* death cinematic overlay — desaturated dark vignette fades in over
      ~1.4s as the hero falls. Pointer-events none so it never blocks
      input on the next run (defensive). */
@@ -1205,6 +1236,21 @@
     <div class="muted" id="over-stats"></div>
     <div class="blink" id="over-again" style="visibility:hidden">
       CLICK TO RISE AGAIN</div>
+  </div>
+
+  <!-- pause menu — opens on ESC during play. Resume returns to combat,
+       Restart Run kills the current run and sends the player back to
+       the title screen so they can pick a fresh class. -->
+  <div id="pauseMenu" class="overlay hidden">
+    <div class="pmCard">
+      <div class="pmTitle">PAUSED</div>
+      <div class="pmSub">Mortimer holds his breath</div>
+      <div class="pmBtns">
+        <button id="pmResume" class="pmBtn">RESUME</button>
+        <button id="pmRestart" class="pmBtn pmBtnAlt">RESTART RUN</button>
+      </div>
+      <div class="pmHint">ESC closes the menu</div>
+    </div>
   </div>
 
   <!-- death cinematic overlay — fades in over 1.4s as the hero falls. A
@@ -11354,6 +11400,15 @@ addEventListener("keydown", (e) => {
       !UI.forgeScreen.classList.contains("hidden")) {
     closeForge(); return;
   }
+  // ESC during play → open the pause menu (Resume / Restart Run).
+  // ESC again on the menu → resume.
+  if (e.code === "Escape") {
+    const pm = document.getElementById("pauseMenu");
+    if (pm && !pm.classList.contains("hidden")) {
+      resumeFromPause(); return;
+    }
+    if (state === ST.PLAYING) { openPauseMenu(); return; }
+  }
   if (state === ST.PLAYING) {
     if (e.code === "Space") { e.preventDefault(); tryDash(); }
     if (e.code === "KeyE") trySmash();
@@ -11364,6 +11419,50 @@ addEventListener("keydown", (e) => {
     if (e.code === "Digit1") detonateAnnihilator();
   }
 });
+function openPauseMenu() {
+  const pm = document.getElementById("pauseMenu");
+  if (!pm) return;
+  pm.classList.remove("hidden");
+  state = ST.CHOICE;            // any non-PLAYING state freezes the world tick
+  document.body.style.cursor = "default";
+  try { document.exitPointerLock(); } catch (e) {}
+}
+function resumeFromPause() {
+  const pm = document.getElementById("pauseMenu");
+  if (pm) pm.classList.add("hidden");
+  state = ST.PLAYING;
+  if (!isTouch) canvas.requestPointerLock();
+}
+function restartRun() {
+  // close pause menu + game-over overlay + round popup + any choice modal
+  const pm = document.getElementById("pauseMenu");
+  if (pm) pm.classList.add("hidden");
+  if (UI.over) UI.over.classList.add("hidden");
+  if (UI.roundPopup) UI.roundPopup.classList.add("hidden");
+  const dfd = document.getElementById("deathFade");
+  if (dfd) dfd.classList.remove("show");
+  // wipe the autosave — restart means full reset, no resume option
+  if (typeof SaveLoad !== "undefined" && SaveLoad.clear) SaveLoad.clear();
+  // back to title so the player picks class again. Meta shards from
+  // earned content STAY (only an actual death wipes them).
+  state = ST.TITLE;
+  if (UI.title) UI.title.classList.remove("hidden");
+  if (typeof refreshTitleMenu === "function") refreshTitleMenu();
+  if (crosshairEl) crosshairEl.style.display = "none";
+  document.body.style.cursor = "default";
+  try { document.exitPointerLock(); } catch (e) {}
+}
+// wire the pause-menu buttons once the page is ready
+(function wirePauseMenu() {
+  const r = document.getElementById("pmResume");
+  const rr = document.getElementById("pmRestart");
+  if (r) r.addEventListener("click", () => {
+    Sound.uiClick && Sound.uiClick(); resumeFromPause();
+  });
+  if (rr) rr.addEventListener("click", () => {
+    Sound.uiClick && Sound.uiClick(); restartRun();
+  });
+})();
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 addEventListener("mousemove", (e) => {
@@ -12502,17 +12601,12 @@ function drawMinimap() {
     ctx.beginPath(); ctx.arc(mx(z.x), mz(z.z), z.rare ? 3.2 : 2, 0, TAU);
     ctx.fill();
   }
-  // objective beacons — a bright ring + the kind in a single letter
-  for (const obj of objectives) {
-    if (obj.complete) continue;
-    const ox = mx(obj.x), oz = mz(obj.z);
-    const cHex = obj.kind === "clear" ? "#ff7a3a" :
-                 obj.kind === "bounty" ? "#c850a8" : "#6aaaff";
-    ctx.strokeStyle = cHex; ctx.lineWidth = 2.4;
-    ctx.beginPath(); ctx.arc(ox, oz, 6.5, 0, TAU); ctx.stroke();
-    ctx.fillStyle = cHex;
-    ctx.beginPath(); ctx.arc(ox, oz, 2.4, 0, TAU); ctx.fill();
-  }
+  // Objective markers are intentionally OMITTED from the minimap —
+  // per user request the player has to discover them by exploring. The
+  // in-world beacon pillar + on-screen #objLabel still tell the player
+  // what to do once they get within ~25yd, so they know WHY they're
+  // there as soon as they arrive. Finding the spot itself is the
+  // reward of looking around.
   // the ANNIHILATOR — a pulsing crimson diamond if not collected
   if (annihilator && !annihilator.held) {
     const ax = mx(annihilator.x), az = mz(annihilator.z);
