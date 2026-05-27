@@ -1786,30 +1786,35 @@ const Music = (() => {
   // Called from update() each frame with the current game state. The
   // intensity target is a function of (state, boss-alive, zombie-count).
   function setIntensity(target) { intensity = target; }
-  let _lastRate = -1;
+  let _lastVol = -1, _updT = 0;
   function update(dt) {
     intensityT = lerp(intensityT, intensity, Math.min(1, dt * 1.2));
+    // Throttle Music.update DOM work — runs at ~10 Hz instead of 60 Hz.
+    // The audio engine handles its own interpolation; we don't need to
+    // poke audio.volume 60 times per second. On mobile this alone cut
+    // a measurable chunk of per-frame cost.
+    _updT += dt;
+    let v = -1;
     if (dir > 0) {
       fadeT = Math.min(FADE, fadeT + dt);
-      audio.volume = (fadeT / FADE) * TARGET_VOL * intensityT;
+      v = (fadeT / FADE) * TARGET_VOL * intensityT;
       if (fadeT >= FADE) dir = 0;
     } else if (dir < 0) {
       fadeT = Math.min(FADE, fadeT + dt);
-      audio.volume = (1 - fadeT / FADE) * TARGET_VOL * intensityT;
+      v = (1 - fadeT / FADE) * TARGET_VOL * intensityT;
       if (fadeT >= FADE) { dir = 0; try { audio.pause(); } catch (e) {} }
     } else if (on) {
-      audio.volume = TARGET_VOL * intensityT;
+      v = TARGET_VOL * intensityT;
     }
-    // subtle tempo lift on boss waves — playbackRate up to 1.10 at peak.
-    // MOBILE BROWSERS RE-BUFFER on every playbackRate change, which was
-    // a major stutter source. Only write when the rate changes by more
-    // than 0.02 — gives the same audible effect at a fraction of the
-    // re-buffer churn.
-    const newRate = 0.92 + intensityT * 0.13;
-    if (Math.abs(newRate - _lastRate) > 0.02) {
-      try { audio.playbackRate = newRate; _lastRate = newRate; }
-      catch (e) {}
+    // Only commit the volume change every 0.1s OR if it changed by
+    // more than 0.04 (catches the fade-in / fade-out without spamming).
+    if (v >= 0 && (_updT >= 0.1 || Math.abs(v - _lastVol) > 0.04)) {
+      audio.volume = v; _lastVol = v; _updT = 0;
     }
+    // playbackRate tempo lift REMOVED — mobile browsers re-buffer on
+    // every change, and even with throttling the off-pitch playback
+    // sounded wrong to the user. Music stays at native speed; the
+    // intensity ramp comes from volume + the wave-clear sting instead.
   }
   function setVolume(v) {
     TARGET_VOL = 0.22 * v;
@@ -8512,7 +8517,7 @@ function wizardChannelTick(dt) {
   // counts roughly doubled — the channel reads as a WALL of fire now,
   // not a thin orange line. Mobile (lowQ) still gets a leaner version.
   const NCORE  = lowQ ? 6  : 14;   // bright white-hot at the mouth
-  const NBODY  = lowQ ? 14 : 28;   // dense orange flame body
+  const NBODY  = lowQ ? 28 : 128;  // DENSE flame body (user request 28→128)
   const NSMOKE = lowQ ? 3  : 6;    // dim red/smoke wisps trailing
   const NEMBER = lowQ ? 2  : 5;    // sparking embers that curl up
   // CORE — fast, narrow, DEEP RED-ORANGE. Speed + life bumped so the
@@ -15224,27 +15229,36 @@ function update(dt) {
   updateBolts(dt);
   updateFlares(dt); updateGibs(dt); updateScorch(dt); updateCracks(dt);
   updateSplats(dt);
-  updateScreenFlash(dt); updateFireflies(dt, clock); updateHaze(dt, clock);
+  updateScreenFlash(dt);
+  // MOBILE: skip the ambient eye-candy updates (fireflies + haze drift +
+  // occlusion fade). They're pure look-and-feel and not visible enough
+  // on a phone screen to justify the per-frame loops. Saves ~60+
+  // iterations per frame on mobile.
+  if (!lowQ) {
+    updateFireflies(dt, clock); updateHaze(dt, clock);
+    updateOcclusion();
+  }
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
-  updateCamera(dt); updateOcclusion();
+  updateCamera(dt);
   updateGrass(dt, clock);
   updateAmbient(dt, clock);
   updateDmgNums(dt);
   Ambience.update(dt);
-  // Dynamic music intensity — boss alive = ramp HIGH, lots of zombies =
-  // medium-high, otherwise normal. Player HP <30% adds a tense lift.
-  let intent = 1.0;
-  let bossAlive = false;
-  for (let i = 0; i < zombies.length; i++) {
-    if (zombies[i].boss && zombies[i].state !== "die") {
-      bossAlive = true; break;
+  // Music intensity — compute every other frame on mobile.
+  if (!lowQ || ((clock * 1000) | 0) % 2 === 0) {
+    let intent = 1.0;
+    let bossAlive = false;
+    for (let i = 0; i < zombies.length; i++) {
+      if (zombies[i].boss && zombies[i].state !== "die") {
+        bossAlive = true; break;
+      }
     }
+    if (bossAlive) intent = 1.55;
+    else if (zombiesAlive >= 22) intent = 1.18;
+    if (player && player.alive && player.hp < player.maxHp * 0.3)
+      intent += 0.18;
+    Music.setIntensity(intent);
   }
-  if (bossAlive) intent = 1.55;
-  else if (zombiesAlive >= 22) intent = 1.18;
-  if (player && player.alive && player.hp < player.maxHp * 0.3)
-    intent += 0.18;
-  Music.setIntensity(intent);
   Music.update(dt);
   updateToasts(dt);
   updateQuestHud();
