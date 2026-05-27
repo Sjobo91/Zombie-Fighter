@@ -827,6 +827,31 @@
   body.touch #enhPicker .enhGlyph { font-size: 32px; }
   body.touch #enhPicker .enhN { font-size: 13px; }
   body.touch #enhPicker .enhD { font-size: 10px; }
+  /* ── floating world-objective label ── appears when the hero is
+     within ~25yd of an objective. Tells you the NAME, WHAT TO DO,
+     and live PROGRESS so you don't have to glance at the HUD chip. */
+  #objLabel { position: fixed; left: 50%; top: 40%;
+    transform: translate(-50%, -100%);
+    pointer-events: none; opacity: 0;
+    transition: opacity .25s;
+    background: linear-gradient(180deg,
+      rgba(28,18,14,.92), rgba(14,10,8,.92));
+    border: 1px solid #c97a30; border-radius: 8px;
+    padding: 8px 16px; min-width: 200px; max-width: 320px;
+    text-align: center; color: #f0e6d2;
+    font-size: 12px; letter-spacing: 1px;
+    box-shadow: 0 4px 22px rgba(0,0,0,.65); z-index: 6; }
+  #objLabel.show { opacity: 1; }
+  #objLabel .oN { font-size: 13px; font-weight: 800;
+    letter-spacing: 2px; color: #f0cf72; }
+  #objLabel .oT { font-size: 10px; color: #b0a890;
+    margin-top: 3px; font-style: italic; }
+  #objLabel .oP { font-size: 14px; font-weight: 800;
+    color: #fff8dc; margin-top: 4px; letter-spacing: 1px; }
+  body.touch #objLabel { min-width: 150px; padding: 6px 12px; }
+  body.touch #objLabel .oN { font-size: 11px; }
+  body.touch #objLabel .oT { font-size: 9px; }
+  body.touch #objLabel .oP { font-size: 12px; }
   /* death cinematic overlay — desaturated dark vignette fades in over
      ~1.4s as the hero falls. Pointer-events none so it never blocks
      input on the next run (defensive). */
@@ -6926,48 +6951,261 @@ function pickObjectiveSpot() {
   return { x: rand(-ARENA + 24, ARENA - 24),
            z: rand(-ARENA + 24, ZSHORE - 24) };
 }
-function spawnObjective(kind) {
-  const spot = pickObjectiveSpot();
-  const col = OBJ_COLOR[kind] || 0xffffff;
-  const ry = walkHeight(spot.x, spot.z);
-  const g = new THREE.Group();
-  // ground ring
+// Themed objective scenes. Each kind builds an actual little vignette
+// at the objective spot — a cursed altar, a torn battleground, a
+// treasure shrine — so the player walks up to a SCENE that tells them
+// "I'm supposed to do something here", not just a circle on the floor.
+function buildObjectiveScene(kind, col) {
+  const root = new THREE.Group();
+  const anim = { core: null, ring: null, beacon: null,
+    altar: null, runeRing: null, lid: null, banners: [],
+    sparkles: [], altarRunes: [] };
+  // ── ground ring (kept — sells "this is a zone") ──
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(7.6, 8.6, 36),
     new THREE.MeshBasicMaterial({ color: col, transparent: true,
       opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2;
-  ring.position.set(0, 0.2, 0); g.add(ring);
-  // pillar of light
+  ring.position.set(0, 0.2, 0); root.add(ring);
+  anim.ring = ring;
+  // ── pillar of light + halo core ──
   const beacon = new THREE.Mesh(
     new THREE.CylinderGeometry(0.6, 1.4, 50, 8, 1, true),
     new THREE.MeshBasicMaterial({ color: col, transparent: true,
       opacity: 0.32, depthWrite: false, side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending }));
-  beacon.position.y = 25; g.add(beacon);
-  // core glow sprite — slightly larger to compensate for the dropped
-  // PointLight (kept off to avoid the per-objective recompile storm)
+  beacon.position.y = 25; root.add(beacon);
+  anim.beacon = beacon;
   const core = new THREE.Sprite(new THREE.SpriteMaterial({
     map: flareTex, color: col, transparent: true, opacity: 0.95,
     depthWrite: false, blending: THREE.AdditiveBlending }));
-  core.scale.set(5.5, 5.5, 1); core.position.y = 3.6; g.add(core);
+  core.scale.set(5.5, 5.5, 1); core.position.y = 3.6; root.add(core);
+  anim.core = core;
+
+  if (kind === "clear") {
+    // ── CURSED ALTAR ── sacrificial stone slab with a glowing skull
+    // and a violet rune-ring at its base. Four corner braziers with
+    // crimson flames anchor the perimeter. Bone shards litter the
+    // ground. Dark mist rises from the altar.
+    const stone = mat(0x3a3a42, 0.95);
+    const dark  = mat(0x1a1612, 1);
+    const bone  = mat(0xc4b89a, 0.7);
+    // altar base
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(3.2, 1.0, 2.2), stone);
+    base.position.y = 0.5; base.castShadow = true; root.add(base);
+    // altar top slab
+    const top = new THREE.Mesh(
+      new THREE.BoxGeometry(3.6, 0.32, 2.6), stone);
+    top.position.y = 1.16; top.castShadow = true; root.add(top);
+    // SKULL on top — animated emissive that pulses
+    const skullMat = new THREE.MeshStandardMaterial({
+      color: 0xd4c8a8, emissive: 0xc850a8, emissiveIntensity: 1.2,
+      roughness: 0.6 });
+    const skull = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 9, 7), skullMat);
+    skull.position.y = 2.0; skull.scale.set(1, 1.1, 1.05);
+    skull.castShadow = true; root.add(skull);
+    anim.altar = skull;
+    // skull jaw
+    const jaw = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.34, 0.4), bone);
+    jaw.position.set(0, 1.62, 0.36); root.add(jaw);
+    // eye sockets (small dark spheres set INTO the skull)
+    for (const sx of [-0.18, 0.18]) {
+      const socket = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 6, 5),
+        new THREE.MeshBasicMaterial({ color: 0x080404 }));
+      socket.position.set(sx, 2.05, 0.45); root.add(socket);
+      const eyeGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: flareTex, color: col, transparent: true, opacity: 0.95,
+        depthWrite: false, blending: THREE.AdditiveBlending }));
+      eyeGlow.position.set(sx, 2.05, 0.52);
+      eyeGlow.scale.set(0.5, 0.5, 1); root.add(eyeGlow);
+    }
+    // VIOLET RUNE RING under the altar — rotates per frame
+    const runeRing = new THREE.Mesh(
+      new THREE.TorusGeometry(3.4, 0.16, 5, 24),
+      new THREE.MeshStandardMaterial({ color: col,
+        emissive: col, emissiveIntensity: 1.6, roughness: 0.5 }));
+    runeRing.position.y = 0.08;
+    runeRing.rotation.x = Math.PI / 2;
+    root.add(runeRing);
+    anim.runeRing = runeRing;
+    // 4 corner braziers — pillar + flame cone
+    for (const c of [[-4.2, -3.6], [4.2, -3.6],
+                     [-4.2, 3.6],  [4.2, 3.6]]) {
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.24, 2.6, 6), dark);
+      post.position.set(c[0], 1.3, c[1]); root.add(post);
+      const flame = new THREE.Mesh(
+        new THREE.ConeGeometry(0.55, 1.4, 7),
+        new THREE.MeshStandardMaterial({ color: col,
+          emissive: col, emissiveIntensity: 1.5,
+          transparent: true, opacity: 0.9 }));
+      flame.position.set(c[0], 3.2, c[1]); root.add(flame);
+      anim.altarRunes.push(flame);
+    }
+    // bone shards scattered (HD only — keep mobile light)
+    if (!lowQ) for (let i = 0; i < 7; i++) {
+      const a = rand(0, TAU), d = rand(2.8, 5.5);
+      const sh = new THREE.Mesh(
+        new THREE.BoxGeometry(rand(0.25, 0.5), 0.12,
+          rand(0.15, 0.35)), bone);
+      sh.position.set(Math.cos(a) * d, 0.18, Math.sin(a) * d);
+      sh.rotation.set(rand(-0.3, 0.3), rand(0, TAU), rand(-0.3, 0.3));
+      root.add(sh);
+    }
+  } else if (kind === "bounty") {
+    // ── REVENANT BATTLEGROUND ── torn banners on broken poles, swords
+    // stuck in the dirt, a ritual circle waiting for the hunt. The
+    // revenant itself spawns separately and stalks within the ring.
+    const stone = mat(0x3a3a42, 0.95);
+    const dark  = mat(0x1a1612, 1);
+    const wood  = mat(0x4a2e1a, 0.95);
+    const steel = metalMat(0xb0b4bc, 0.6);
+    // CRIMSON RUNE RING — wider, faster spinning than the clear one
+    const runeRing = new THREE.Mesh(
+      new THREE.TorusGeometry(5.5, 0.18, 5, 30),
+      new THREE.MeshStandardMaterial({ color: col,
+        emissive: col, emissiveIntensity: 1.4, roughness: 0.5 }));
+    runeRing.position.y = 0.06;
+    runeRing.rotation.x = Math.PI / 2;
+    root.add(runeRing);
+    anim.runeRing = runeRing;
+    // 4 torn banners on broken poles around the perimeter
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * TAU + Math.PI / 4;
+      const dx = Math.cos(a) * 5.5, dz = Math.sin(a) * 5.5;
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.10, 0.13, 4.6, 6), wood);
+      pole.position.set(dx, 2.2, dz); root.add(pole);
+      const banner = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.4, 2.2),
+        new THREE.MeshStandardMaterial({ color: col,
+          side: THREE.DoubleSide, transparent: true, opacity: 0.85,
+          roughness: 1 }));
+      banner.position.set(dx + 0.7, 3.0, dz);
+      banner.rotation.y = a + Math.PI / 2;
+      root.add(banner);
+      anim.banners.push(banner);
+    }
+    // 3 swords stuck blade-down in the ground — old fallen warriors
+    for (let i = 0; i < 3; i++) {
+      const a = rand(0, TAU), d = rand(2.5, 4.0);
+      const blade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 1.8, 0.05), steel);
+      blade.position.set(Math.cos(a) * d, 0.9, Math.sin(a) * d);
+      blade.rotation.x = rand(-0.2, 0.2);
+      blade.rotation.z = rand(-0.18, 0.18);
+      blade.castShadow = true; root.add(blade);
+      const hilt = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.12, 0.16),
+        metalMat(0xc9a23a, 0.6));
+      hilt.position.set(Math.cos(a) * d, 1.78,
+        Math.sin(a) * d); root.add(hilt);
+    }
+    // a few weathered helms / debris piles
+    if (!lowQ) for (let i = 0; i < 3; i++) {
+      const a = rand(0, TAU), d = rand(2.5, 5.0);
+      const helm = new THREE.Mesh(
+        new THREE.SphereGeometry(0.38, 8, 6,
+          0, TAU, 0, Math.PI * 0.6), metalMat(0x4a4a55, 0.5));
+      helm.position.set(Math.cos(a) * d, 0.36, Math.sin(a) * d);
+      helm.rotation.z = rand(-0.6, 0.6); root.add(helm);
+    }
+  } else if (kind === "cache") {
+    // ── TREASURE SHRINE ── stone arch with a chest sitting under it.
+    // Gold sparkles drift above the chest. The lid jitters periodically
+    // like something inside is alive. Two side pillars with rune-glow.
+    const stone = mat(0x6a6660, 0.9);
+    const wood  = mat(0x4a2e1a, 0.95);
+    const goldM = new THREE.MeshStandardMaterial({
+      color: 0xffd06a, emissive: 0xc97a30, emissiveIntensity: 0.9,
+      metalness: 0.7, roughness: 0.4 });
+    // arch pillars
+    for (const sx of [-2.2, 2.2]) {
+      const pillar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 5.4, 0.7), stone);
+      pillar.position.set(sx, 2.7, 0);
+      pillar.castShadow = true; root.add(pillar);
+      // rune-glow rings around each pillar
+      const glowR = new THREE.Mesh(
+        new THREE.TorusGeometry(0.5, 0.08, 5, 14),
+        new THREE.MeshStandardMaterial({ color: col,
+          emissive: col, emissiveIntensity: 1.4, roughness: 0.5 }));
+      glowR.position.set(sx, 2.7, 0);
+      root.add(glowR);
+    }
+    // arch lintel
+    const lintel = new THREE.Mesh(
+      new THREE.BoxGeometry(5.4, 0.7, 0.9), stone);
+    lintel.position.y = 5.7; lintel.castShadow = true; root.add(lintel);
+    // CHEST — wooden box with gold trim
+    const chestBody = new THREE.Mesh(
+      new THREE.BoxGeometry(2.0, 1.0, 1.2), wood);
+    chestBody.position.y = 0.5; chestBody.castShadow = true;
+    root.add(chestBody);
+    // chest trim bands (gold)
+    for (const ry of [0.18, 0.82]) {
+      const band = new THREE.Mesh(
+        new THREE.BoxGeometry(2.1, 0.08, 1.3), goldM);
+      band.position.y = ry; root.add(band);
+    }
+    // chest lid — animated, jitters
+    const lid = new THREE.Mesh(
+      new THREE.BoxGeometry(2.0, 0.4, 1.2), wood);
+    lid.position.set(0, 1.18, 0); root.add(lid);
+    anim.lid = lid;
+    // lid lock (gold)
+    const lock = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.4, 0.18), goldM);
+    lock.position.set(0, 1.18, 0.62); root.add(lock);
+    // 4 floating gold sparkles ABOVE the chest — animated bob
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * TAU;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: flareTex, color: 0xffd06a, transparent: true,
+        opacity: 0.9, depthWrite: false,
+        blending: THREE.AdditiveBlending }));
+      sp.scale.set(0.55, 0.55, 1);
+      sp.position.set(Math.cos(a) * 0.7, 2.0 + i * 0.15,
+        Math.sin(a) * 0.7);
+      sp.userData.dynamic = true;     // we animate position per-frame
+      sp.userData.phase = i * 1.57;
+      root.add(sp);
+      anim.sparkles.push(sp);
+    }
+  }
+  return { g: root, anim };
+}
+function spawnObjective(kind) {
+  const spot = pickObjectiveSpot();
+  const col = OBJ_COLOR[kind] || 0xffffff;
+  const ry = walkHeight(spot.x, spot.z);
+  const scene_ = buildObjectiveScene(kind, col);
+  const g = scene_.g, anim = scene_.anim;
   g.position.set(spot.x, ry, spot.z);
   scene.add(g);
-  const obj = { kind, x: spot.x, z: spot.z, r: 8, g, core, ring, beacon,
-    light, t: 0, progress: 0, target: 0, complete: false };
+  const obj = { kind, x: spot.x, z: spot.z, r: 8, g, anim,
+    core: anim.core, ring: anim.ring, beacon: anim.beacon,
+    t: 0, progress: 0, target: 0, complete: false };
   if (kind === "clear") {
-    obj.target = 14;       // 14 kills inside the zone
+    obj.target = 14;
     obj.name = "Clear the cursed glade";
+    obj.tagline = "Slay 14 in the ring";
   } else if (kind === "bounty") {
-    obj.name = "Bounty: slay the Revenant";
+    obj.name = "Slay the Revenant";
     obj.target = 1;
+    obj.tagline = "End the elite stalker";
     spawnBountyTarget(obj);
   } else if (kind === "cache") {
-    obj.name = "Investigate the strange light";
-    obj.target = 1;        // walk-in to claim
+    obj.name = "Investigate the cache";
+    obj.target = 1;
+    obj.tagline = "Walk in to claim the prize";
   }
   objectives.push(obj);
-  banner(obj.name.toUpperCase(), "NEW OBJECTIVE");
+  banner(obj.name.toUpperCase(), "OBJECTIVE — " + obj.tagline.toUpperCase());
   return obj;
 }
 function spawnBountyTarget(obj) {
@@ -7063,12 +7301,50 @@ function updateObjectives(dt) {
   for (let i = objectives.length - 1; i >= 0; i--) {
     const obj = objectives[i];
     obj.t += dt;
-    // animate the beacon — gentle pulse
+    const a = obj.anim;
+    // ── beacon + ground ring (kept) ──
     if (obj.core) {
       const s = 4 + Math.sin(obj.t * 3) * 0.4;
       obj.core.scale.set(s, s, 1);
     }
     if (obj.ring) obj.ring.rotation.z = obj.t * 0.6;
+    // ── ALTAR (clear) — skull pulses + rune-ring spins + brazier
+    // flames flicker. Even at rest, the location looks ALIVE. ──
+    if (a && a.altar) {
+      const pulse = 1 + Math.sin(obj.t * 3.5) * 0.18;
+      a.altar.scale.set(pulse, pulse * 1.05, pulse);
+      a.altar.rotation.y = obj.t * 0.4;
+    }
+    if (a && a.runeRing) {
+      a.runeRing.rotation.z = obj.t * 0.8;
+    }
+    if (a && a.altarRunes) {
+      for (let f = 0; f < a.altarRunes.length; f++) {
+        const fl = a.altarRunes[f];
+        const flick = 0.85 + Math.sin(obj.t * 6 + f * 1.4) * 0.15;
+        fl.scale.set(flick, flick * 1.1, flick);
+      }
+    }
+    // ── BANNERS (bounty) — gentle sway in the wind ──
+    if (a && a.banners) for (let b = 0; b < a.banners.length; b++) {
+      a.banners[b].rotation.y +=
+        Math.sin(obj.t * 1.4 + b * 0.7) * dt * 0.18;
+    }
+    // ── CHEST LID (cache) — periodic jitter like something inside
+    // wants out, plus the sparkles bob around the chest ──
+    if (a && a.lid) {
+      const j = Math.max(0, Math.sin(obj.t * 0.9));
+      const tw = Math.sin(obj.t * 18) * j * 0.06;
+      a.lid.rotation.x = -j * 0.18;
+      a.lid.position.set(tw, 1.18 + j * 0.08, -j * 0.04);
+    }
+    if (a && a.sparkles) for (const sp of a.sparkles) {
+      const ph = sp.userData.phase || 0;
+      const ang = obj.t * 0.8 + ph;
+      sp.position.set(Math.cos(ang) * 0.9,
+        2.0 + Math.sin(obj.t * 1.8 + ph) * 0.4,
+        Math.sin(ang) * 0.9);
+    }
     // CACHE: claimed by walking in
     if (obj.kind === "cache" && !obj.complete &&
         Math.hypot(player.x - obj.x, player.z - obj.z) < obj.r) {
@@ -7081,13 +7357,63 @@ function updateObjectives(dt) {
       if (obj.beacon) obj.beacon.material.opacity = 0.32 * k;
       if (obj.ring) obj.ring.material.opacity = 0.6 * k;
       if (obj.core) obj.core.material.opacity = 0.95 * k;
-      if (obj.light) obj.light.intensity = 2.8 * k;
       if (obj._fade > 1.3) {
         scene.remove(obj.g); objectives.splice(i, 1);
       }
     }
   }
+  updateObjectiveLabel();
 }
+// ── On-world objective label ── a floating tooltip that appears when
+// the player gets within ~25yd of any objective. Shows the name + what
+// to do + live progress. Sells the "WHY am I here, WHAT must happen"
+// without forcing the player to glance at the HUD chip.
+let _objLabelEl = null;
+function updateObjectiveLabel() {
+  if (!_objLabelEl) {
+    _objLabelEl = document.createElement("div");
+    _objLabelEl.id = "objLabel";
+    document.body.appendChild(_objLabelEl);
+  }
+  if (!player || state !== ST.PLAYING) {
+    _objLabelEl.classList.remove("show"); return;
+  }
+  // closest non-complete objective within 25 yards
+  let best = null, bestD = 25 * 25;
+  for (const o of objectives) {
+    if (o.complete) continue;
+    const dx = o.x - player.x, dz = o.z - player.z;
+    const dd = dx * dx + dz * dz;
+    if (dd < bestD) { bestD = dd; best = o; }
+  }
+  if (!best) { _objLabelEl.classList.remove("show"); return; }
+  // project the objective top-of-beacon to screen for the label position
+  _objLabelProj.set(best.x, walkHeight(best.x, best.z) + 5.5, best.z)
+    .project(camera);
+  if (_objLabelProj.z > 1) {
+    _objLabelEl.classList.remove("show"); return;
+  }
+  _objLabelEl.classList.add("show");
+  const sx = (_objLabelProj.x * 0.5 + 0.5) * innerWidth;
+  const sy = (-_objLabelProj.y * 0.5 + 0.5) * innerHeight;
+  _objLabelEl.style.left = sx + "px";
+  _objLabelEl.style.top = sy + "px";
+  let prog;
+  if (best.kind === "clear")
+    prog = best.progress + " / " + best.target + " slain";
+  else if (best.kind === "bounty")
+    prog = best.progress ? "DOWN" : "ALIVE";
+  else
+    prog = "WALK IN";
+  const html = '<div class="oN">' + best.name + '</div>' +
+    '<div class="oT">' + best.tagline + '</div>' +
+    '<div class="oP">' + prog + '</div>';
+  if (_objLabelEl._lastHtml !== html) {
+    _objLabelEl.innerHTML = html;
+    _objLabelEl._lastHtml = html;
+  }
+}
+const _objLabelProj = new THREE.Vector3();
 function clearObjectives() {
   for (const o of objectives) scene.remove(o.g);
   objectives = [];
