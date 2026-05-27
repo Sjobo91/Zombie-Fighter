@@ -852,6 +852,31 @@
   body.touch #objLabel .oN { font-size: 11px; }
   body.touch #objLabel .oT { font-size: 9px; }
   body.touch #objLabel .oP { font-size: 12px; }
+  /* ── BIG CENTRAL CHARGE BAR ── slides up when the hunter draws a bow
+     or the rogue charges a throwing knife. Positioned above the
+     ability row so it's impossible to miss while focused on combat. */
+  #chargeBar { position: fixed; left: 50%; bottom: 130px;
+    transform: translate(-50%, 12px);
+    width: 340px; pointer-events: none; opacity: 0;
+    transition: opacity .18s, transform .18s; z-index: 5; }
+  #chargeBar.show { opacity: 1; transform: translate(-50%, 0); }
+  #chargeBar.full .chgFill {
+    background: linear-gradient(90deg, #d4a050, #ffe080, #fff8dc);
+    box-shadow: 0 0 22px rgba(255,224,128,.65); }
+  #chargeBar.full .chgLabel { color: #fff8dc; }
+  #chargeBar .chgLabel { font-size: 11px; letter-spacing: 4px;
+    font-weight: 800; color: #b3a98f; text-align: center;
+    margin-bottom: 6px;
+    text-shadow: 0 0 8px rgba(0,0,0,.6); }
+  #chargeBar .chgWrap { height: 16px;
+    background: rgba(16,12,8,.86); border: 1px solid #4a3a1c;
+    border-radius: 4px; overflow: hidden;
+    box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+  #chargeBar .chgFill { height: 100%; width: 0%;
+    background: linear-gradient(90deg, #4a3a18, #c97a30, #ffae50);
+    transition: width .04s linear; }
+  body.touch #chargeBar { bottom: 170px; width: 240px; }
+  body.touch #chargeBar .chgWrap { height: 12px; }
   /* ── PAUSE MENU (ESC) ── overlay with Resume / Restart Run. Stops
      the world updating until the player picks something. */
   #pauseMenu .pmCard { width: 360px; padding: 32px 28px 24px;
@@ -1236,6 +1261,14 @@
     <div class="muted" id="over-stats"></div>
     <div class="blink" id="over-again" style="visibility:hidden">
       CLICK TO RISE AGAIN</div>
+  </div>
+
+  <!-- big central charge bar — shown when the hunter is drawing or the
+       rogue is charging a throwing knife. Positioned just above the
+       ability row so the player can't miss it while focused on combat. -->
+  <div id="chargeBar">
+    <div class="chgLabel" id="chgLabel">DRAW</div>
+    <div class="chgWrap"><div class="chgFill" id="chgFill"></div></div>
   </div>
 
   <!-- pause menu — opens on ESC during play. Resume returns to combat,
@@ -8707,6 +8740,19 @@ function tryAttack() {
     }
     return;
   }
+  // ROGUE — HOLD LMB to charge a throwing knife. Release flings it.
+  // Reuses the hunter's drawing / drawT / drawMax system so the same
+  // big charge bar covers both classes. Lets the rogue do CLEAR
+  // objectives without standing in the middle of a ring waiting for
+  // melee range.
+  if (cls.weapon === "daggers") {
+    if (!player.drawing) {
+      player.drawing = true; player.drawT = 0;
+      player.drawMax = 0.9;       // rogue charges faster than the hunter
+      Sound.daggerSlash && Sound.daggerSlash();
+    }
+    return;
+  }
   // wizard — LMB opens the frostfire channel instead of single-shot bolts.
   // updatePlayer ticks damage while channeling is true; mouseup turns it off.
   if (cls.weapon === "staff") {
@@ -8749,6 +8795,70 @@ function tryAttack() {
     player.atkSlowT = ATK_SLOW_DUR;
   }
   Sound.swing();
+}
+// Class-aware "release the charge" dispatcher. Either the hunter bow
+// or the rogue throwing knife depending on weapon. Touch + mouse +
+// channel-close handlers all call this; no need to know the class.
+function releaseChargeShot() {
+  if (!player || !player.drawing) return;
+  const cls = player.classDef || CLASSES.knight;
+  if (cls.weapon === "daggers") { releaseRogueThrow(); return; }
+  releaseBowShot();
+}
+/* ROGUE — called on mouseup. Hurls a throwing knife. Damage / speed /
+   range scale with draw time, same shape as the hunter's bow. */
+function releaseRogueThrow() {
+  if (!player.drawing || !player.alive) return;
+  const charge = clamp(player.drawT / (player.drawMax || 0.9), 0.15, 1);
+  player.drawing = false; player.drawT = 0;
+  const pt = PROJ_TYPES.knife;
+  const pitchAng = aimPitchAngle();
+  const cP = Math.cos(pitchAng), sP = Math.sin(pitchAng);
+  const aimDirX = Math.sin(player.aim) * cP;
+  const aimDirZ = Math.cos(player.aim) * cP;
+  const sx = player.x + aimDirX * 1.4;
+  const sz = player.z + aimDirZ * 1.4;
+  const sy = (player.y || 0) + 2.0 + sP * 1.4;
+  // build a small spinning dagger mesh
+  const g = new THREE.Group();
+  const blade = new THREE.Mesh(
+    new THREE.BoxGeometry(0.10, 0.7, 0.04),
+    metalMat(0xdfe4ec, 0.7));
+  blade.position.y = 0; g.add(blade);
+  const guard = new THREE.Mesh(
+    new THREE.BoxGeometry(0.32, 0.06, 0.10),
+    new THREE.MeshStandardMaterial({ color: 0xf06aff,
+      emissive: 0xc850a8, emissiveIntensity: 1.6, roughness: 0.4 }));
+  guard.position.y = -0.4; g.add(guard);
+  const pom = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.07, 0),
+    new THREE.MeshStandardMaterial({ color: 0xf06aff,
+      emissive: 0xc850a8, emissiveIntensity: 2.0, roughness: 0.3 }));
+  pom.position.y = -0.48; g.add(pom);
+  g.position.set(sx, sy, sz);
+  g.rotation.y = player.aim;
+  g.rotation.x = -pitchAng;
+  scene.add(g);
+  // charge scaling — slightly less generous than the bow (0.85→2.0×
+  // damage, 0.9→1.8× speed) so the rogue still wants to close into
+  // melee for big DPS but CAN clear ringed zones from outside.
+  const speed = pt.speed * (0.9 + charge * 0.9);
+  const dmgMul = pt.dmgMul * (0.85 + charge * 1.15);
+  const pierce = pt.pierce + Math.floor(charge * 2);
+  heroProjectiles.push({ obj: g, kind: "knife", x: sx, y: sy, z: sz,
+    vx: aimDirX * speed, vy: sP * speed, vz: aimDirZ * speed,
+    life: pt.life * (1 + charge * 0.8), hits: new Set(), pierce,
+    spin: 28,                          // visual: dagger tumbles in air
+    def: Object.assign({}, pt, { dmgMul }) });
+  Sound.daggerSlash && Sound.daggerSlash();
+  // small recovery delay scaling with charge — discourages spam
+  player.atkSlowT = ATK_SLOW_DUR * (0.15 + charge * 0.35);
+  spawnParts(sx, sy, sz, 6 + Math.floor(charge * 10),
+    { color: 0xf06aff, speed: 10, life: 0.3 });
+  if (charge > 0.85) {
+    screenFlash("#f06aff", 0.16); shake(0.25);
+    flashLight(sx, sy, sz, 0.28, 0xc850a8);
+  }
 }
 /* HUNTER — called on mouseup. Releases the arrow with damage and range
    scaled by how long the bow was drawn (drawT). */
@@ -10276,13 +10386,16 @@ function capHeroProjectiles() {
 const PROJ_TYPES = {
   bolt:   { speed: 75, life: 1.0, pierce: 0, dmgMul: 1.0,
             col: 0x6aaaff, size: 0.5, trail: 0x6aaaff, trailN: 6 },
-  // hand-cannon slug — heavy, slow, knocks them off their feet
-  // hand-cannon slug — heavy hitter. 1.85× damage and a big knockback
   bullet: { speed: 145, life: 0.9, pierce: 2, dmgMul: 1.85,
             col: 0xffe06a, size: 0.36, trail: 0xff9030, trailN: 2,
             knock: 6.5 },
   arrow:  { speed: 96, life: 1.4, pierce: 3, dmgMul: 0.85,
             col: 0xe8e0c0, size: 0.18, trail: 0x9aeac0, trailN: 1 },
+  // ROGUE throwing knife — fast, short life, pierces 1, magenta trail.
+  // Charge-scaled by releaseRogueThrow, base values define an
+  // unupgraded shot at full charge ≈ same DPS as a melee dagger swing.
+  knife:  { speed: 110, life: 0.9, pierce: 1, dmgMul: 1.05,
+            col: 0xf06aff, size: 0.22, trail: 0xc850a8, trailN: 2 },
 };
 function rangedFire() {
   const cls = player.classDef || CLASSES.knight;
@@ -10496,6 +10609,17 @@ function updateHeroProjectiles(dt) {
       if (Math.random() < 0.6)
         spawnParts(p.x, p.y, p.z, 1,
           { color: 0xc0ffe0, speed: 1.0, life: 0.5 });
+    }
+    // KNIFE — tumbles end-over-end as it flies, with a magenta trail
+    if (p.kind === "knife") {
+      const horiz = Math.hypot(p.vx, p.vz);
+      p.obj.rotation.y = Math.atan2(p.vx, p.vz);
+      p.obj.rotation.x = -(p.spin || 24) * (p.age || 0);
+      spawnParts(p.x, p.y, p.z, 1,
+        { color: 0xc850a8, speed: 1.4, life: 0.28 });
+      if (Math.random() < 0.5)
+        spawnParts(p.x, p.y, p.z, 1,
+          { color: 0xf06aff, speed: 0.9, life: 0.45 });
     }
     // a soft trail (bullet / explosive)
     if ((p.kind === "bullet" || p.kind === "explosive") &&
@@ -11484,7 +11608,7 @@ addEventListener("mousedown", (e) => {
 addEventListener("mouseup", (e) => {
   if (e.button === 0) {
     mouseDown = false;
-    if (player && player.drawing) releaseBowShot();
+    if (player && player.drawing) releaseChargeShot();
     if (player && player.channeling) player.channeling = false;
   }
 });
@@ -11605,7 +11729,7 @@ function setupTouchControls() {
     if (newVal) {
       if (state === ST.PLAYING) tryAttack();
     } else {
-      if (player && player.drawing) releaseBowShot();
+      if (player && player.drawing) releaseChargeShot();
       if (player && player.channeling) player.channeling = false;
     }
   }
@@ -12633,6 +12757,37 @@ function currentDistrict(x, z) {
   if (z > 42 && Math.abs(x) < 104) return "THE MARKET";
   return "MORTIMER'S PLAZA";
 }
+// Big central charge bar — visible at the BOTTOM CENTRE of the screen
+// while either the hunter is drawing the bow or the rogue is charging
+// a throwing knife. Re-uses player.drawT / drawMax so a single function
+// covers both classes. The smaller HUD-side draw bar still ticks too;
+// this one's just for unmissable combat focus.
+let _chargeBarLastK = -1, _chargeBarLastLabel = "";
+function updateChargeBar() {
+  const el = document.getElementById("chargeBar");
+  if (!el || !player) return;
+  if (!player.drawing || state !== ST.PLAYING) {
+    if (el.classList.contains("show")) el.classList.remove("show");
+    return;
+  }
+  el.classList.add("show");
+  const k = clamp(player.drawT / (player.drawMax || 1.5), 0, 1);
+  const full = k >= 0.985;
+  el.classList.toggle("full", full);
+  if (k !== _chargeBarLastK) {
+    const fill = document.getElementById("chgFill");
+    if (fill) fill.style.width = (k * 100) + "%";
+    _chargeBarLastK = k;
+  }
+  const cls = (player.classDef || CLASSES.knight).weapon;
+  const label = cls === "daggers" ? (full ? "SHADOWSTRIKE" : "CHARGE THROW")
+                                  : (full ? "FULL DRAW"    : "DRAW");
+  if (label !== _chargeBarLastLabel) {
+    const lbl = document.getElementById("chgLabel");
+    if (lbl) lbl.textContent = label;
+    _chargeBarLastLabel = label;
+  }
+}
 // per-class HUD widget — populates the #classHud div based on the active
 // hero. Cheap string-build per frame; only re-renders when state changes.
 let _classHudCache = "";
@@ -12725,6 +12880,7 @@ function updateHUD() {
     UI.stats.innerHTML = newStats; _huiCache.stats = newStats; }
   // ── per-class widget — Hunter draw bar / Gunslinger ammo / Rogue pips ──
   if (UI.classHud) updateClassHud();
+  updateChargeBar();
   UI.xpfill.style.width = clamp(player.xp / player.xpNext, 0, 1) * 100 + "%";
   function cdb(bar, num, cd, max) {
     bar.style.top = (cd > 0 ? (1 - cd / max) * 100 : 100) + "%";
