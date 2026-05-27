@@ -13388,6 +13388,18 @@ function prewarmZombieAssets() {
 function startGame(opts) {
   const snap = opts && opts.resume ? SaveLoad.read() : null;
   if (snap && snap.cls) chosenClass = snap.cls;     // class must match the save
+  // BULLET-PROOF state reset before flipping to PLAYING. The loop
+  // can tick MANY times between "state = PLAYING" below and the
+  // startWave() call further down (prewarmZombieAssets compiles
+  // shaders, can take 50-150ms). If waveState was "fight" + toSpawn
+  // empty + zombiesAlive=0 (the state at the moment of death) AND
+  // wave=0 (the global default), updateWaves would fire onWaveCleared
+  // and openRoundPopup with "WAVE 0 CLEARED". Setting waveState to
+  // "loading" makes updateWaves a no-op until startWave runs.
+  waveState = "loading"; toSpawn = []; zombiesAlive = 0;
+  wave = 0; kills = 0; score = 0; totalDmg = 0; level = 1;
+  // also kill the round popup in case it was open from a previous run
+  if (UI.roundPopup) UI.roundPopup.classList.add("hidden");
   // FLIP TO PLAYING UP-FRONT — even if some later setup step throws an
   // error, the player still has control. Camera stops orbiting, input
   // works, the loop renders the world properly. Errors are logged.
@@ -13737,8 +13749,16 @@ for (const cardEl of UI.classSelect.querySelectorAll(".classCard")) {
   });
 }
 UI.over.addEventListener("click", () => {
-  if (state === ST.GAMEOVER && gameOverT > 1.1) {
+  // Wait until the cinematic settled (overlay shows at 2.5s, this
+  // matches that — clicks before then are ignored so they don't
+  // skip the moment).
+  if (state === ST.GAMEOVER && gameOverT > 2.5) {
     UI.over.classList.add("hidden");
+    // CLEAR the death cinematic overlay — without this the grey
+    // desaturate / dim film stays over the title screen and the
+    // player thinks the menu is unresponsive.
+    const dfd = document.getElementById("deathFade");
+    if (dfd) dfd.classList.remove("show");
     // back to the title so the player sees the shards just earned and can
     // visit the Forge before launching the next run
     state = ST.TITLE;
