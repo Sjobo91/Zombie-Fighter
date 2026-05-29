@@ -15655,35 +15655,40 @@ function updateCamera(dt) {
   const D = 39;
   const cd = D * Math.cos(camPitch);   // desired ground distance behind him
   const dirX = -Math.sin(camYaw), dirZ = -Math.cos(camYaw);
-  // ── CAMERA COLLISION ── march from the hero toward the orbit point.
-  // If a WALL (building) lies along that line, pull the camera in to
-  // just before it so the hero is NEVER hidden behind a wall. This is
-  // the fix for "camera goes behind a building and I see nothing".
+  // ── CAMERA COLLISION ── GENTLE now. The previous version pulled the
+  // camera right up to the wall (min 8 units) which felt like being
+  // zoomed onto the hero's face. The real fix for "behind a building"
+  // is the occlusion FADE below (the wall turns see-through). The
+  // pull-in here is just a soft safety net with a HIGH minimum so the
+  // view never gets cramped — the camera barely moves, the building
+  // fades, and you keep seeing your hero at a comfortable distance.
+  const CAM_MIN = Math.max(26, cd * 0.72);   // never closer than this
   let clearDist = cd;
   const walls = getWallColliders();
   const STEP = 4;
-  for (let dist = 8; dist <= cd; dist += STEP) {
+  for (let dist = 10; dist <= cd; dist += STEP) {
     const sx = player.x + dirX * dist, sz = player.z + dirZ * dist;
     let hit = false;
     for (let w = 0; w < walls.length; w++) {
       const c = walls[w];
       if (c.box) {
-        if (Math.abs(sx - c.x) < c.hw + 1.2 &&
-            Math.abs(sz - c.z) < c.hd + 1.2) { hit = true; break; }
-      } else if (Math.hypot(sx - c.x, sz - c.z) < c.r + 1.2) {
+        if (Math.abs(sx - c.x) < c.hw + 1.0 &&
+            Math.abs(sz - c.z) < c.hd + 1.0) { hit = true; break; }
+      } else if (Math.hypot(sx - c.x, sz - c.z) < c.r + 1.0) {
         hit = true; break;
       }
     }
-    if (hit) { clearDist = Math.max(8, dist - STEP); break; }
+    if (hit) { clearDist = Math.max(CAM_MIN, dist - STEP); break; }
   }
-  // smooth the pull: snap IN fast (0.5) so we never clip through a wall,
-  // ease OUT slow (0.12) so rounding a corner doesn't whip the camera.
+  // smooth the pull: snap IN fast (0.4) so we never clip deep into a
+  // wall, ease OUT slow (0.1) so rounding a corner doesn't whip the view.
   if (player._camDist == null) player._camDist = clearDist;
   player._camDist = lerp(player._camDist, clearDist,
-    clearDist < player._camDist ? 0.5 : 0.12);
+    clearDist < player._camDist ? 0.4 : 0.1);
   const useDist = player._camDist;
-  const frac = useDist / cd;
-  const ch = D * Math.sin(camPitch) * frac;   // lower as it pulls closer
+  // height barely changes now (min frac 0.72) so the framing stays put
+  const frac = Math.max(0.82, useDist / cd);
+  const ch = D * Math.sin(camPitch) * frac;
   const tx = player.x + dirX * useDist;
   const tz = player.z + dirZ * useDist;
   camera.position.x = lerp(camera.position.x, tx, 0.17);
@@ -15721,7 +15726,9 @@ function updateOcclusion() {
     if (isOccluding && !oc.faded) {
       for (let m = 0; m < oc.meshes.length; m++) {
         const mat = oc.meshes[m].material;
-        mat.transparent = true; mat.opacity = 0.22; mat.depthWrite = false;
+        // ghost it right down — you should clearly see your hero THROUGH
+        // the wall (this, not the camera pull-in, is the real fix)
+        mat.transparent = true; mat.opacity = 0.12; mat.depthWrite = false;
       }
       oc.faded = true;
     } else if (!isOccluding && oc.faded) {
@@ -16229,14 +16236,13 @@ function update(dt) {
   updateFlares(dt); updateGibs(dt); updateScorch(dt); updateCracks(dt);
   updateSplats(dt);
   updateScreenFlash(dt);
-  // MOBILE: skip the ambient eye-candy updates (fireflies + haze drift +
-  // occlusion fade). They're pure look-and-feel and not visible enough
-  // on a phone screen to justify the per-frame loops. Saves ~60+
-  // iterations per frame on mobile.
+  // MOBILE: skip the pure eye-candy (fireflies + haze drift) but KEEP
+  // occlusion — seeing your hero through a building you stand behind is
+  // gameplay-critical on every platform.
   if (!lowQ) {
     updateFireflies(dt, clock); updateHaze(dt, clock);
-    updateOcclusion();
   }
+  updateOcclusion();
   smashRing.update(dt); windRing.update(dt); boomRing.update(dt);
   updateCamera(dt);
   updateGrass(dt, clock);
@@ -16508,6 +16514,7 @@ function updateHub(dt) {
   // (and lets you test your weapon swing in the sanctuary).
   updatePlayer(dt);
   updateCamera(dt);
+  updateOcclusion();
   updateGrass(dt, clock);
   updateAmbient(dt, clock);
   updateParts(dt); updateFlashes(dt); updateFlares(dt);
