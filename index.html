@@ -8966,13 +8966,15 @@ function releaseBowShot() {
   ag.position.set(sx, sy, sz);
   ag.rotation.y = player.aim; ag.rotation.x = -pitchAng;
   scene.add(ag);
-  // charge scales speed (range), pierce, and damage
+  // charge scales speed (range) + damage. NO pierce now — the arrow
+  // STICKS on the first target and bursts a small AOE there (the AOE
+  // radius grows with charge). Reads as "impact shot", not a railgun.
   const speed = pt.speed * (0.8 + charge * 0.8);   // 0.92× → 1.6× speed
   const dmgMul = pt.dmgMul * (0.7 + charge * 1.6); // 0.94× → 2.3×
-  const pierce = pt.pierce + Math.floor(charge * 3);  // up to 6 pierce
   heroProjectiles.push({ obj: ag, kind: "arrow", x: sx, y: sy, z: sz,
     vx: aimDirX * speed, vy: sP * speed, vz: aimDirZ * speed,
-    life: pt.life * (1 + charge), hits: new Set(), pierce,
+    life: pt.life * (1 + charge), hits: new Set(), pierce: 0,
+    aoe: 3.0 + charge * 3.5,            // 3 → 6.5 yd burst on impact
     def: Object.assign({}, pt, { dmgMul }) });
   Sound.bowfire && Sound.bowfire();
   // a small recovery slow so spamming half-charge shots isn't the only play
@@ -9714,28 +9716,39 @@ function explosiveBarrage(baseDmg) {
       const aimDirX = Math.sin(a) * cP, aimDirZ = Math.cos(a) * cP;
       const sx = e.x + aimDirX * 1.8, sz = e.z + aimDirZ * 1.8;
       const sy = (e.y || 0) + 2.2 + sP * 1.8;
-      // an oversized brass-cased shell, glowing hot
+      // a BIG brass-cased slug, glowing hot — fattened so you can
+      // actually watch it sail across the battlefield.
       const bg = new THREE.Group();
       const slug = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.32, 0.28, 0.9, 8),
+        new THREE.CylinderGeometry(0.5, 0.42, 1.5, 10),
         new THREE.MeshStandardMaterial({ color: 0xffe9a0,
-          emissive: 0xff6030, emissiveIntensity: 2.0,
-          roughness: 0.3, metalness: 0.7 }));
+          emissive: 0xff6030, emissiveIntensity: 2.2,
+          roughness: 0.3, metalness: 0.8 }));
       slug.rotation.x = Math.PI / 2; bg.add(slug);
+      // a pointed tip so it reads as a heavy round, not a pill
+      const tip = new THREE.Mesh(
+        new THREE.ConeGeometry(0.5, 0.7, 10),
+        new THREE.MeshStandardMaterial({ color: 0xffd27a,
+          emissive: 0xff8a30, emissiveIntensity: 1.8, metalness: 0.8,
+          roughness: 0.3 }));
+      tip.rotation.x = Math.PI / 2; tip.position.z = 1.0; bg.add(tip);
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({
         map: flareTex, color: 0xff8a3a, transparent: true,
         opacity: 0.95, depthWrite: false,
         blending: THREE.AdditiveBlending }));
-      halo.scale.set(2.4, 2.4, 1); bg.add(halo);
+      halo.scale.set(3.6, 3.6, 1); bg.add(halo);
       bg.position.set(sx, sy, sz);
       bg.rotation.y = a; bg.rotation.x = -pitchAng;
       scene.add(bg);
-      const SPEED = 110;
+      // SLOWER (52 vs 110) so the slug is a watchable tracer, not a blur.
+      // life bumped so it still crosses the arena at the lower speed.
+      const SPEED = 52;
       heroProjectiles.push({ obj: bg, kind: "explosive",
         x: sx, y: sy, z: sz,
         vx: aimDirX * SPEED, vy: sP * SPEED, vz: aimDirZ * SPEED,
-        life: 1.0, hits: new Set(), pierce: 0,
-        def: { col: 0xff6030, trail: 0xff8a3a, trailN: 3,
+        life: 2.0, hits: new Set(), pierce: 0,
+        fatSlug: true,                 // flag → thick trail in update loop
+        def: { col: 0xff6030, trail: 0xff8a3a, trailN: 4,
                dmgMul: 1.0, knock: 9,
                explosive: true, blastR: 8.5,
                blastDmg: baseDmg * 1.4 } });
@@ -10712,6 +10725,20 @@ function updateHeroProjectiles(dt) {
         p.def.trailN > 0 && Math.random() < 0.85)
       spawnParts(p.x, p.y, p.z, p.def.trailN,
         { color: p.def.trail, speed: 3, life: 0.32 });
+    // ── FAT SLUG (gunslinger RMB) ── keep the round oriented along its
+    // flight + lay a thick, bright fire trail EVERY frame so you can
+    // clearly watch the heavy round sail across the field.
+    if (p.fatSlug) {
+      const horiz = Math.hypot(p.vx, p.vz);
+      p.obj.rotation.y = Math.atan2(p.vx, p.vz);
+      p.obj.rotation.x = -Math.atan2(p.vy || 0, horiz);
+      spawnParts(p.x, p.y, p.z, 3,
+        { color: pick([0xff8a3a, 0xffd06a, 0xff5a1e]),
+          speed: 4, up: 1, life: 0.45 });
+      if (Math.random() < 0.5)
+        spawnParts(p.x, p.y, p.z, 1,
+          { color: 0x3a2a22, speed: 2, up: 3, life: 0.7 });   // smoke
+    }
     if (p.kind === "explosive" && Math.random() < 0.55)
       spawnParts(p.x, p.y, p.z, 1,
         { color: 0x6a3018, speed: 1, up: 2, life: 0.6 });
@@ -10782,10 +10809,27 @@ function updateHeroProjectiles(dt) {
           flare(p.x, p.y, p.z, 3.5, 0xffd06a, 0.45);
           if (crit) flashLight(p.x, p.y, p.z, 0.22, 0xffd06a);
         } else if (p.kind === "arrow") {
-          // arrow stick — a tight burst, less explosive
-          spawnParts(p.x, p.y, p.z, 8,
-            { color: 0x9aeac0, speed: 12, life: 0.3 });
-          flare(p.x, p.y, p.z, 3.5, 0x9aeac0, 0.4);
+          // ── IMPACT ARROW ── no pierce. On hit it bursts a small AOE
+          // (p.aoe radius) hitting everything around the point, then dies.
+          if (p.aoe && !p._burst) {
+            p._burst = true;
+            const splash = dmg * 0.6;     // splash a bit weaker than direct
+            for (const o of zombies) {
+              if (o === z || o.state === "die" || o.state === "rising")
+                continue;
+              if (Math.hypot(o.x - p.x, o.z - p.z) < p.aoe + o.r)
+                hitZombie(o, splash, false,
+                  Math.atan2(o.x - p.x, o.z - p.z), 1.4, true);
+            }
+            // green impact burst + ring sized to the AOE
+            smashRing.setColor(0x9aeac0);
+            smashRing.show(p.x, p.y, p.z, p.aoe * 1.4, 0.4);
+            spawnParts(p.x, p.y, p.z, lowQ ? 12 : 24,
+              { color: pick([0x9aeac0, 0xc0ffe0, 0x6ad0a0]),
+                speed: 18, up: 4, life: 0.5 });
+            flashLight(p.x, p.y, p.z, 0.22, 0x9aeac0);
+          }
+          flare(p.x, p.y, p.z, 4.5, 0x9aeac0, 0.45);
         } else {
           flare(p.x, p.y, p.z, 3, p.def.col, 0.45);
         }
@@ -16472,37 +16516,52 @@ function buildHub() {
 }
 
 function enterSanctuary() {
-  buildHub();
-  // un-hide the hub (descend hides it) + clear last run's wager mods
-  if (hubGroup) hubGroup.visible = true;
-  for (const st of hubStations) if (st.g) st.g.visible = true;
-  runMods = { hpMul: 1, dmgMul: 1, shardMul: 1, challenge: "none", stake: 0 };
-  // close any combat overlays
-  if (UI.roundPopup) UI.roundPopup.classList.add("hidden");
-  if (UI.over) UI.over.classList.add("hidden");
-  if (UI.title) UI.title.classList.add("hidden");
-  if (UI.classSelect) UI.classSelect.classList.add("hidden");
-  const dfd = document.getElementById("deathFade");
-  if (dfd) dfd.classList.remove("show");
-  canvas.style.filter = "";
-  // fresh, calm world: no zombies, no waves
-  waveState = "loading"; toSpawn = []; zombiesAlive = 0;
-  // build / rebuild the player so they can walk around with current gear
-  resetGame();
-  if (typeof Meta !== "undefined" && Meta.applyOnNewRun) Meta.applyOnNewRun();
-  // drop the player just inside the dais, facing the gate
-  player.x = HUB_CENTER.x; player.z = HUB_CENTER.z + 14;
-  player.y = walkHeight(player.x, player.z);
-  if (player.obj) player.obj.position.set(player.x, player.y, player.z);
-  camYaw = Math.PI;            // look toward the gate (north)
-  state = ST.HUB;
-  document.body.style.cursor = "none";
-  if (crosshairEl) crosshairEl.style.display = "none";
-  if (!isTouch) { try { canvas.requestPointerLock(); } catch (e) {} }
-  Sound.actx && Sound.actx();
-  Ambience.start && Ambience.start();
-  Music.start && Music.start();
-  banner("Spend your shards. Then descend.", "THE SANCTUARY");
+  // The whole hub entry is wrapped so a hiccup can NEVER strand the
+  // player on a frozen class-select screen — if anything throws we
+  // fall straight through to a normal run instead.
+  try {
+    buildHub();
+    if (hubGroup) hubGroup.visible = true;
+    for (const st of hubStations) if (st.g) st.g.visible = true;
+    runMods = { hpMul: 1, dmgMul: 1, shardMul: 1, challenge: "none", stake: 0 };
+    // close every overlay
+    if (UI.roundPopup) UI.roundPopup.classList.add("hidden");
+    if (UI.over) UI.over.classList.add("hidden");
+    if (UI.title) UI.title.classList.add("hidden");
+    if (UI.classSelect) UI.classSelect.classList.add("hidden");
+    const dfd = document.getElementById("deathFade");
+    if (dfd) dfd.classList.remove("show");
+    canvas.style.filter = "";
+    // rebuild the player with current gear …
+    resetGame();
+    if (typeof Meta !== "undefined" && Meta.applyOnNewRun) Meta.applyOnNewRun();
+    // … then PURGE everything resetGame() seeds for a run: the bounty
+    // revenant, objective beacons + the annihilator. The sanctuary is
+    // a calm, empty courtyard — no combat, no markers.
+    if (typeof clearObjectives === "function") clearObjectives();
+    if (typeof clearAnnihilator === "function") clearAnnihilator();
+    for (const z of zombies) {
+      if (z.obj) scene.remove(z.obj);
+      if (z.mound) scene.remove(z.mound);
+    }
+    zombies = []; zombiesAlive = 0; toSpawn = []; waveState = "loading";
+    // drop the player on the dais, facing the gate
+    player.x = HUB_CENTER.x; player.z = HUB_CENTER.z + 14;
+    player.y = walkHeight(player.x, player.z);
+    if (player.obj) player.obj.position.set(player.x, player.y, player.z);
+    camYaw = Math.PI;
+    state = ST.HUB;
+    document.body.style.cursor = "none";
+    if (crosshairEl) crosshairEl.style.display = "none";
+    if (!isTouch) { try { canvas.requestPointerLock(); } catch (e) {} }
+    Sound.actx && Sound.actx();
+    Ambience.start && Ambience.start();
+    Music.start && Music.start();
+    banner("Upgrade, then walk to THE GATE to descend.", "THE SANCTUARY");
+  } catch (err) {
+    console.error("[enterSanctuary] failed — starting run directly", err);
+    try { startGame(); } catch (e2) { console.error(e2); }
+  }
 }
 
 const _hubProj = new THREE.Vector3();
@@ -16663,7 +16722,13 @@ function loop(ts) {
     if (gameOverT > 3.6 && UI.overAgain.style.visibility === "hidden")
       UI.overAgain.style.visibility = "visible";
   } else if (state === ST.HUB) {
-    updateHub(dt);
+    // safety net: a hub error must never hard-freeze the game on a
+    // black/last-frame. Log it and drop the player into a run instead.
+    try { updateHub(dt); }
+    catch (err) {
+      console.error("[hub] update failed — descending", err);
+      try { startGame(); } catch (e2) { console.error(e2); }
+    }
   } else if (state === ST.TITLE) {
     clock += dt;
     camera.position.set(
