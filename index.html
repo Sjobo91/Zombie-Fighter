@@ -811,15 +811,41 @@
   #enhPicker.show { display: flex; }
   #enhPicker .enhCard-row { display: flex; gap: 16px; flex-wrap: wrap;
     justify-content: center; padding: 24px; max-width: 760px; }
-  #enhPicker .enhCard { width: 200px; padding: 22px 18px;
+  #enhPicker .enhCard { width: 210px; padding: 22px 18px;
     background: linear-gradient(180deg, #2a1f3a, #14101a);
     border: 2px solid #6a4a90; border-radius: 12px; cursor: pointer;
     transition: border-color .15s, transform .12s, box-shadow .15s;
     text-align: center; color: #f0e6d2; }
-  #enhPicker .enhCard:hover { border-color: #f0cf72; transform: translateY(-3px);
-    box-shadow: 0 8px 32px rgba(240,207,114,.4); }
-  #enhPicker .enhGlyph { font-size: 48px; color: #c870ff; margin-bottom: 8px;
-    text-shadow: 0 0 16px rgba(200,112,255,.6); }
+  #enhPicker .enhCard:hover { transform: translateY(-3px); }
+  /* ─ rarity tints ─ */
+  #enhPicker .enhCard.common  { border-color: #6a4a90; }
+  #enhPicker .enhCard.common:hover  { border-color: #c870ff;
+    box-shadow: 0 8px 28px rgba(200,112,255,.45); }
+  #enhPicker .enhCard.common  .enhGlyph { color: #c870ff;
+    text-shadow: 0 0 14px rgba(200,112,255,.6); }
+  #enhPicker .enhCard.rare    { border-color: #4090c0;
+    background: linear-gradient(180deg, #1a283a, #0e1422); }
+  #enhPicker .enhCard.rare:hover    { border-color: #6acaff;
+    box-shadow: 0 8px 32px rgba(106,202,255,.55); }
+  #enhPicker .enhCard.rare    .enhGlyph { color: #6acaff;
+    text-shadow: 0 0 16px rgba(106,202,255,.7); }
+  #enhPicker .enhCard.legendary { border-color: #c97a30;
+    background: linear-gradient(180deg, #3a2818, #1a0e08);
+    animation: enhLegPulse 1.6s ease-in-out infinite; }
+  #enhPicker .enhCard.legendary:hover { border-color: #ffd06a;
+    box-shadow: 0 8px 40px rgba(255,200,80,.7); }
+  #enhPicker .enhCard.legendary .enhGlyph { color: #ffd06a;
+    text-shadow: 0 0 22px rgba(255,200,80,.85); }
+  @keyframes enhLegPulse {
+    0%, 100% { box-shadow: 0 6px 24px rgba(255,200,80,.35); }
+    50%      { box-shadow: 0 8px 36px rgba(255,200,80,.7); }
+  }
+  #enhPicker .enhRarity { font-size: 9px; font-weight: 800;
+    letter-spacing: 3px; margin-top: 6px; text-transform: uppercase; }
+  #enhPicker .enhCard.common  .enhRarity { color: #c870ff; }
+  #enhPicker .enhCard.rare    .enhRarity { color: #6acaff; }
+  #enhPicker .enhCard.legendary .enhRarity { color: #ffd06a; }
+  #enhPicker .enhGlyph { font-size: 48px; margin-bottom: 8px; }
   #enhPicker .enhN { font-size: 16px; font-weight: 800; letter-spacing: 2px;
     color: #ffd06a; margin-bottom: 6px; }
   #enhPicker .enhD { font-size: 12px; color: #b0a890; line-height: 1.4; }
@@ -10804,6 +10830,38 @@ function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
       // the bonus crit chance applies to FUTURE shots.
     }
   }
+  // ── ENHANCEMENT HOOKS ── these apply BEFORE the final dmg round
+  // so they read clean numbers in the damage log.
+  if (player && !isChain) {
+    // BERSERKER — damage scales linearly with missing HP (up to +50%)
+    if (player.enhBerserker) {
+      const missing = 1 - clamp(player.hp / player.maxHp, 0, 1);
+      dmg *= 1 + missing * 0.5;
+    }
+    // MOMENTUM — consecutive hits within 1.5s gain +4% each (cap 10)
+    if (player.enhMomentum) {
+      const now = clock;
+      if ((player._momT || 0) > 0 && now - player._momT < 1.5)
+        player._momStacks = Math.min(10, (player._momStacks || 0) + 1);
+      else
+        player._momStacks = 1;
+      player._momT = now;
+      dmg *= 1 + (player._momStacks - 1) * 0.04;
+    }
+    // EXECUTIONER'S CALL — instant kill below 25% HP
+    if (player.enhExecute && z.hp < z.maxHp * 0.25 && z.hp > 0) {
+      dmg = z.hp + 1;
+      crit = true;
+      // small white flash on the execute so the trigger reads
+      flashLight(z.x, z.y + 1.4, z.z, 0.25, 0xfff8dc);
+    }
+    // INFERNO HEART — every hit applies burn (3s, modest DPS)
+    if (player.enhInferno && z.state !== "die") {
+      z.burn = Math.max(z.burn || 0, 3.0);
+      z.burnDps = Math.max(z.burnDps || 0,
+        (player.dmg || 12) * (player.dmgMul || 1) * 0.4);
+    }
+  }
   dmg = Math.max(1, Math.round(dmg));
   totalDmg += dmg;                             // tallied for the death screen
   z.hp -= dmg; z.flash = 0.14;
@@ -10838,6 +10896,35 @@ function hitZombie(z, dmg, crit, ang, knockMul, isChain) {
   if (!_hitSoundThisFrame) {
     _hitSoundThisFrame = true;
     crit ? Sound.crit() : Sound.hit();
+  }
+  // ── CHAIN REACTION (legendary) — crits arc lightning to 2 nearby
+  // zombies for 50% damage each. Visual: bright magenta sparks +
+  // brief sound. Distinct from the "lightning" ability so they stack.
+  if (player && player.enhChainReact && crit && !isChain) {
+    let jumps = 0;
+    const used = new Set([z]);
+    let sx = z.x, sy = z.y + (d.h || 3) * 0.5, sz = z.z;
+    while (jumps < 2) {
+      let best = null, bd = 12;
+      for (const o of zombies) {
+        if (o.state === "die" || o.state === "rising" ||
+            used.has(o)) continue;
+        const dd = Math.hypot(o.x - sx, o.z - sz);
+        if (dd < bd) { bd = dd; best = o; }
+      }
+      if (!best) break;
+      used.add(best);
+      // sparkle + lightning visual
+      if (typeof drawLightning === "function")
+        drawLightning(sx, sy, sz, best.x, best.y + 1.2, best.z);
+      spawnParts(best.x, best.y + 1.2, best.z, 6,
+        { color: 0xff7afa, speed: 14, life: 0.3 });
+      hitZombie(best, dmg * 0.5, false,
+        Math.atan2(best.x - sx, best.z - sz), 0.6, true);
+      sx = best.x; sy = best.y + (ETYPES[best.type].h || 3) * 0.5;
+      sz = best.z;
+      jumps++;
+    }
   }
   // LIGHTNING — primary hits fork chain-lightning to nearby foes
   // (capped at 2 jumps on lowQ, 3 on HD — used to be 4 which compounded
@@ -10884,6 +10971,31 @@ function killZombie(z) {
   z.state = "die"; z.dieT = 0;
   zombiesAlive--;
   kills++;
+  // ── ENHANCEMENT HOOKS on kill ──
+  if (player) {
+    // BUTCHER (rare) — kills heal 4% Max HP
+    if (player.enhButcher && player.alive)
+      player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.04);
+    // INFERNO HEART (legendary) — burning kills detonate in a small AOE
+    if (player.enhInferno && (z.burn || 0) > 0.05) {
+      const r = 5.5;
+      const explosionDmg = (player.dmg || 12) * (player.dmgMul || 1) * 0.7;
+      // visual: flare + ember burst at the corpse
+      flare(z.x, z.y + 1.2, z.z, 6, 0xff5a18, 0.4, 0.85);
+      spawnParts(z.x, z.y + 0.8, z.z, lowQ ? 8 : 18,
+        { color: pick([0xff5a18, 0xff8a30, 0xc8281e]),
+          speed: 14, up: 6, life: 0.6 });
+      flashLight(z.x, z.y + 1, z.z, 0.28, 0xff5a18);
+      // damage nearby zombies (skip the one that just died)
+      for (const o of zombies) {
+        if (o === z || o.state === "die" ||
+            o.state === "rising") continue;
+        if (Math.hypot(o.x - z.x, o.z - z.z) < r + o.r)
+          hitZombie(o, explosionDmg, false,
+            Math.atan2(o.x - z.x, o.z - z.z), 1.2, true);
+      }
+    }
+  }
   // shard reward per kill — bosses are worth a lot more, rares a bit more,
   // and ALL kills scale with the current stage (higher level = bigger haul)
   if (typeof Meta !== "undefined" && Meta.awardShards) {
@@ -11023,6 +11135,22 @@ function gainXp(n) {
 function startWave(n) {
   wave = n;
   toSpawn = [];
+  // ── FIRST-MINUTE HOOK ── per the Balatro lesson: the opening 45-60s
+  // of a new run MUST hit. Wave 1 used to start with 0 zombies on
+  // screen — player spawned and waited several seconds for the first
+  // claw-up. Now we drop 3 shamblers within 16-22 yards of the spawn
+  // point, already "chasing", so the first kill lands in ~3-4 seconds.
+  if (n === 1 && player) {
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU + rand(-0.2, 0.2);
+      const d = rand(16, 22);
+      const x = clamp(player.x + Math.cos(a) * d,
+        -ARENA + 9, ARENA - 9);
+      const z = clamp(player.z + Math.sin(a) * d,
+        -ARENA + 9, ZSHORE - 4);
+      spawnZombieAt("shambler", x, z);
+    }
+  }
   // The per-wave objective picker is RETIRED in favour of the long-term
   // QUEST_CHAIN (see below). Waves now end naturally when the spawn
   // queue empties and the horde is cleared.
@@ -11353,7 +11481,38 @@ function hurtPlayer(amt, source) {
   if (cls.passive && cls.passive.deadEye && player.deadEyeStacks) {
     player.deadEyeStacks = 0; recalc();
   }
-  if (player.hp <= 0) { player.hp = 0; player.alive = false; gameOver(); }
+  if (player.hp <= 0) {
+    // ── PHOENIX HEART (legendary) — once per charge, deny death
+    // and revive at full HP with a brief invuln window.
+    if (player.phoenixCharges && player.phoenixCharges > 0) {
+      player.phoenixCharges--;
+      player.hp = player.maxHp;
+      player.iframes = 2.5;
+      banner("PHOENIX HEART", "Death is denied");
+      Sound.levelup && Sound.levelup();
+      screenFlash("#ff8a3a", 0.7); shake(1.4);
+      // explosion of fire around the player to clear immediate threats
+      spawnParts(player.x, player.y + 1.2, player.z, lowQ ? 30 : 80,
+        { color: pick([0xff5a18, 0xff8a30, 0xffae50, 0xffd06a]),
+          speed: 22, up: 12, life: 0.95 });
+      smashRing.setColor(0xff8a3a);
+      smashRing.show(player.x, player.y + 0.3, player.z, 10, 0.55);
+      // knock back nearby zombies + apply burn to them
+      for (const z of zombies) {
+        if (z.state === "die") continue;
+        if (Math.hypot(z.x - player.x, z.z - player.z) < 12) {
+          z.kx += (z.x - player.x) * 1.5;
+          z.kz += (z.z - player.z) * 1.5;
+          z.stagger = Math.max(z.stagger || 0, 1.0);
+          z.burn = Math.max(z.burn || 0, 3.0);
+          z.burnDps = Math.max(z.burnDps || 0,
+            (player.dmg || 12) * (player.dmgMul || 1) * 0.6);
+        }
+      }
+      return;
+    }
+    player.hp = 0; player.alive = false; gameOver();
+  }
 }
 /* ─── hit-direction arc pool ──────────────────────────────────────────────────
    Each new hit pushes an arc div to the screen edge pointing at the source.
@@ -13435,41 +13594,106 @@ const QUEST_CHAIN = [
 ];
 // Enhancement choices offered when a quest completes. Pure stat lifts
 // so they work on every class. Three are rolled at random per pick.
+// ── ENHANCEMENT TIERS ──
+// Per the indie-ARPG research (Halls of Torment / Death Must Die): hits
+// sell on GAME-BREAKING SYNERGIES, not flat stat lifts. Picks now carry
+// a rarity (common / rare / legendary). Each pick rolls 3 cards with a
+// 70 / 25 / 5 weighted draw, so legendaries feel like "oh shit" moments.
+// Legendaries are read by hitZombie + killZombie to actually CHANGE
+// gameplay (chain crits, executes, kill-explosions, etc.).
 const QUEST_ENHANCEMENTS = [
-  { id: "vampire", name: "VAMPIRIC", glyph: "♥",
+  // ── COMMON: flat stat lifts (existing) ──
+  { id: "vampire", name: "VAMPIRIC", glyph: "♥", rarity: "common",
     desc: "+5% Lifesteal — every hit returns life",
     apply: (p) => { p.lifesteal = (p.lifesteal || 0) + 0.05; } },
-  { id: "bloodlust", name: "BLOODLUST", glyph: "⚔",
+  { id: "bloodlust", name: "BLOODLUST", glyph: "⚔", rarity: "common",
     desc: "+15% Attack speed",
     apply: (p) => { p.atkSpeed = (p.atkSpeed || 1) * 1.15;
       if (typeof recalc === "function") recalc(); } },
-  { id: "juggernaut", name: "JUGGERNAUT", glyph: "🛡",
+  { id: "juggernaut", name: "JUGGERNAUT", glyph: "🛡", rarity: "common",
     desc: "+25% Max HP",
     apply: (p) => { p.perma.hp += Math.round(p.maxHp * 0.25);
       recalc(); p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.25); } },
-  { id: "stormwalker", name: "STORMWALKER", glyph: "⚡",
+  { id: "stormwalker", name: "STORMWALKER", glyph: "⚡", rarity: "common",
     desc: "+20% Movement speed",
     apply: (p) => { p.perma.spd += 0.2; recalc(); } },
-  { id: "executioner", name: "EXECUTIONER", glyph: "✦",
+  { id: "executioner", name: "EXECUTIONER", glyph: "✦", rarity: "common",
     desc: "+15% Critical chance",
     apply: (p) => { p.critChance = (p.critChance || 0) + 0.15; } },
-  { id: "wrath", name: "WRATH", glyph: "✶",
+  { id: "wrath", name: "WRATH", glyph: "✶", rarity: "common",
     desc: "+20% Damage",
     apply: (p) => { p.perma.dmg += Math.round(p.dmg * 0.2); recalc(); } },
-  { id: "soulbound", name: "SOULBOUND", glyph: "✧",
+  { id: "soulbound", name: "SOULBOUND", glyph: "✧", rarity: "common",
     desc: "Rage / Spirit fills 40% faster",
     apply: (p) => { p.rageMul = (p.rageMul || 1) * 1.4; } },
-  { id: "stoneskin", name: "STONESKIN", glyph: "◊",
+  { id: "stoneskin", name: "STONESKIN", glyph: "◊", rarity: "common",
     desc: "-15% Damage taken",
     apply: (p) => { p.dmgTakenMul = (p.dmgTakenMul || 1) * 0.85; } },
+
+  // ── RARE: conditional / scaling buffs ──
+  { id: "berserker", name: "BERSERKER", glyph: "☠", rarity: "rare",
+    desc: "Up to +50% damage as your HP drops",
+    apply: (p) => { p.enhBerserker = true; } },
+  { id: "butcher", name: "BUTCHER", glyph: "❀", rarity: "rare",
+    desc: "Kills heal 4% Max HP",
+    apply: (p) => { p.enhButcher = true; } },
+  { id: "momentum", name: "MOMENTUM", glyph: "➤", rarity: "rare",
+    desc: "Consecutive hits +4% damage (stacks 10×, resets after 1.5s)",
+    apply: (p) => { p.enhMomentum = true; } },
+  { id: "stoneheart", name: "STONEHEART", glyph: "♛", rarity: "rare",
+    desc: "+50% Max HP but -10% Move speed",
+    apply: (p) => { p.perma.hp += Math.round(p.maxHp * 0.5);
+      p.perma.spd -= 0.10; recalc();
+      p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.5); } },
+
+  // ── LEGENDARY: GAME-CHANGERS that interact with combat ──
+  { id: "chain", name: "CHAIN REACTION", glyph: "⚡", rarity: "legendary",
+    desc: "Crits chain lightning to 2 nearby foes for 50% damage",
+    apply: (p) => { p.enhChainReact = true; } },
+  { id: "inferno", name: "INFERNO HEART", glyph: "🔥", rarity: "legendary",
+    desc: "Hits ignite. Burning kills detonate in a small AOE blast.",
+    apply: (p) => { p.enhInferno = true; } },
+  { id: "execute", name: "EXECUTIONER'S CALL", glyph: "✪", rarity: "legendary",
+    desc: "Strike a foe below 25% HP → instant execute + +20% damage",
+    apply: (p) => { p.enhExecute = true;
+      p.perma.dmg += Math.round(p.dmg * 0.2); recalc(); } },
+  { id: "phoenix", name: "PHOENIX HEART", glyph: "✦", rarity: "legendary",
+    desc: "Once per quest tier, death is denied — revive at full HP",
+    apply: (p) => { p.phoenixCharges = (p.phoenixCharges || 0) + 1; } },
+  { id: "glass", name: "GLASS CANNON", glyph: "✧", rarity: "legendary",
+    desc: "+60% Damage, but -25% Max HP. Pure power.",
+    apply: (p) => { p.perma.dmg += Math.round(p.dmg * 0.6);
+      p.perma.hp -= Math.round(p.maxHp * 0.25); recalc();
+      p.hp = Math.min(p.maxHp, p.hp); } },
 ];
+// 70 / 25 / 5 weighted-random card pull. Each card rolls independently
+// so picks can be (common, common, common) or (rare, common, legendary).
+function _rollEnhRarity() {
+  const r = Math.random();
+  if (r < 0.05) return "legendary";
+  if (r < 0.30) return "rare";
+  return "common";
+}
 function questPickEnhancements() {
-  const pool = QUEST_ENHANCEMENTS.slice();
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+  const byTier = {
+    common:    QUEST_ENHANCEMENTS.filter(e => e.rarity === "common"),
+    rare:      QUEST_ENHANCEMENTS.filter(e => e.rarity === "rare"),
+    legendary: QUEST_ENHANCEMENTS.filter(e => e.rarity === "legendary"),
+  };
+  const picked = [];
+  const usedIds = new Set();
+  for (let i = 0; i < 3; i++) {
+    let tier = _rollEnhRarity();
+    // fallbacks: if a tier has nothing left, walk down to common
+    let pool = byTier[tier].filter(e => !usedIds.has(e.id));
+    if (!pool.length) { tier = "rare"; pool = byTier.rare.filter(e => !usedIds.has(e.id)); }
+    if (!pool.length) { tier = "common"; pool = byTier.common.filter(e => !usedIds.has(e.id)); }
+    if (!pool.length) continue;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    usedIds.add(pick.id);
+    picked.push(pick);
   }
-  return pool.slice(0, 3);
+  return picked;
 }
 function startNextQuest() {
   if (!player) return;
@@ -13529,10 +13753,12 @@ function openEnhancementPicker() {
   let cards = "";
   for (let i = 0; i < picks.length; i++) {
     const p = picks[i];
-    cards += '<div class="enhCard" data-idx="' + i + '">' +
+    const rar = p.rarity || "common";
+    cards += '<div class="enhCard ' + rar + '" data-idx="' + i + '">' +
       '<div class="enhGlyph">' + (p.glyph || "✦") + '</div>' +
       '<div class="enhN">' + p.name + '</div>' +
       '<div class="enhD">' + p.desc + '</div>' +
+      '<div class="enhRarity">' + rar + '</div>' +
       '</div>';
   }
   wrap.innerHTML = '<div class="enhCard-row">' + cards + '</div>';
