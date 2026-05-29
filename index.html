@@ -6876,8 +6876,11 @@ function spawnLoot(x, z, item) {
   // Common = 8 shards … Ancient = 80 shards. The player banks them and
   // spends at the Forge between waves.
   if (Meta && typeof Meta.awardShards === "function") {
+    // shards are rare now — these come from objective/boss drops, which
+    // are themselves uncommon, so the per-drop value can stay chunky
+    // without flooding the economy. Common = 3 … Ancient = 31.
     const tier = (item && item.rarity != null) ? item.rarity : 0;
-    const bonus = 8 + tier * 14;
+    const bonus = 3 + tier * 7;
     Meta.awardShards(bonus, "GEAR");
   }
 }
@@ -10996,12 +10999,20 @@ function killZombie(z) {
       }
     }
   }
-  // shard reward per kill — bosses are worth a lot more, rares a bit more,
-  // and ALL kills scale with the current stage (higher level = bigger haul)
+  // ── SHARD DROPS — now RARE, like real loot, not a faucet ──
+  // Common zombies almost never drop (12% chance of a single shard).
+  // Elites/rares always give a couple, giants a handful, bosses a real
+  // payday. This makes shards feel earned and keeps Forge upgrades a
+  // genuine investment instead of pocket change after one wave.
   if (typeof Meta !== "undefined" && Meta.awardShards) {
-    const tier = z.boss ? 50 : z.type === "giant" ? 14 :
-      (z.type === "brute" || z.rare) ? 5 : 1;
-    Meta.awardShards(Math.round(tier * (1 + (level - 1) * 0.4)), "KILL");
+    let drop = 0;
+    if (z.boss)              drop = 22;
+    else if (z.type === "giant")   drop = 6;
+    else if (z.type === "necro")   drop = 4;
+    else if (z.type === "brute" || z.rare) drop = 2;
+    else if (Math.random() < 0.12) drop = 1;     // common: rare trickle
+    if (drop > 0)
+      Meta.awardShards(Math.round(drop * (1 + (level - 1) * 0.25)), "KILL");
   }
   // GUNSLINGER DEAD-EYE — each kill stacks +8% crit (capped at 60%)
   if (player) {
@@ -13724,7 +13735,7 @@ function questComplete() {
   banner(q.template.name + " — COMPLETE", "CHOOSE YOUR REWARD");
   Sound.levelup && Sound.levelup();
   screenFlash("#fff8dc", 0.5); shake(0.6);
-  if (Meta && Meta.awardShards) Meta.awardShards(60, "QUEST");
+  if (Meta && Meta.awardShards) Meta.awardShards(20, "QUEST");   // was 60
   openEnhancementPicker();
 }
 // Renders the live quest chip top-centre (reuses #objHud div + CSS).
@@ -13792,6 +13803,21 @@ function openEnhancementPicker() {
 const ROUND_SECS = 10;
 let roundTimerPaused = false;          // freezes the countdown while in forge
 function openRoundPopup() {
+  // ── SKIP the stats popup when there's nothing to spend ── early waves
+  // give 0 stat points, so the popup felt pointless ("meteen al zo'n
+  // stats pop-up"). If the player has no points to allocate, just flash
+  // a brief wave-cleared banner and roll straight into the next wave.
+  if (player && (player.statPoints || 0) <= 0) {
+    banner("Mortimer's horde regroups", "WAVE " + wave + " CLEARED");
+    setTimeout(() => {
+      if (state === ST.PLAYING) return;  // already moved on somehow
+      closeRoundPopup();
+    }, 1500);
+    state = ST.ROUND;
+    roundT = 1.6; roundTimerPaused = true;   // freeze the countdown UI
+    UI.roundPopup.classList.add("hidden");   // no popup card
+    return;
+  }
   state = ST.ROUND;
   document.body.style.cursor = "default";
   document.exitPointerLock();
@@ -13918,7 +13944,7 @@ function onWaveCleared() {
   // wave-clear shard bonus — grows steeply with stage so the late game
   // rewards keep pace with the punishment. (Higher stage = bigger payout.)
   if (Meta && Meta.awardShards)
-    Meta.awardShards(25 + (wave | 0) * 5 + (level | 0) * 15, "WAVE");
+    Meta.awardShards(4 + (wave | 0) * 1, "WAVE");      // was 25 + wave*5 + lvl*15
   // ability-pick cards are gone — abilities come from the Forge now.
   // The ultimate is still picked the first time it unlocks (one choice / run).
   if (pendingUlt) { pendingUlt = false; openUltimateChoice(); return; }
@@ -13993,7 +14019,7 @@ function advanceLevel() {
   // big stage-advance bonus — encourages pushing through the portal.
   // Quadratic-ish curve so deeper stages keep feeling like jackpots.
   if (Meta && Meta.awardShards)
-    Meta.awardShards(120 + (level | 0) * (level | 0) * 18, "STAGE");
+    Meta.awardShards(20 + (level | 0) * 8, "STAGE");   // was 120 + lvl²*18
   // each stage paints the world in its own palette — fog, sky, moon retint
   applyStageTheme(level);
   // a thunderclap of light, then back to spawn
