@@ -15520,13 +15520,49 @@ function poseZombie(z, d, chillMul) {
 }
 
 /* ─── camera + ambient ────────────────────────────────────────────────────── */
+// wall colliders cached once — buildings never change at runtime, so we
+// filter the (large) colliders array a single time for the camera march.
+let _wallColliders = null;
+function getWallColliders() {
+  if (!_wallColliders) _wallColliders = colliders.filter(c => c.wall);
+  return _wallColliders;
+}
 function updateCamera(dt) {
   // the camera orbits the hero — mouse yaw spins it, mouse pitch raises it
   const D = 39;
-  const ch = D * Math.sin(camPitch);   // height above the hero
-  const cd = D * Math.cos(camPitch);   // ground distance behind him
-  const tx = player.x - Math.sin(camYaw) * cd;
-  const tz = player.z - Math.cos(camYaw) * cd;
+  const cd = D * Math.cos(camPitch);   // desired ground distance behind him
+  const dirX = -Math.sin(camYaw), dirZ = -Math.cos(camYaw);
+  // ── CAMERA COLLISION ── march from the hero toward the orbit point.
+  // If a WALL (building) lies along that line, pull the camera in to
+  // just before it so the hero is NEVER hidden behind a wall. This is
+  // the fix for "camera goes behind a building and I see nothing".
+  let clearDist = cd;
+  const walls = getWallColliders();
+  const STEP = 4;
+  for (let dist = 8; dist <= cd; dist += STEP) {
+    const sx = player.x + dirX * dist, sz = player.z + dirZ * dist;
+    let hit = false;
+    for (let w = 0; w < walls.length; w++) {
+      const c = walls[w];
+      if (c.box) {
+        if (Math.abs(sx - c.x) < c.hw + 1.2 &&
+            Math.abs(sz - c.z) < c.hd + 1.2) { hit = true; break; }
+      } else if (Math.hypot(sx - c.x, sz - c.z) < c.r + 1.2) {
+        hit = true; break;
+      }
+    }
+    if (hit) { clearDist = Math.max(8, dist - STEP); break; }
+  }
+  // smooth the pull: snap IN fast (0.5) so we never clip through a wall,
+  // ease OUT slow (0.12) so rounding a corner doesn't whip the camera.
+  if (player._camDist == null) player._camDist = clearDist;
+  player._camDist = lerp(player._camDist, clearDist,
+    clearDist < player._camDist ? 0.5 : 0.12);
+  const useDist = player._camDist;
+  const frac = useDist / cd;
+  const ch = D * Math.sin(camPitch) * frac;   // lower as it pulls closer
+  const tx = player.x + dirX * useDist;
+  const tz = player.z + dirZ * useDist;
   camera.position.x = lerp(camera.position.x, tx, 0.17);
   camera.position.y = lerp(camera.position.y, player.y + ch, 0.17);
   camera.position.z = lerp(camera.position.z, tz, 0.17);
